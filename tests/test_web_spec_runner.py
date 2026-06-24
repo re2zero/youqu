@@ -64,6 +64,35 @@ def test_wait_after_navigation_can_be_disabled():
     assert page.waits == []
 
 
+def test_run_all_emits_standalone_cases_scope(tmp_path, monkeypatch):
+    events = []
+    runner = WebSpecRunner(WebSpecConfig(report_dir=str(tmp_path)), reporter=events.append)
+    spec = TestSpec.model_validate({
+        "id": "first",
+        "title": "First",
+        "steps": [{
+            "description": "检查",
+            "assertions": [{"type": "visible", "locator": {"strategy": "text", "value": "ok"}}],
+        }],
+    })
+    monkeypatch.setattr(runner, "_start_browser", lambda: None)
+    monkeypatch.setattr(runner, "_stop_browser", lambda: None)
+
+    def fake_run_spec(spec, report_root=None, spec_index=1, total_specs=1):
+        record = RunRecord(spec_id=spec.id, spec_title=spec.title, report_dir=str(tmp_path / spec.id))
+        record.finalize()
+        return record
+
+    monkeypatch.setattr(runner, "run_spec", fake_run_spec)
+
+    runner.run_all([spec], report_dir=tmp_path)
+
+    assert events[0].kind == "suite_start"
+    assert events[0].payload["scope"] == "cases"
+    assert events[-1].kind == "suite_end"
+    assert events[-1].payload["scope"] == "cases"
+
+
 def test_run_all_blocks_only_remaining_specs_on_environment_error(tmp_path, monkeypatch):
     runner = WebSpecRunner(WebSpecConfig(report_dir=str(tmp_path)))
     specs = [

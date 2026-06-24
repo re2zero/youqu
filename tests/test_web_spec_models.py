@@ -69,7 +69,10 @@ def test_drag_to_action_target_is_supported():
             "actions": [{
                 "type": "drag_to",
                 "locator": {"strategy": "css", "value": ".source"},
+                "source_position": {"x": 10, "y": 12},
                 "target": {"strategy": "css", "value": ".target"},
+                "target_position": {"x": 40, "y": 30},
+                "steps": 5,
             }],
         }],
     })
@@ -77,6 +80,11 @@ def test_drag_to_action_target_is_supported():
     action = spec.steps[0].actions[0]
     assert action.type == ActionType.DRAG_TO
     assert action.target.value == ".target"
+    assert action.source_position.x == 10
+    assert action.source_position.y == 12
+    assert action.target_position.x == 40
+    assert action.target_position.y == 30
+    assert action.steps == 5
 
 
 def test_numeric_priority_is_normalized_to_string():
@@ -119,3 +127,53 @@ def test_new_assertion_fields_are_supported():
     first, second = spec.steps[0].assertions
     assert first.attribute == "aria-label"
     assert second.mode == "contains_order"
+
+
+def test_locator_scope_is_supported():
+    spec = TestSpec.model_validate({
+        "id": "scope_case",
+        "title": "Scope 测试",
+        "steps": [{
+            "description": "在容器内点击",
+            "actions": [{
+                "type": "click",
+                "locator": {
+                    "strategy": "test_id",
+                    "value": "submit",
+                    "scope": {"strategy": "test_id", "value": "card-2"},
+                },
+            }],
+        }],
+    })
+
+    locator = spec.steps[0].actions[0].locator
+    assert locator.scope is not None
+    assert locator.scope.value == "card-2"
+    assert locator.scope.strategy == LocatorStrategy.TEST_ID
+
+
+def test_nested_scope_is_supported():
+    spec = TestSpec.model_validate({
+        "id": "nested_scope_case",
+        "title": "嵌套 Scope 测试",
+        "steps": [{
+            "description": "多层限定",
+            "actions": [{
+                "type": "click",
+                "locator": {
+                    "strategy": "test_id",
+                    "value": "button",
+                    "scope": {
+                        "strategy": "test_id",
+                        "value": "form",
+                        "scope": {"strategy": "test_id", "value": "modal"},
+                    },
+                },
+            }],
+        }],
+    })
+
+    locator = spec.steps[0].actions[0].locator
+    assert locator.scope.value == "form"
+    assert locator.scope.scope.value == "modal"
+    assert locator.scope.scope.scope is None

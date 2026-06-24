@@ -57,9 +57,12 @@ def save_suite_summary(suite: SuiteRecord, output_dir: str | Path) -> None:
 
 
 def print_suite_summary(suite: SuiteRecord) -> None:
-    """Print a compact suite summary to terminal."""
+    """Print a compact suite or standalone cases summary to terminal."""
     title = f"{suite.suite_id} {suite.suite_name}".strip()
-    print(f"Web spec result: {title}" if title else "Web spec result:")
+    if title:
+        print(f"Web spec suite result: {title}")
+    else:
+        print("Web spec cases result:")
     for record in suite.specs:
         print(
             f"  {record.spec_id:30s} {record.status.value:15s} "

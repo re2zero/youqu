@@ -93,6 +93,7 @@ class SpecProgressReporter:
     def __init__(self, verbose: bool = False, console: Console | None = None) -> None:
         self.verbose = verbose
         self._console = console or get_console()
+        self._case_started = False
 
     def __call__(self, event: RunnerEvent) -> None:
         handler = getattr(self, f"_on_{event.kind}", None)
@@ -100,13 +101,18 @@ class SpecProgressReporter:
             handler(event.payload)
 
     def _on_suite_start(self, payload: dict[str, Any]) -> None:
+        label = _run_scope_label(payload.get("scope"), start=True)
+        title = _suite_title(payload)
+        if title:
+            title = f" {title}"
         self._print(
-            f"RUN-SUITE total={payload.get('total_specs', 0)} report_dir={payload.get('report_dir', '')}"
+            f"{label}{title} total={payload.get('total_specs', 0)} report_dir={payload.get('report_dir', '')}"
         )
 
     def _on_suite_end(self, payload: dict[str, Any]) -> None:
+        label = _run_scope_label(payload.get("scope"), start=False)
         self._print(
-            "END-SUITE "
+            f"{label} "
             f"total={payload.get('total', 0)} "
             f"passed={payload.get('passed', 0)} "
             f"failed={payload.get('failed', 0)} "
@@ -117,29 +123,33 @@ class SpecProgressReporter:
         )
 
     def _on_spec_start(self, payload: dict[str, Any]) -> None:
+        if self._case_started:
+            self._print("")
+        self._case_started = True
         self._print(
-            f"RUN [{payload.get('index', 1)}/{payload.get('total', 1)}] "
-            f"{payload.get('spec_id', '')} - {payload.get('title', '')} "
-            f"steps={payload.get('total_steps', 0)}"
+            f"▶ CASE [{payload.get('index', 1)}/{payload.get('total', 1)}] "
+            f"{payload.get('spec_id', '')} | {payload.get('title', '')} "
+            f"| steps={payload.get('total_steps', 0)}"
         )
 
     def _on_spec_end(self, payload: dict[str, Any]) -> None:
         error = _error_suffix(payload.get("error"))
+        status = payload.get("status", "")
         self._print(
-            f"END {payload.get('spec_id', '')} {payload.get('status', '')} "
+            f"{_status_prefix(status)} CASE {payload.get('spec_id', '')} {status} "
             f"duration={_fmt_duration(payload.get('duration_seconds', 0))}{error}"
         )
 
     def _on_step_start(self, payload: dict[str, Any]) -> None:
         self._print(
-            f"  STEP [{payload.get('step_index', 1)}/{payload.get('total_steps', 1)}] "
-            f"{payload.get('order', '')} - {payload.get('description', '')}"
+            f"  → STEP [{payload.get('step_index', 1)}/{payload.get('total_steps', 1)}] "
+            f"{payload.get('order', '')} | {payload.get('description', '')}"
         )
 
     def _on_step_end(self, payload: dict[str, Any]) -> None:
         error = _error_suffix(payload.get("error"))
         self._print(
-            f"  STEP [{payload.get('step_index', 1)}/{payload.get('total_steps', 1)}] "
+            f"  ← STEP [{payload.get('step_index', 1)}/{payload.get('total_steps', 1)}] "
             f"{payload.get('status', '')} duration={_fmt_ms(payload.get('duration_ms', 0))}{error}"
         )
 
@@ -191,6 +201,22 @@ class SpecProgressReporter:
 
     def _print(self, line: str) -> None:
         self._console.print(line, markup=False)
+
+
+def _run_scope_label(scope: Any, start: bool) -> str:
+    if scope == "cases":
+        return "RUN-CASES" if start else "END-CASES"
+    return "RUN-SUITE" if start else "END-SUITE"
+
+
+def _suite_title(payload: dict[str, Any]) -> str:
+    suite_id = str(payload.get("suite_id") or "").strip()
+    title = str(payload.get("title") or "").strip()
+    return f"{suite_id} {title}".strip()
+
+
+def _status_prefix(status: Any) -> str:
+    return "✓" if status == "passed" else "✗"
 
 
 def _format_locator(locator: dict[str, Any] | None, include_match: bool = False) -> str:

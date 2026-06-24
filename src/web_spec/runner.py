@@ -42,7 +42,7 @@ class WebSpecRunner:
         suite = SuiteRecord()
         out_dir = Path(report_dir or _timestamp_dir(self.config.report_dir))
         out_dir.mkdir(parents=True, exist_ok=True)
-        self._emit("suite_start", total_specs=len(specs), report_dir=str(out_dir))
+        self._emit("suite_start", scope="cases", total_specs=len(specs), report_dir=str(out_dir))
         try:
             self._start_browser()
             for index, spec in enumerate(specs, start=1):
@@ -68,6 +68,7 @@ class WebSpecRunner:
             save_suite_summary(suite, out_dir)
             self._emit(
                 "suite_end",
+                scope="cases",
                 total=suite.total,
                 passed=suite.passed,
                 failed=suite.failed,
@@ -94,6 +95,7 @@ class WebSpecRunner:
         execution_specs = _suite_report_specs(suite_spec)
         self._emit(
             "suite_start",
+            scope="suite",
             suite_id=suite.suite_id,
             title=suite.suite_name,
             total_specs=len(execution_specs),
@@ -165,6 +167,7 @@ class WebSpecRunner:
             save_suite_summary(suite, out_dir)
             self._emit(
                 "suite_end",
+                scope="suite",
                 total=suite.total,
                 passed=suite.passed,
                 failed=suite.failed,

@@ -133,6 +133,32 @@ def test_drag_to_action_resolves_target():
     assert source.drag_kwargs == {"timeout": 3456}
 
 
+def test_drag_to_action_passes_positions_and_steps():
+    source = FakeLocator()
+    target = FakeLocator()
+    page = FakePage({".source": source, ".target": target})
+    spec = ActionSpec.model_validate({
+        "type": "drag_to",
+        "locator": {"strategy": "css", "value": ".source"},
+        "source_position": {"x": 10, "y": 12},
+        "target": {"strategy": "css", "value": ".target"},
+        "target_position": {"x": 40, "y": 30},
+        "steps": 5,
+        "timeout_ms": 3456,
+    })
+
+    result = execute(page, spec)
+
+    assert result.success is True
+    assert source.drag_target is target
+    assert source.drag_kwargs == {
+        "timeout": 3456,
+        "source_position": {"x": 10.0, "y": 12.0},
+        "target_position": {"x": 40.0, "y": 30.0},
+        "steps": 5,
+    }
+
+
 def test_drag_to_requires_target():
     spec = ActionSpec.model_validate({
         "type": "drag_to",

@@ -347,6 +347,8 @@ def _check_locator(
             message=f"交互动作使用常见文本 '{locator.value}'，容易多匹配。",
             suggestion="建议补充 exact: true，或改用 role/test_id。",
         ))
+    if locator.scope:
+        issues.extend(_check_locator(file_path, locator.scope, step_order, f"{item} scope", interactive=False))
     return issues
 
 

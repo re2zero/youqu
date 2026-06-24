@@ -75,15 +75,24 @@ def resolve_all(page: Any, spec: LocatorSpec) -> ResolvedLocator:
 
 
 def _build_locator(page: Any, spec: LocatorSpec):
+    """Build a Playwright locator, optionally scoped to a parent locator."""
+    if spec.scope:
+        parent = _build_locator(page, spec.scope)
+        return _build_locator_on_parent(parent, spec)
+    return _build_locator_on_parent(page, spec)
+
+
+def _build_locator_on_parent(parent: Any, spec: LocatorSpec):
+    """Build locator on a parent (page or another locator)."""
     if spec.strategy == LocatorStrategy.ROLE:
         options = {"name": spec.name} if spec.name else {}
-        return page.get_by_role(spec.value, **options)
+        return parent.get_by_role(spec.value, **options)
     if spec.strategy == LocatorStrategy.TEXT:
-        return page.get_by_text(spec.value, exact=spec.exact)
+        return parent.get_by_text(spec.value, exact=spec.exact)
     if spec.strategy == LocatorStrategy.TEST_ID:
-        return page.get_by_test_id(spec.value)
+        return parent.get_by_test_id(spec.value)
     if spec.strategy in (LocatorStrategy.BEM_CSS, LocatorStrategy.CSS):
-        return page.locator(spec.value)
+        return parent.locator(spec.value)
     raise LocatorError(f"未知的 locator strategy: {spec.strategy}")
 
 

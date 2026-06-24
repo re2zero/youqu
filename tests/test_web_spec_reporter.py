@@ -5,7 +5,7 @@
 
 import json
 
-from web_spec.reporter import save_spec_report, save_suite_summary
+from web_spec.reporter import print_suite_summary, save_spec_report, save_suite_summary
 from web_spec.result import ActionRecord, RunRecord, StepRecord, SuiteRecord
 
 
@@ -50,6 +50,24 @@ def test_save_spec_report_includes_suite_metadata(tmp_path):
     html = (report_dir / "report.html").read_text(encoding="utf-8")
     assert "冒烟套件" in html
     assert "login.yaml" in html
+
+
+def test_print_suite_summary_distinguishes_suite_and_standalone_cases(capsys):
+    suite = SuiteRecord(suite_id="smoke", suite_name="冒烟套件")
+    suite.specs.append(RunRecord(spec_id="login", spec_title="登录测试"))
+    suite.finalize()
+
+    cases = SuiteRecord()
+    cases.specs.append(RunRecord(spec_id="profile", spec_title="资料测试"))
+    cases.finalize()
+
+    print_suite_summary(suite)
+    print_suite_summary(cases)
+
+    captured = capsys.readouterr()
+    assert "Web spec suite result: smoke 冒烟套件" in captured.out
+    assert "Web spec cases result:" in captured.out
+    assert "Web spec result:" not in captured.out
 
 
 def test_save_suite_summary(tmp_path):

@@ -71,7 +71,8 @@ def execute(page: Any, spec: ActionSpec, execution: ExecutionSpec | None = None)
         elif spec.type == ActionType.DRAG_TO:
             resolved = _resolve_required(page, spec, require_unique=True)
             target = _resolve_target(page, spec)
-            resolved.locator.drag_to(target.locator, timeout=spec.timeout_ms)
+            drag_kwargs = _build_drag_kwargs(spec)
+            resolved.locator.drag_to(target.locator, **drag_kwargs)
         elif spec.type == ActionType.UPLOAD_FILE:
             if spec.value is None:
                 raise ValueError("upload_file 需要 value 参数")
@@ -98,6 +99,17 @@ def _resolve_target(page: Any, spec: ActionSpec) -> ResolvedLocator:
     if not spec.target:
         raise ValueError("drag_to 需要 target")
     return resolve(page, spec.target, require_unique=True)
+
+
+def _build_drag_kwargs(spec: ActionSpec) -> dict[str, Any]:
+    drag_kwargs: dict[str, Any] = {"timeout": spec.timeout_ms}
+    if spec.source_position:
+        drag_kwargs["source_position"] = spec.source_position.model_dump()
+    if spec.target_position:
+        drag_kwargs["target_position"] = spec.target_position.model_dump()
+    if spec.steps is not None:
+        drag_kwargs["steps"] = spec.steps
+    return drag_kwargs
 
 
 def _wait_and_resolve(page: Any, spec: ActionSpec, execution: ExecutionSpec | None) -> ResolvedLocator:

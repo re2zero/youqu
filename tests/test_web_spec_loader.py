@@ -95,7 +95,10 @@ steps:
         locator: {strategy: css, value: .open-target}
       - type: drag_to
         locator: {strategy: css, value: .source}
+        source_position: {x: 10, y: 12}
         target: {strategy: css, value: .target}
+        target_position: {x: 40, y: 30}
+        steps: 5
       - type: upload_file
         locator: {strategy: css, value: "input[type=file]"}
         value: /tmp/demo.png
@@ -105,7 +108,11 @@ steps:
 
     action_types = [action.type.value for action in spec.steps[0].actions]
     assert action_types == ["right_click", "dblclick", "drag_to", "upload_file"]
-    assert spec.steps[0].actions[2].target.value == ".target"
+    drag_action = spec.steps[0].actions[2]
+    assert drag_action.target.value == ".target"
+    assert drag_action.source_position.x == 10
+    assert drag_action.target_position.y == 30
+    assert drag_action.steps == 5
 
 
 def test_load_spec_parses_new_assertions(tmp_path):
