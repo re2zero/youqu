@@ -519,6 +519,64 @@ class TestDynamicCoordinates:
         assert result.passed
         mk.click.assert_called_once_with(0, 0)
 
+    @patch("src.yaml_test.executor._ensure_window_focus")
+    @patch("src.yaml_test.executor._get_dog")
+    @patch("src.yaml_test.executor._get_mk")
+    def test_click_target_role_only_uses_first_nonzero_extents(self, mock_get_mk, mock_get_dog, mock_focus):
+        mk = MagicMock()
+        mock_get_mk.return_value = mk
+        dog = MagicMock()
+        dog.obj.findChildren.return_value = [
+            MagicMock(extents=(0, 0, 0, 0)),
+            MagicMock(extents=(810, 470, 970, 518)),
+        ]
+        mock_get_dog.return_value = dog
+
+        tc = _make_testcase(
+            [ActionStep(action="mouse_right_click", ref="ctx_dictation")],
+            elements={
+                "ctx_dictation": {
+                    "click_target": "edit_area",
+                    "menu": ["语音听写"],
+                },
+                "edit_area": {
+                    "role": "text",
+                },
+            },
+        )
+        result = StepExecutor(tc).run()
+        assert result.passed
+        mk.right_click.assert_called_once_with(1295.0, 729.0)
+
+    @patch("src.yaml_test.executor._ensure_window_focus")
+    @patch("src.yaml_test.executor._get_dog")
+    @patch("src.yaml_test.executor._get_mk")
+    def test_click_target_role_only_uses_dynamic_center(self, mock_get_mk, mock_get_dog, mock_focus):
+        mk = MagicMock()
+        mock_get_mk.return_value = mk
+        dog = MagicMock()
+        dog.find_elements_by_attr.return_value = []
+        node = MagicMock()
+        node.extents = (1000, 1000, 200, 100)
+        dog.obj = [node]
+        mock_get_dog.return_value = dog
+
+        tc = _make_testcase(
+            [ActionStep(action="mouse_right_click", ref="ctx_dictation")],
+            elements={
+                "ctx_dictation": {
+                    "click_target": "edit_area",
+                    "menu": ["语音听写"],
+                },
+                "edit_area": {
+                    "role": "text",
+                },
+            },
+        )
+        result = StepExecutor(tc).run()
+        assert result.passed
+        mk.right_click.assert_called_once_with(1100.0, 1050.0)
+
 
 class TestSmartWait:
     @patch("src.yaml_test.assertions.run_assert")

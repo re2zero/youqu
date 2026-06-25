@@ -95,6 +95,8 @@ def _resolve_step_attrs(step: ActionStep, elements: dict) -> dict:
             attrs.setdefault("x", tx)
         if ty is not None:
             attrs.setdefault("y", ty)
+        if not (tx is not None and ty is not None):
+            attrs.setdefault("click_target", click_target)
 
     sel = step.selector
     if sel is not None and not step.ref:
@@ -145,16 +147,53 @@ def _resolve_coordinates(attrs: dict, context: dict) -> tuple[int, int]:
         try:
             dog = _get_dog(context, context.get("app") or "")
             _ensure_window_focus(context)
-            expr = f"$//{name}/" if name else "$/"
-            if expr == "$/":
-                return attrs.get("x") or 0, attrs.get("y") or 0
-            found = dog.find_elements_by_attr(expr)
+            if name:
+                found = dog.find_elements_by_attr(f"$//{name}/")
+            elif role:
+                from src.depends.dogtail.tree import predicate
+                found = dog.obj.findChildren(
+                    predicate.GenericPredicate(roleName=role), recursive=True
+                )
+            else:
+                found = []
             if found:
-                center = dog.element_center(found[0])
-                if center and center[0] >= 0 and center[1] >= 0:
-                    return center
-        except Exception:
+                for node in found:
+                    try:
+                        x, y, width, height = node.extents
+                        center = (x + width / 2, y + height / 2)
+                        if (
+                            center
+                            and center[0] >= 0
+                            and center[1] >= 0
+                            and width is not None
+                            and height is not None
+                            and width > 0
+                            and height > 0
+                        ):
+                            return center
+                    except BaseException:
+                        pass
+                try:
+                    center = dog.element_center(found[0])
+                    if center and center[0] >= 0 and center[1] >= 0:
+                        return center
+                except BaseException:
+                    pass
+        except BaseException:
             pass
+
+    if attrs.get("x") is not None and attrs.get("y") is not None:
+        return attrs.get("x"), attrs.get("y")
+
+    try:
+        dog = _get_dog(context, context.get("app") or "")
+        node = dog.obj[0] if isinstance(dog.obj, list) else dog.obj
+        x, y, width, height = node.extents
+        center = (x + width / 2, y + height / 2)
+        if center and center[0] >= 0 and center[1] >= 0:
+            return center
+    except BaseException:
+        pass
 
     return attrs.get("x") or 0, attrs.get("y") or 0
 
