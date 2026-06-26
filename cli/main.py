@@ -170,6 +170,26 @@ def main():
     p_web_suite.add_argument("--no-screenshot", action="store_true", help="Disable step screenshots")
     p_web_suite.add_argument("--verbose", action="store_true", help="Show action and assertion details")
 
+    # youqu dev <subcommand>
+    p_dev = sub.add_parser("dev", help="Dev-mode suite management")
+    dev_sub = p_dev.add_subparsers(dest="dev_command")
+
+    p_dev_init = dev_sub.add_parser("init", help="Create dev-yaml/ directory")
+
+    p_dev_make = dev_sub.add_parser("make", help="Create skeleton .suite.yaml")
+    p_dev_make.add_argument("name", help="Suite name (e.g. 键盘-快捷键)")
+    p_dev_make.add_argument("--force", action="store_true", help="Overwrite existing file")
+
+    p_dev_list = dev_sub.add_parser("list", help="List suites or spec details")
+    p_dev_list.add_argument("name", nargs="?", default="", help="Suite name filter")
+
+    p_dev_run = dev_sub.add_parser("run", help="Execute a suite")
+    p_dev_run.add_argument("name", help="Suite name (e.g. 键盘-快捷键)")
+    p_dev_run.add_argument("--spec", default="", help="Spec IDs (comma-separated)")
+    p_dev_run.add_argument("--tag", default="", help="Filter by tags (comma-separated)")
+    p_dev_run.add_argument("--skip-env-check", action="store_true", help="Skip environment checks")
+    p_dev_run.add_argument("--fast", action="store_true", help="Run in-process (no subprocess isolation)")
+
     # youqu startproject <name>
     p_sp = sub.add_parser("startproject", help="Create project from template")
     p_sp.add_argument("name", nargs="?", help="Project name (default: youqu)")
@@ -211,6 +231,20 @@ def main():
     elif args.command == "index":
         from youqu.cli.index import run as index_run
         index_run(args)
+    elif args.command == "dev":
+        from youqu.cli.dev import cmd_init, cmd_list, cmd_make, cmd_run
+        dispatch = {
+            "init": cmd_init,
+            "make": cmd_make,
+            "list": cmd_list,
+            "run": cmd_run,
+        }
+        handler = dispatch.get(args.dev_command)
+        if handler:
+            handler(args)
+        else:
+            print("Unknown dev command. Usage: youqu dev {init|make|list|run}")
+            sys.exit(1)
     elif args.command == "web-spec":
         from youqu.cli.web_spec import run as web_spec_run
         web_spec_run(args)

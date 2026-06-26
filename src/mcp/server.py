@@ -1012,6 +1012,100 @@ def yaml_cancel(job_id: str) -> dict:
 
 
 # ============================================================
+# Dev-mode Suite Tools
+# ============================================================
+
+
+def _find_dev_yaml_dir():
+    from youqu.cli.dev import _find_dev_yaml_dir as _cli_find
+    return _cli_find()
+
+
+@mcp.tool
+def dev_list_suites() -> dict:
+    """List available dev-mode suites from dev-yaml/ directory."""
+    _dev_dir = _find_dev_yaml_dir()
+    if not _dev_dir:
+        return {"success": False, "error": "No dev-yaml/ directory found"}
+    try:
+        suites = []
+        for p in sorted(_dev_dir.glob("*.suite.yaml")):
+            from src.yaml_test.suite.parser import parse_suite
+            try:
+                suite = parse_suite(p)
+                suites.append({
+                    "name": p.stem,
+                    "file": str(p),
+                    "title": suite.name,
+                    "app": suite.app,
+                    "module": suite.module,
+                    "tags": suite.tags,
+                    "spec_count": len(suite.specs),
+                    "specs": [
+                        {"id": s.id, "name": s.name, "tags": s.tags,
+                         "skip": s.skip, "timeout": s.timeout}
+                        for s in suite.specs
+                    ],
+                })
+            except Exception as exc:
+                suites.append({
+                    "name": p.stem, "file": str(p),
+                    "error": str(exc),
+                })
+        return {"success": True, "dev_dir": str(_dev_dir), "suites": suites}
+    except _TOOL_ERRORS as e:
+        return {"success": False, "error": str(e)}
+
+
+@mcp.tool
+def dev_run_suite(
+    name: str,
+    spec_ids: str = "",
+    tags: str = "",
+    skip_env_check: bool = False,
+) -> dict:
+    """Execute a dev-mode suite synchronously.
+
+    Runs the suite in-process (--fast mode). For large suites,
+    use the CLI subprocess mode via youqu dev run.
+
+    Args:
+        name: Suite name (filename without .suite.yaml suffix)
+        spec_ids: Comma-separated spec IDs to filter (optional)
+        tags: Comma-separated tags to filter (optional)
+        skip_env_check: Skip environment pre-checks
+    """
+    _dev_dir = _find_dev_yaml_dir()
+    if not _dev_dir:
+        return {"success": False, "error": "No dev-yaml/ directory found"}
+
+    target_file = _dev_dir / f"{name}.suite.yaml"
+    if not target_file.exists():
+        _stems = [p.stem for p in _dev_dir.glob("*.suite.yaml")]
+        return {"success": False, "error": f"Suite '{name}' not found",
+                "available": _stems}
+
+    try:
+        from src.yaml_test.suite.executor import SuiteExecutor
+        from src.yaml_test.suite.parser import parse_suite
+        suite = parse_suite(target_file)
+        executor = SuiteExecutor(suite)
+        result = executor.run(
+            spec_ids=spec_ids or None,
+            tags=tags or None,
+            skip_env_check=skip_env_check,
+        )
+        return {
+            "success": True,
+            "data": result.model_dump(),
+        }
+    except _TOOL_ERRORS as e:
+        return {"success": False, "error": str(e)}
+    except Exception as e:
+        return {"success": False, "error": f"suite execution failed: {e}"}
+
+
+# ============================================================
 # Entry Point
 # ============================================================
 
