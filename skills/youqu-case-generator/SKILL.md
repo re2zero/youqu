@@ -1,26 +1,30 @@
 ---
 name: youqu-case-generator
-version: "0.4.0"
+version: "0.5.0"
 description: >
-  Generate YouQu test cases in YAML (primary) or Python (fallback) from xlsx/csv or
-  feature descriptions. Use whenever: YAML用例生成, xlsx转py用例, csv转py用例,
-  生成YouQu用例, generate YouQu tests, 批量生成测试用例, youqu make, 创建autotest,
-  AT-SPI用例生成.
+  Generate YouQu test cases in YAML (primary) or Python (fallback) from xlsx/csv,
+  feature descriptions, or git diff analysis. Use whenever: YAML用例生成,
+  xlsx转py用例, csv转py用例, 生成YouQu用例, generate YouQu tests, 批量生成测试用例,
+  youqu make, 创建autotest, AT-SPI用例生成, diff生成用例, 代码变更生成用例.
 ---
 
 # YouQu Case Generator
 
 Generate complete, executable YouQu test cases in YAML (primary) or Python (fallback)
-from xlsx/csv test case documents. Core principle: LLM understands test intent +
-youqu-mcp provides the real AT-SPI element tree → produces genuine operations,
-not trivial stubs.
+from xlsx/csv test case documents, feature descriptions, or git diff analysis.
+Core principle: LLM understands test intent + youqu-mcp provides the real AT-SPI
+element tree → produces genuine operations, not trivial stubs.
 
-## Two Operating Modes
+## Three Operating Modes
 
 - **xlsx/csv-driven**: Full regression suite from structured spreadsheet (id, title,
   module, precondition, steps, expected, priority).
-- **feature-driven**: New feature cases from PR description, issue, requirement doc,
-  or code diff. Extract testable scenarios manually, then generate.
+- **feature-driven**: New feature cases from PR description, issue, requirement doc.
+  Extract testable scenarios manually, then generate.
+- **git-diff-driven**: Cases from `youqu-change-test` skill. Receives structured
+  change analysis (module, change_type, affected_features, diff summary), generates
+  cases for uncovered features. Called by `youqu-change-test` Step 4 — do NOT use
+  standalone unless you have the structured analysis output.
 
 ## YAML First, Python Second
 
@@ -77,6 +81,34 @@ generation and does not need to be persisted. The original xlsx/csv in
 `autotest/casefiles/` is the permanent source of truth.
 
 **feature mode**: Gather context manually from PR descriptions, git diffs, etc.
+
+**git-diff mode** (called by `youqu-change-test` skill): Input is a structured
+analysis result from LLM reading git diff, not raw diff text. The analysis already
+identifies modules, features, and change type. Agent derives test scenarios from
+the analysis + original diff content.
+
+Input format:
+```yaml
+source_type: git_diff
+app_name: "deepin-music"
+module: "播放"
+change_type: "new_feature"         # bug_fix / new_feature / refactor / config
+change_description: |
+  新增了歌词逐字高亮功能，在播放页面底部显示歌词，
+  当前播放行高亮，支持逐字 Karaoke 效果。
+affected_features:
+  - "歌词显示"
+  - "逐字高亮"
+diff_summary: |
+  src/player/lyrics.cpp  | 120 +++++++++++++
+  src/player/lyrics.h    |  30 +++
+  src/ui/lyrics_panel.cpp | 85 ++++++---
+```
+
+In git-diff mode, skip Step 1 (no xlsx/csv parsing). Go directly to Step 2
+(project skeleton check) → Step 3 (AT-SPI tree) → Step 8 (YAML generation).
+Case metadata: `vars.source_type: "git_diff"`, `vars.change_type`, and trace
+the affected_features in the `feature` field.
 
 **Output format decision**: By default, generate YAML cases. Generate Python only when:
 - Case requires loops, conditionals, or complex state management
