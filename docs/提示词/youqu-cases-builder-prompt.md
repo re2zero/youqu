@@ -161,15 +161,10 @@ git push -u origin <TARGET_BRANCH>
 
 报告必须包含：
 
-- 项目: <PROJECT_ROOT>
-- 应用: <APP_NAME>
-- 基础分支: <SOURCE_BRANCH>
-- 自动化分支: <TARGET_BRANCH>
-- Issue: <ISSUE_ID>
-
 ### 1. 任务信息
 - 项目: <PROJECT_ROOT>
 - 应用: <APP_NAME>
+- 基础分支: <SOURCE_BRANCH>
 - 自动化分支: <TARGET_BRANCH>
 - Issue: <ISSUE_ID>
 

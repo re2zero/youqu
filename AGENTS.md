@@ -202,3 +202,25 @@ Ruff: line-length=100, 4-space indent, Python 3.10+。仅启用 E4/E7/E9/F 规�
 - MCP `keyboard_press_key` / `keyboard_hot_key` 会拦截危险快捷键组合。
 - MCP `screenshot_save` 固定输出到 `_PROJECT_ROOT / "report" / "vlm_evidence"`，不接受调用方传任意输出路径；`VLM_EVIDENCE_DIR` 只影响 VLM 内部配置，不控制 MCP 工具输出。
 - `src/__init__.py` 对 VLM 模块做可选导入 fallback；`Src.vlm` / `Src.vlm_agent` 是 lazy property，会检查 `VLMConfig().is_available()`。
+
+<!-- TRELLIS:START -->
+# Trellis Instructions
+
+These instructions are for AI assistants working in this project.
+
+This project is managed by Trellis. The working knowledge you need lives under `.trellis/`:
+
+- `.trellis/workflow.md` — development phases, when to create tasks, skill routing
+- `.trellis/spec/` — package- and layer-scoped coding guidelines (read before writing code in a given layer)
+- `.trellis/workspace/` — per-developer journals and session traces
+- `.trellis/tasks/` — active and archived tasks (PRDs, research, jsonl context)
+
+If a Trellis command is available on your platform (e.g. `/trellis:finish-work`, `/trellis:continue`), prefer it over manual steps. Not every platform exposes every command.
+
+If you're using Codex or another agent-capable tool, additional project-scoped helpers may live in:
+- `.agents/skills/` — reusable Trellis skills
+- `.codex/agents/` — optional custom subagents
+
+Managed by Trellis. Edits outside this block are preserved; edits inside may be overwritten by a future `trellis update`.
+
+<!-- TRELLIS:END -->
