@@ -12,6 +12,8 @@ from __future__ import annotations
 import os
 import shlex
 import subprocess
+import re
+import signal
 import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
@@ -245,6 +247,7 @@ def _handle_session_start(step: ActionStep, context: dict) -> None:
     cmd = step.command or context.get("app", "")
     if not cmd:
         raise ValueError("session_start requires 'command' or app name")
+    context["app"] = cmd
     if not any(c in cmd for c in "|&;><$`"):
         parts = cmd.split()
         if len(parts) == 1:
@@ -267,15 +270,33 @@ def _handle_session_stop(step: ActionStep, context: dict) -> None:
             proc.kill()
             proc.wait()
     # Always pkill by app name to handle single-instance apps (e.g. DTK DBus
-    # single-instance) where the tracked Popen process has already exited
-    # but the real app instance is still running.
+    # Use pgrep to find PIDs by cmdline, then kill them directly.
+    # Filter out python3 (test script) and sh (shell wrapper) to avoid
+    # killing ourselves. Exclude our own PID as well.
     app = context.get("app", "")
     if app:
         pkill_name = os.path.basename(app) if "/" in app else app
-        subprocess.run(
-            f"pkill -9 {shlex.quote(pkill_name)}", shell=True, check=False
+        pgrep = subprocess.run(
+            ["pgrep", "-f", re.escape(pkill_name)],
+            capture_output=True, text=True,
         )
-    context.pop("app_process", None)
+        if pgrep.stdout.strip():
+            own_pid = os.getpid()
+            for pid in pgrep.stdout.strip().split():
+                pid_int = int(pid)
+                if pid_int == own_pid:
+                    continue
+                # Read comm to skip python3 (test script) and sh (shell wrapper)
+                try:
+                    comm = open(f"/proc/{pid_int}/comm").read().strip()
+                except (FileNotFoundError, PermissionError):
+                    continue
+                if comm in ("python3", "python", "sh", "bash"):
+                    continue
+                try:
+                    os.kill(pid_int, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
 
 
 def _handle_keyboard_press(step: ActionStep, context: dict) -> None:

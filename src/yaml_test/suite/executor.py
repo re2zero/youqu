@@ -115,7 +115,9 @@ class SuiteExecutor:
 
     def __init__(self, suite: SuiteSpec):
         self.suite = suite
-        self.context: dict[str, Any] = {}
+        self.context: dict[str, Any] = {
+            "app": suite.app,
+        }
 
     def run(
         self,
@@ -134,6 +136,8 @@ class SuiteExecutor:
         env_skip_ids: set[str] = set()
         if not skip_env_check and self.suite.env_check:
             for item in self.suite.env_check:
+                if isinstance(item, dict):
+                    item = EnvCheckItem(**item)
                 ok = _check_env(item)
                 if not ok:
                     if item.spec_ids:
