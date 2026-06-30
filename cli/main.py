@@ -188,7 +188,6 @@ def main():
     p_dev_run.add_argument("--spec", default="", help="Spec IDs (comma-separated)")
     p_dev_run.add_argument("--tag", default="", help="Filter by tags (comma-separated)")
     p_dev_run.add_argument("--skip-env-check", action="store_true", help="Skip environment checks")
-    p_dev_run.add_argument("--fast", action="store_true", help="Run in-process (no subprocess isolation)")
 
     # youqu startproject <name>
     p_sp = sub.add_parser("startproject", help="Create project from template")

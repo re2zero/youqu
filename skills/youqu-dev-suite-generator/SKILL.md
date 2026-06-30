@@ -9,9 +9,13 @@ description: >
 
 # YouQu Dev Suite Generator
 
-生成 YouQu 开发人员自测套件（`.suite.yaml` 文件），产出默认放在 `dev-yaml/` 目录
-下。单个 `.suite.yaml` 文件是一个测试套件，包含多个 spec（操作），按模块组织，支持
+生成 YouQu 开发人员自测套件（`.suite.yaml` 文件），产出 **必须** 放在 `autotest/dev-yaml/`
+目录下。单个 `.suite.yaml` 文件是一个测试套件，包含多个 spec（操作），按模块组织，支持
 独立执行和标签过滤。
+
+> **路径约束（MUST）**：所有 `.suite.yaml` 文件必须写入 `autotest/dev-yaml/` 目录。
+> 禁止在项目根目录创建 `dev-yaml/`，禁止在 `autotest/dev-yaml/` 下创建子目录——
+> CLI 仅扫描 `autotest/dev-yaml/*.suite.yaml`（单层 glob），子目录中的 suite 不会被识别。
 
 > **与 youqu-case-generator 的区别**：
 > - youqu-case-generator 生成完整 YAML 用例（`test_*.yaml`），用于 CI/测试执行
@@ -45,7 +49,16 @@ description: >
 
 ## 输出格式
 
-输出为 `.suite.yaml` 文件，写入 `dev-yaml/` 目录。文件命名：`<模块名>.suite.yaml`。
+输出为 `.suite.yaml` 文件，写入 `autotest/dev-yaml/` 目录。
+
+**文件命名（MUST）**：`<操作简称>.suite.yaml`。`<操作简称>` 是该套件所测操作的简短
+描述名（2-4 个中文字符或对应英文），**不得使用应用名**。
+
+| 正确 | 错误 |
+|------|------|
+| `右键.suite.yaml` | `deepin-reader.suite.yaml` |
+| `快捷键.suite.yaml` | `reader.suite.yaml` |
+| `文件打开.suite.yaml` | `文件管理器.suite.yaml` |
 
 完整格式示例：
 
@@ -125,8 +138,21 @@ specs:
 
 ### 操作类型（specs[].steps[].action）
 
-支持与 `test_*.yaml` 相同的操作类型，但 **不支持 `ref` 字段**（suite 模式没有
-`elements.yaml` 引用机制）。元素定位须使用 inline `selector`，坐标须直接写 `x`/`y`。
+支持与 `test_*.yaml` 相同的操作类型。
+
+> **元素定位约束（MUST）**：suite 模式 **不使用 `elements.yaml`**，所有元素定位
+> **必须** 使用 inline `selector` 字段写在每个 step 内。**禁止使用 `ref` 字段**。
+> 坐标须直接写 `x`/`y`。
+>
+> ```yaml
+> # ✅ 正确 — inline selector
+> - action: mouse_click
+>   selector: {name: "确定"}
+>
+> # ❌ 禁止 — ref 引用 elements.yaml
+> - action: mouse_click
+>   ref: "confirm_button"
+> ```
 
 | action | 参数 | 说明 |
 |--------|------|------|
@@ -173,8 +199,6 @@ youqu dev run <套件名> --tag shortcut
 # 跳过环境预检
 youqu dev run <套件名> --skip-env-check
 
-# 进程内模式（快速，无子进程隔离）
-youqu dev run <套件名> --fast
 ```
 
 ## 环境检查说明

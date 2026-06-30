@@ -21,7 +21,7 @@
 - **分模块、分批次构建**：每次只处理一个模块或一个批次，完成一批后向 multica 报告进度。
 - **先检查，再生成**：如果项目已有 `.suite.yaml` 套件，先检查完整度，再决定补充哪些套件。
 - **不跳过环境敏感用例**：对硬件/配置有依赖的 spec 必须添加 `skip` 字段或 `env_check` 项，不能静默删除。
-- **不修改框架源码**：只修改被测项目的 `dev-yaml/` 目录。
+- **不修改框架源码**：只修改被测项目的 `autotest/dev-yaml/` 目录。
 - **不硬编码绝对路径**：suite 中必须使用 `${BUILD_DIR}`、`${TEST_FILES_DIR}` 等变量。
 - **不凭空编造元素**：step 中的 `selector` 必须来自 AT-SPI 树或实际控件属性。
 - **不生成空壳套件**：每个 spec 必须有真实步骤和可验证的操作。
@@ -55,7 +55,7 @@
 | SOURCE_BRANCH | 基础分支 | `master` |
 | BASE_BRANCH | 当前工作分支 | `at` |
 | TARGET_BRANCH | 自动化测试分支 | `at` |
-| DEV_YAML_PATH | dev 套件目录 | `dev-yaml/` |
+| DEV_YAML_PATH | dev 套件目录 | `autotest/dev-yaml/` |
 | APP_NAME | 应用名 | `deepin-music` |
 | APP_BINARY | 应用二进制路径 | `/usr/bin/deepin-music` |
 | ISSUE_ID | multica issue ID | `MUL-123` |
@@ -70,8 +70,8 @@
 
 ### 阶段 1：检查项目现状
 
-1. 检查 `dev-yaml/` 目录是否存在。如果不存在，执行 `youqu dev init` 创建。
-2. 检查 `dev-yaml/` 下是否已有 `*.suite.yaml` 文件。
+1. 检查 `autotest/dev-yaml/` 目录是否存在。如果不存在，执行 `youqu dev init` 创建。
+2. 检查 `autotest/dev-yaml/` 下是否已有 `*.suite.yaml` 文件。
 3. 如果已有 suite 文件，执行完整性检查：
    - 每个 suite 是否包含完整元数据（`name`、`app`、`module`）。
    - 每个 spec 是否有唯一的 `id`。
@@ -88,7 +88,7 @@
 1. 使用 `youqu-dev-suite-generator` 技能生成 `.suite.yaml` 套件。
 2. 按模块分批处理，每批建议不超过 5 个 suite 文件。
 3. 每个模块生成或更新：
-   - `dev-yaml/<module>.suite.yaml`
+   - `autotest/dev-yaml/<module>.suite.yaml`
    - 必要时更新已有 suite 文件的 spec 列表
 4. 生成原则：
    - 每个 `.suite.yaml` 对应一个模块，包含该模块所有操作。
@@ -118,7 +118,7 @@ cd <PROJECT_ROOT> && youqu dev list
 3. 可选：对冒烟类套件执行快速验证：
 
 ```bash
-cd <PROJECT_ROOT> && youqu dev run <suite_name> --fast --skip-env-check
+cd <PROJECT_ROOT> && youqu dev run <suite_name> --skip-env-check
 ```
 
 > 仅在需要验证步骤可执行性时运行，不要在 multica 模式下批量执行所有套件。

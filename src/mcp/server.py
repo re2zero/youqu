@@ -1066,8 +1066,7 @@ def dev_run_suite(
 ) -> dict:
     """Execute a dev-mode suite synchronously.
 
-    Runs the suite in-process (--fast mode). For large suites,
-    use the CLI subprocess mode via youqu dev run.
+    Runs the suite in-process.
 
     Args:
         name: Suite name (filename without .suite.yaml suffix)

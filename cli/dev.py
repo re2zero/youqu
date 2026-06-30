@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import json
-import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -162,74 +160,12 @@ def cmd_run(args: Any) -> None:
     spec_ids = args.spec or None
     tags = args.tag or None
     skip_env_check = args.skip_env_check
-    fast = args.fast
 
-    if fast:
-        result = _run_in_process(suite, spec_ids, tags, skip_env_check)
-    else:
-        result = _run_subprocess(suite_path, spec_ids, tags, skip_env_check)
+    executor = SuiteExecutor(suite)
+    result = executor.run(spec_ids=spec_ids, tags=tags, skip_env_check=skip_env_check)
 
     _print_result(result)
     sys.exit(1 if result.failed > 0 else 0)
-
-
-def _run_in_process(
-    suite: SuiteSpec, spec_ids: str | None, tags: str | None, skip_env: bool,
-) -> SuiteResult:
-    executor = SuiteExecutor(suite)
-    return executor.run(spec_ids=spec_ids, tags=tags, skip_env_check=skip_env)
-
-
-def _run_subprocess(
-    suite_path: Path, spec_ids: str | None, tags: str | None, skip_env: bool,
-) -> SuiteResult:
-    cmd = [
-        sys.executable, "-m", "src.yaml_test.suite",
-        str(suite_path),
-    ]
-    if spec_ids:
-        cmd.extend(["--spec", spec_ids])
-    if tags:
-        cmd.extend(["--tag", tags])
-    if skip_env:
-        cmd.append("--skip-env-check")
-
-    try:
-        proc = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-        )
-    except OSError as exc:
-        return SuiteResult(
-            suite_name=suite_path.stem,
-            error=f"subprocess launch failed: {exc}",
-        )
-
-    try:
-        stdout, stderr = proc.communicate(timeout=300)
-    except subprocess.TimeoutExpired:
-        proc.kill()
-        return SuiteResult(
-            suite_name=suite_path.stem,
-            error="subprocess timed out after 300s",
-        )
-
-    if stderr:
-        return SuiteResult(
-            suite_name=suite_path.stem,
-            error=stderr.decode("utf-8", errors="replace"),
-        )
-
-    try:
-        data = json.loads(stdout)
-        if "error" in data:
-            return SuiteResult(suite_name=suite_path.stem, error=data["error"])
-        return SuiteResult.model_validate(data)
-    except (json.JSONDecodeError, Exception) as exc:
-        return SuiteResult(
-            suite_name=suite_path.stem,
-            error=f"result parse failed: {exc}",
-        )
 
 
 def _print_result(result: SuiteResult) -> None:
