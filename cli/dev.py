@@ -8,6 +8,14 @@ from src.yaml_test.suite import SuiteExecutor, SuiteResult, parse_suite
 from src.yaml_test.suite.models import SuiteSpec
 
 
+_SUFFIX = ".suite.yaml"
+
+
+def _suite_stem(p: Path) -> str:
+    """Strip the full .suite.yaml suffix — Path.stem only removes the last dot suffix."""
+    return p.name[: -len(_SUFFIX)]
+
+
 def _find_dev_yaml_dir() -> Path | None:
     candidates = [
         Path.cwd() / "dev-yaml",
@@ -24,20 +32,23 @@ def _find_suite_path(name: str) -> Path | None:
     base = _find_dev_yaml_dir()
     if base is None:
         return None
-    for p in sorted(base.glob("*.suite.yaml")):
-        if p.stem == name:
+    for p in sorted(base.rglob(f"*{_SUFFIX}")):
+        if _suite_stem(p) == name:
             return p
-    for p in sorted(base.glob("*.suite.yaml")):
-        prefix = p.name[: -len(".suite.yaml")]
-        if prefix == name or prefix.startswith(name + "-"):
+    for p in sorted(base.rglob(f"*{_SUFFIX}")):
+        stem = _suite_stem(p)
+        if stem == name or stem.startswith(name + "-"):
+            return p
+    for p in sorted(base.rglob(f"*{_SUFFIX}")):
+        if p.parent.name == name and _suite_stem(p) == name:
             return p
     return None
 
 
 def _list_suites(dev_dir: Path) -> list[tuple[str, Path]]:
     suites = []
-    for p in sorted(dev_dir.glob("*.suite.yaml")):
-        suites.append((p.stem, p))
+    for p in sorted(dev_dir.rglob(f"*{_SUFFIX}")):
+        suites.append((_suite_stem(p), p))
     return suites
 
 

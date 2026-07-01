@@ -88,10 +88,12 @@
 1. 使用 `youqu-dev-suite-generator` 技能生成 `.suite.yaml` 套件。
 2. 按模块分批处理，每批建议不超过 5 个 suite 文件。
 3. 每个模块生成或更新：
-   - `autotest/dev-yaml/<module>.suite.yaml`
+   - `autotest/dev-yaml/<模块名>/<操作组名>.suite.yaml`
    - 必要时更新已有 suite 文件的 spec 列表
 4. 生成原则：
-   - 每个 `.suite.yaml` 对应一个模块，包含该模块所有操作。
+   - 每个模块对应 `autotest/dev-yaml/` 下一个子目录（子目录名 = 模块名）。
+   - 模块内按操作组拆分 suite 文件（如"主菜单"、"右键菜单"、"快捷键"）。
+   - 操作组少时一个 suite 即可；操作组多时拆成多个 suite 放在同一子目录下。
    - 每个 spec 独立可执行，公共操作放在 `setup` 中。
    - 给 spec 打标签便于过滤：`shortcut`、`ui`、`menu`、`dbus`、`smoke` 等。
    - 环境敏感的 spec 添加 `skip` 字段或 `env_check` 项。

@@ -1029,7 +1029,7 @@ def dev_list_suites() -> dict:
         return {"success": False, "error": "No dev-yaml/ directory found"}
     try:
         suites = []
-        for p in sorted(_dev_dir.glob("*.suite.yaml")):
+        for p in sorted(_dev_dir.rglob("*.suite.yaml")):
             from src.yaml_test.suite.parser import parse_suite
             try:
                 suite = parse_suite(p)
@@ -1078,9 +1078,11 @@ def dev_run_suite(
     if not _dev_dir:
         return {"success": False, "error": "No dev-yaml/ directory found"}
 
-    target_file = _dev_dir / f"{name}.suite.yaml"
-    if not target_file.exists():
-        _stems = [p.stem for p in _dev_dir.glob("*.suite.yaml")]
+    from youqu.cli.dev import _find_suite_path as _cli_find_suite
+
+    target_file = _cli_find_suite(name)
+    if target_file is None:
+        _stems = [p.stem for p in _dev_dir.rglob("*.suite.yaml")]
         return {"success": False, "error": f"Suite '{name}' not found",
                 "available": _stems}
 

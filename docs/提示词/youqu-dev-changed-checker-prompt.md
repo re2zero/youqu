@@ -188,7 +188,7 @@ diff_summary: |
   <git diff --stat 输出>
 ```
 
-2. 生成 `.suite.yaml` 套件文件到 `autotest/dev-yaml/` 目录。
+2. 生成 `.suite.yaml` 套件文件到 `autotest/dev-yaml/<模块名>/` 子目录下（子目录名 = 模块名，suite 文件 stem = 操作组名）。
 
 3. 验证套件可被解析：
 

@@ -125,6 +125,82 @@ class TestCmdList:
             cmd_list(type("Args", (), {"name": "test-suite"})())
 
 
+class TestSubdirectorySuites:
+    def test_list_suites_finds_subdirectory_suites(self, tmp_path):
+        from youqu.cli.dev import _list_suites
+
+        dev_dir = _make_dev_yaml(tmp_path)
+        mod_dir = dev_dir / "菜单"
+        mod_dir.mkdir()
+        sp = mod_dir / "主菜单.suite.yaml"
+        sp.write_text(_MINIMAL_SUITE, encoding="utf-8")
+        sp2 = mod_dir / "右键菜单.suite.yaml"
+        sp2.write_text(_MINIMAL_SUITE, encoding="utf-8")
+
+        suites = _list_suites(dev_dir)
+        stems = [s[0] for s in suites]
+        assert "主菜单" in stems
+        assert "右键菜单" in stems
+        assert len(suites) == 2
+
+    def test_find_suite_path_by_stem_in_subdirectory(self, tmp_path):
+        from youqu.cli.dev import _find_suite_path
+
+        dev_dir = _make_dev_yaml(tmp_path)
+        mod_dir = dev_dir / "菜单"
+        mod_dir.mkdir()
+        sp = mod_dir / "主菜单.suite.yaml"
+        sp.write_text(_MINIMAL_SUITE, encoding="utf-8")
+
+        with patch("youqu.cli.dev._find_dev_yaml_dir", return_value=dev_dir):
+            result = _find_suite_path("主菜单")
+            assert result is not None
+            assert result.name == "主菜单.suite.yaml"
+            assert result.parent.name == "菜单"
+
+    def test_find_suite_path_by_module_dir_name(self, tmp_path):
+        from youqu.cli.dev import _find_suite_path
+
+        dev_dir = _make_dev_yaml(tmp_path)
+        mod_dir = dev_dir / "搜索"
+        mod_dir.mkdir()
+        sp = mod_dir / "搜索.suite.yaml"
+        sp.write_text(_MINIMAL_SUITE, encoding="utf-8")
+
+        with patch("youqu.cli.dev._find_dev_yaml_dir", return_value=dev_dir):
+            result = _find_suite_path("搜索")
+            assert result is not None
+            assert result.name == "搜索.suite.yaml"
+
+    def test_find_suite_path_flat_still_works(self, tmp_path):
+        from youqu.cli.dev import _find_suite_path
+
+        dev_dir = _make_dev_yaml(tmp_path, _MINIMAL_SUITE)
+        with patch("youqu.cli.dev._find_dev_yaml_dir", return_value=dev_dir):
+            result = _find_suite_path("test-suite")
+            assert result is not None
+            assert result.name == "test-suite.suite.yaml"
+
+    def test_find_suite_path_multiple_suites_same_module(self, tmp_path):
+        from youqu.cli.dev import _find_suite_path, _list_suites
+
+        dev_dir = _make_dev_yaml(tmp_path)
+        mod_dir = dev_dir / "文件操作"
+        mod_dir.mkdir()
+        for op_name in ("文件打开", "文件保存", "文件关闭"):
+            sp = mod_dir / f"{op_name}.suite.yaml"
+            sp.write_text(_MINIMAL_SUITE, encoding="utf-8")
+
+        suites = _list_suites(dev_dir)
+        assert len(suites) == 3
+
+        with patch("youqu.cli.dev._find_dev_yaml_dir", return_value=dev_dir):
+            for op_name in ("文件打开", "文件保存", "文件关闭"):
+                result = _find_suite_path(op_name)
+                assert result is not None
+                assert result.parent.name == "文件操作"
+
+
 class TestPrintResult:
     def test_print_all_passed(self, capsys):
         from youqu.cli.dev import _print_result
