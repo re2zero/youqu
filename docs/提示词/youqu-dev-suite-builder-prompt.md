@@ -25,6 +25,7 @@
 - **不硬编码绝对路径**：suite 中必须使用 `${BUILD_DIR}`、`${TEST_FILES_DIR}` 等变量。
 - **不凭空编造元素**：step 中的 `selector` 必须来自 AT-SPI 树或实际控件属性。
 - **不生成空壳套件**：每个 spec 必须有真实步骤和可验证的操作。
+- **标记套件状态**：新生成的套件必须设置 `status` 字段，骨架步骤（仅坐标/等待占位符）标记为 `draft`，完整可执行步骤标记为 `ready`。
 - **spec 独立可执行**：spec 之间不共享状态，公共操作（启动应用）放在 suite `setup` 中。
 
 ---
@@ -40,6 +41,7 @@
 - **严禁遗漏 spec 元数据**：每个 spec 必须有唯一的 `id`（字母数字下划线，不能重复）。
 - **严禁跳过已有套件完整性检查**：如果已有 `.suite.yaml`，必须先检查再补充。
 - **严禁在 multica 模式下添加 `--spec`、`--tag` 等过滤参数执行套件**（验证阶段除外）。
+- **严禁遗漏 status 字段**：每个 suite 必须设置 `status`（`draft` 或 `ready`）。
 
 ---
 
@@ -58,6 +60,7 @@
 | DEV_YAML_PATH | dev 套件目录 | `autotest/dev-yaml/` |
 | APP_NAME | 应用名 | `deepin-music` |
 | APP_BINARY | 应用二进制路径 | `/usr/bin/deepin-music` |
+| DESKTOP_ENV | 桌面环境是否可用 | `yes` / `no` |
 | ISSUE_ID | multica issue ID | `MUL-123` |
 | MODULE | 指定模块（可选） | `播放` |
 | TAG | 指定标签（可选） | `smoke` |
@@ -79,7 +82,72 @@
    - 是否存在 `selector` 引用了不存在的元素（需通过 AT-SPI 树验证）。
    - 是否有环境敏感的 spec 未添加 `skip` 或 `env_check`。
    - `setup`/`teardown` 是否正确使用生命周期动作（`session_start`/`session_stop`）。
-4. 如果没有任何 suite 文件，直接进入阶段 2。
+4. 如果没有任何 suite 文件，直接进入阶段 1.5。
+
+---
+
+### 阶段 1.5：AT-SPI 树发现
+
+生成 suite 步骤前，**必须** 先获取目标应用的真实 AT-SPI 元素树。`selector` 的
+name/role 值必须来自实际控件，禁止凭空编造。未执行本步骤的 suite 只能标记为 `draft`。
+
+> 完整步骤见 `youqu-dev-suite-generator` 技能的「AT-SPI 树发现」章节。
+
+1. **检查桌面环境**：
+
+```bash
+echo "DISPLAY=$DISPLAY"
+echo "AT_SPI_BUS_ADDRESS=$AT_SPI_BUS_ADDRESS"
+echo "QT_ACCESSIBILITY=$QT_ACCESSIBILITY"
+```
+
+如果 `AT_SPI_BUS_ADDRESS` 为空，尝试自动获取：
+
+```bash
+AT_SPI_BUS_ADDRESS=$(ss -lxp 2>/dev/null | grep at-spi | grep -oP 'unix:path=\K[^ ]*' | head -1)
+```
+
+如果 `DISPLAY` 为空或 `DESKTOP_ENV=no`，跳过本阶段，所有 suite 标记为 `status: draft`。
+
+2. **启动目标应用并验证 AT-SPI 可访问**：
+
+```
+system_kill_process(process_name="<APP_NAME>")
+app_launch(command="<APP_BINARY>", wait_seconds=3)
+window_focus(app_name="<APP_NAME>")
+window_get_info(app_name="<APP_NAME>")
+```
+
+3. **Dump AT-SPI 树**：
+
+```
+# 完整树 dump
+atspi_dump_tree(app_name="<APP_NAME>")
+
+# 按角色查找
+atspi_find_element(app_name="<APP_NAME>", expr="$/push button")
+atspi_find_element(app_name="<APP_NAME>", expr="$/menu item")
+
+# 截图辅助
+screenshot_save()
+```
+
+4. **交互式探索不同 UI 状态**（菜单、对话框、右键菜单等）：
+
+```
+# 触发主菜单
+atspi_find_and_click(app_name="<APP_NAME>", expr="主菜单")
+sleep 0.5
+atspi_dump_tree(app_name="<APP_NAME>")
+screenshot_save()
+```
+
+5. **记录元素信息**：从树 dump 中提取 name/role，供阶段 2 生成 suite 步骤时用作
+   inline `selector` 值。DTK 应用常使用内部类名（如 `DTitlebarDWindowOptionButton`），
+   `atspi_find_element` 找不到时用 pyatspi 脚本 fallback（见技能文档）。
+
+6. 如果 AT-SPI 树获取成功，suite 步骤中的 selector 来自树 → `status: ready`。
+   如果部分步骤无法从树获取 selector（如右键菜单项），该步骤用坐标占位 → `status: draft`。
 
 ---
 
@@ -98,6 +166,7 @@
    - 给 spec 打标签便于过滤：`shortcut`、`ui`、`menu`、`dbus`、`smoke` 等。
    - 环境敏感的 spec 添加 `skip` 字段或 `env_check` 项。
    - 不生成不可自动化的用例（需人工判断、视觉验证的步骤不生成或标记 skip）。
+   - 套件必须设置 `status` 字段：步骤完整的设为 `ready`，骨架/占位符步骤的设为 `draft`。
 5. 每完成一批，向 multica 报告进度。
 
 ---

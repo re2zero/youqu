@@ -21,6 +21,7 @@
 - **禁止生成 `autotest/widget/`**
 - **禁止生成任何 `.py` 测试文件**
 - **禁止使用 `ref` 字段**（suite 模式没有 `elements.yaml` 引用机制）
+- **每个 suite 必须设置 `status` 字段**（`draft` 或 `ready`），禁止遗漏
 
 > 执行 Agent 必须加载 `youqu-dev-suite-generator` 技能并遵循 agent 提示词的完整执行流程与禁止操作清单。
 
@@ -37,6 +38,7 @@
 | dev 套件目录 | `{DEV_YAML_PATH}` |
 | 应用名 | `{APP_NAME}` |
 | 应用二进制 | `{APP_BINARY}` |
+| 桌面环境 | `{DESKTOP_ENV}` |
 | Issue ID | `{ISSUE_ID}` |
 
 ---
@@ -62,6 +64,7 @@
 | DEV_YAML_PATH | 否 | `autotest/dev-yaml/` | dev 套件目录 |
 | APP_NAME | 是 | — | 应用名 |
 | APP_BINARY | 是 | — | 应用二进制路径 |
+| DESKTOP_ENV | 否 | `yes` | 桌面环境是否可用（`yes`/`no`），影响 AT-SPI 树发现 |
 | ISSUE_ID | 是 | — | multica issue ID |
 | MODULE | 否 | — | 指定模块 |
 | TAG | 否 | — | 指定标签 |

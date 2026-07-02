@@ -30,7 +30,7 @@
 | 编译目录 | `{BUILD_DIR}` |
 | 编译命令 | `{BUILD_COMMAND}` |
 | 安装命令 | `{INSTALL_COMMAND}` |
-| 安装密码环境变量 | `{INSTALL_PASSWORD_ENV}` |
+| 安装密码（环境变量） | 已设为环境变量 `INSTALL_PASSWORD` |
 | 相关 PR | `{PR_URL}` |
 | Issue ID | `{ISSUE_ID}` |
 
@@ -64,6 +64,7 @@
 | APP_BINARY | 是 | — | 应用二进制路径 |
 | APP_PATH | 是 | 来自 suite `app` 字段 basename；未指定时同 `APP_BINARY` | 实际测试应用路径 |
 | BUILD_DIR | 否 | `${PROJECT_ROOT}/build` | 编译目录 |
+| BUILD_DEP_COMMAND | 否 | — | 安装构建依赖命令，如 `sudo apt-get build-dep -y dde-file-manager` |
 | BUILD_COMMAND | 否 | — | 用户/Issue 指定；LLM 可检查项目技术栈辅助确认，但不得自行发明 |
 | INSTALL_COMMAND | 否 | — | 用户/Issue 指定；LLM 可检查项目技术栈辅助确认，但不得自行发明 |
 | PR_URL | 否 | — | 相关 PR 地址 |

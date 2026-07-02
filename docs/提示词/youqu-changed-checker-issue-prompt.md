@@ -30,7 +30,7 @@
 | 编译目录 | `{BUILD_DIR}` |
 | 编译命令 | `{BUILD_COMMAND}` |
 | 安装命令 | `{INSTALL_COMMAND}` |
-| 安装密码环境变量 | `{INSTALL_PASSWORD_ENV}` |
+| 安装密码（环境变量） | 已设为环境变量 `INSTALL_PASSWORD` |
 | 相关 PR | `{PR_URL}` |
 | Issue ID | `{ISSUE_ID}` |
 
@@ -63,6 +63,7 @@
 | APP_BINARY | 是 | — | 应用二进制路径 |
 | APP_PATH | 是 | 来自 YAML `app` 字段 basename；未指定时同 `APP_BINARY` | 实际测试应用路径 |
 | BUILD_DIR | 否 | `${PROJECT_ROOT}/build` | 编译目录 |
+| BUILD_DEP_COMMAND | 否 | — | 安装构建依赖命令，如 `sudo apt-get build-dep -y dde-file-manager` |
 | BUILD_COMMAND | 否 | — | 用户/Issue 指定；LLM 可检查项目技术栈辅助确认，但不得自行发明 |
 | INSTALL_COMMAND | 否 | — | 用户/Issue 指定；LLM 可检查项目技术栈辅助确认，但不得自行发明 |
 | PR_URL | 否 | — | 相关 PR 地址 |
@@ -216,16 +217,26 @@ test -x <APP_PATH>
 cd <PROJECT_ROOT> && <INSTALL_COMMAND>
 ```
 
-5. 安装密码只能从环境变量读取，例如：
+5. 安装密码从环境变量 `$INSTALL_PASSWORD` 读取。例如：
 
 ```bash
-INSTALL_PASSWORD="${YOUQU_INSTALL_PASSWORD:-}"
+echo "$INSTALL_PASSWORD" | sudo -S sh -c "<INSTALL_COMMAND>"
 ```
-   如果 `INSTALL_PASSWORD` 为空，必须提示用户设置安装密码环境变量，不要猜测、不要硬编码。
+
+   如果 `$INSTALL_PASSWORD` 为空，提示错误并中止：
+   ```
+   错误：INSTALL_PASSWORD 环境变量为空，无法执行需要 sudo 权限的操作。
+   请确保在执行环境中设置了 INSTALL_PASSWORD。
+   ```
    `INSTALL_COMMAND` 必须由 Issue 或用户明确提供；LLM 只能检查项目技术栈辅助确认，不得自行发明。
 
-6. 安装完成后，将 `APP_PATH` 更新为安装后的实际可执行路径。
-7. 如果编译或安装失败，停止测试并报告失败原因。
+6. **禁止操作**：
+   - 严禁输出或打印 `$INSTALL_PASSWORD` 的值。
+   - 严禁将密码写入文件、日志或提交到仓库。
+   - 严禁硬编码密码。
+
+7. 安装完成后，将 `APP_PATH` 更新为安装后的实际可执行路径。
+8. 如果编译或安装失败，停止测试并报告失败原因。
 
 ---
 

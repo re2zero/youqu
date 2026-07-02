@@ -65,9 +65,10 @@
 | APP_BINARY | 应用二进制路径 | `/usr/bin/deepin-music` |
 | APP_PATH | 实际测试应用路径 | 来自 suite `app` 字段 basename；未指定时同 `APP_BINARY`，编译/安装后更新为编译或安装产物 |
 | BUILD_DIR | 编译目录 | `${PROJECT_ROOT}/build` 或用户指定 |
+| BUILD_DEP_COMMAND | 安装构建依赖命令（可选） | 如 `sudo apt-get build-dep -y dde-file-manager`；为空时跳过 |
 | BUILD_COMMAND | 编译命令 | 用户/Issue 指定；LLM 可检查项目技术栈辅助确认，但不得自行发明 |
 | INSTALL_COMMAND | 安装命令 | 用户/Issue 指定；LLM 可检查项目技术栈辅助确认，但不得自行发明 |
-| INSTALL_PASSWORD_ENV | 安装密码环境变量 | 如 `YOUQU_INSTALL_PASSWORD` |
+| INSTALL_PASSWORD | 安装密码（环境变量） | 由 Issue 执行环境设置 `INSTALL_PASSWORD` |
 | PR_URL | 相关 PR 地址（可选） | `https://github.com/linuxdeepin/youqu/pull/123` |
 | MODULE | 指定模块（可选） | `播放` |
 | TAG | 指定标签（可选） | `smoke` |
@@ -168,6 +169,25 @@ youqu dev list <suite_name>
 
 ---
 
+### 阶段 3.5：验证套件质量
+
+在确认相关套件后，运行测试前，必须验证套件的 spec 是否具有可执行的真实步骤：
+
+1. 检查每个 spec 的 `steps`：
+   - 是否包含 AT-SPI `selector` 定位（而非仅 `x`/`y` 坐标操作）
+   - 是否包含至少一个验证动作（`assert`/`check`/`verify`）
+
+2. 如果所有 spec 的步骤都是纯坐标/等待占位符：
+   - 报告"套件为骨架版本，不可用于功能验证"
+   - 跳过该套件的执行
+   - 建议使用 `youqu-dev-suite-generator` 技能重新生成完整套件
+
+3. 如果部分 spec 可执行：
+   - 运行可执行的 spec
+   - 在报告中列出被跳过的骨架 spec
+
+---
+
 ### 阶段 4：新增缺失 Dev 自测套件
 
 当新增功能或无覆盖功能点需要新套件时：
@@ -210,36 +230,48 @@ youqu dev list
    - 如果两者都不是编译产物，必须向用户确认构建命令或停止测试。
    `BUILD_COMMAND` 必须由 Issue 或用户明确提供；LLM 只能检查项目技术栈辅助确认，不得自行发明。
 
-2. 如果 `BUILD_COMMAND` 存在，执行编译：
+2. **安装构建依赖**：如果 `BUILD_DEP_COMMAND` 存在，则在编译前执行：
+
+```bash
+echo "$INSTALL_PASSWORD" | sudo -S sh -c "<BUILD_DEP_COMMAND>"
+```
+
+如果 `$INSTALL_PASSWORD` 为空，提示错误并中止：
+```
+错误：INSTALL_PASSWORD 环境变量为空，无法执行需要 sudo 权限的操作。
+请确保在执行环境中设置了 INSTALL_PASSWORD。
+```
+
+3. 如果 `BUILD_COMMAND` 存在，执行编译：
 
 ```bash
 cd <PROJECT_ROOT> && <BUILD_COMMAND>
 ```
 
-3. 验证编译产物存在且可执行：
+4. 验证编译产物存在且可执行：
 
 ```bash
 test -x <APP_PATH>
 ```
 
-4. 如果应用需要系统安装后才能验证，执行安装：
+5. 如果应用需要系统安装后才能验证，执行安装：
 
 ```bash
-cd <PROJECT_ROOT> && <INSTALL_COMMAND>
+echo "$INSTALL_PASSWORD" | sudo -S sh -c "<INSTALL_COMMAND>"
 ```
 
-5. 安装密码只能从环境变量读取，例如：
-
-```bash
-INSTALL_PASSWORD="${YOUQU_INSTALL_PASSWORD:-}"
-```
-
-   如果 `INSTALL_PASSWORD` 为空，必须提示用户设置安装密码环境变量，不要猜测、不要硬编码。
+   安装密码从环境变量 `$INSTALL_PASSWORD` 读取。
+   如果 `$INSTALL_PASSWORD` 为空，提示错误并中止（同步骤 2 的错误信息）。
    `INSTALL_COMMAND` 必须由 Issue 或用户明确提供；LLM 只能检查项目技术栈辅助确认，不得自行发明。
 
-6. 安装完成后，将 `APP_PATH` 更新为安装后的实际可执行路径。
+6. **禁止操作**：
+   - 严禁输出或打印 `$INSTALL_PASSWORD` 的值。
+   - 严禁将密码写入文件、日志或提交到仓库。
+   - 严禁硬编码密码。
 
-7. 如果编译或安装失败，停止测试并报告失败原因。
+7. 安装完成后，将 `APP_PATH` 更新为安装后的实际可执行路径。
+
+8. 如果编译或安装失败，停止测试并报告失败原因。
 
 > Dev 模式编译产物路径说明：`youqu dev run` 不通过环境变量传递 `APP_PATH`。编译后的产物路径需通过以下方式之一传递给测试：
 > - suite `setup` 中 `session_start.command` 指定可执行路径

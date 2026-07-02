@@ -111,6 +111,145 @@ description: >
    启动关闭。执行连贯的多个键盘/鼠标操作优于每次只做一个操作然后重启。
 6. **不生成不可自动化的用例** — 按「xlsx 智能过滤」判断原则逐条过滤，不可自动化的
    用例不生成 spec。过滤统计报告必须随 suite 一起输出。
+7. **标记套件状态** — 生成时必须设置 `status` 字段：步骤中的 selector 来自 AT-SPI
+   树 dump 的设为 `ready`；仅坐标占位或无法获取 AT-SPI 树的设为 `draft`。
+
+## AT-SPI 树发现
+
+生成 suite 步骤前，**必须** 先获取目标应用的真实 AT-SPI 元素树。`selector` 字段的
+name/role 值必须来自实际控件，禁止凭空编造。未执行本步骤的 suite 只能标记为 `draft`。
+
+### 环境准备
+
+```bash
+echo "DISPLAY=$DISPLAY"
+echo "XDG_SESSION_TYPE=$XDG_SESSION_TYPE"
+echo "AT_SPI_BUS_ADDRESS=$AT_SPI_BUS_ADDRESS"
+echo "QT_ACCESSIBILITY=$QT_ACCESSIBILITY"
+```
+
+如果 `AT_SPI_BUS_ADDRESS` 为空：
+
+```bash
+AT_SPI_BUS_ADDRESS=$(ss -lxp 2>/dev/null | grep at-spi | grep -oP 'unix:path=\K[^ ]*' | head -1)
+```
+
+Qt/DTK 应用必须设置 `QT_ACCESSIBILITY=1` 和 `QT_LINUX_ACCESSIBILITY_ALWAYS_ON=1`。
+
+### 启动应用并验证
+
+通过 MCP 工具启动应用并确认 AT-SPI 可访问：
+
+```
+system_kill_process(process_name="<app_name>")
+app_launch(command="<app_binary>", wait_seconds=3)
+window_focus(app_name="<app_name>")
+window_get_info(app_name="<app_name>")
+```
+
+`window_focus` 成功且 `get_info` 返回窗口几何信息 → 应用就绪。
+
+### 获取 AT-SPI 树
+
+**主要方法 — MCP 工具**：
+
+```
+# 完整树 dump（最快获取所有元素）
+atspi_dump_tree(app_name="<app_name>")
+
+# 按角色查找元素
+atspi_find_element(app_name="<app_name>", expr="$/push button")
+atspi_find_element(app_name="<app_name>", expr="$/menu item")
+
+# 按名称查找
+atspi_find_element(app_name="<app_name>", expr="Btn_打开")
+
+# 获取容器子元素文本
+atspi_get_children_text(app_name="<app_name>", element_expr="$/<app_name>//list view")
+
+# 截图辅助视觉参照
+screenshot_save()
+```
+
+**AT-SPI 路径表达式语法**：
+- `$/<app_name>//<element>` — 在应用下搜索
+- `$/<role>` — 按角色搜索（如 `$/push button`、`$/menu item`）
+- `$/<name>` — 按可访问名称搜索
+- `$/<name>/<role>` — 组合搜索
+
+**交互式探索**：菜单、对话框等 UI 状态需触发后才能捕获：
+
+```
+atspi_find_and_click(app_name="<app_name>", expr="主菜单")
+sleep 0.5
+atspi_dump_tree(app_name="<app_name>")
+screenshot_save()
+```
+
+**fallback — pyatspi 脚本**：当 `atspi_find_element` 找不到已知可见元素时（DTK 应用常使用
+内部类名如 `DTitlebarDWindowOptionButton`），用 pyatspi 脚本 dump 完整树：
+
+```python
+import os, gi
+os.environ['AT_SPI_BUS_ADDRESS'] = 'unix:path=/run/user/<uid>/at-spi/bus_0'
+gi.require_version('Atspi', '2.0')
+from gi.repository import Atspi
+
+def dump_tree(obj, depth=0, max_depth=6):
+    if depth > max_depth:
+        return
+    name = obj.get_name()
+    role = obj.get_role_name()
+    print('  ' * depth + f'{role}: "{name}"')
+    for i in range(obj.get_child_count()):
+        child = obj.get_child_at_index(i)
+        if child:
+            dump_tree(child, depth + 1, max_depth)
+
+desktop = Atspi.get_desktop(0)
+for i in range(desktop.get_child_count()):
+    app = desktop.get_child_at_index(i)
+    if app.get_name() == '<app_name>':
+        for j in range(app.get_child_count()):
+            dump_tree(app.get_child_at_index(j), max_depth=8)
+```
+
+### 捕获不同 UI 状态
+
+AT-SPI 树随 UI 状态变化，需分别捕获：
+
+| 状态 | 触发方式 | 捕获内容 |
+|------|---------|---------|
+| 主窗口 | 启动应用 | 标题栏、菜单栏、内容区 |
+| 主菜单 | 点击菜单按钮 | 所有菜单项、子菜单 |
+| 对话框 | 菜单 → 设置/关于 | 对话框标题、按钮 |
+| 右键菜单 | 右键点击内容区 | 上下文菜单项 |
+| 搜索 | Ctrl+F 或应用快捷键 | 搜索输入框、按钮 |
+
+**工作流**：触发状态 → 等待 0.5-1s → dump 树 → 截图 → 恢复主窗口（Escape）
+
+### 从树到 suite selector
+
+从 AT-SPI 树提取元素信息，直接写入 suite 步骤的 inline `selector`：
+
+| AT-SPI 属性 | suite selector 用法 |
+|------------|-------------------|
+| `name` | `selector: {name: "确定"}` |
+| `role` | `selector: {role: "push button"}` |
+| `name` + `role` | `selector: {name: "打开", role: "menu item"}` |
+
+**已知限制**：
+- 右键上下文菜单可能不在 AT-SPI 树中 → 用坐标 + 键盘导航
+- 空名元素（name=""）→ 用 role 定位
+- 瞬态对话框只在可见时存在 → 触发后立即 dump
+
+### status 字段判定
+
+| 条件 | status 值 |
+|------|----------|
+| selector 来自 AT-SPI 树 dump | `ready` |
+| selector 部分来自树、部分为坐标占位 | `draft` |
+| 无法获取 AT-SPI 树（headless/无桌面环境） | `draft` |
 
 ## 输出格式
 
@@ -131,6 +270,7 @@ description: >
 name: "键盘快捷键自测"
 app: "deepin-reader"
 module: "键盘"
+status: ready
 description: "对阅读器键盘快捷键的快速自测"
 tags: ["shortcut", "smoke"]
 
@@ -187,6 +327,7 @@ specs:
 | `name` | 是 | 套件显示名称 |
 | `app` | 否 | 目标应用名 |
 | `module` | 否 | 模块分类 |
+| `status` | 是 | 套件状态：`ready`（步骤完整可执行）/ `draft`（骨架/占位符步骤） |
 | `env_check` | 否 | 环境预检列表 |
 | `env_check[].type` | 是 | 检测类型：`process` (进程) / `file_exists` (文件) |
 | `env_check[].name` | 是 | 进程名或文件路径 |
