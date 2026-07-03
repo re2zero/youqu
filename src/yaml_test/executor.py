@@ -18,6 +18,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
 
+from src import logger
 from src.yaml_test.elements import resolve_ref
 from src.yaml_test.parser import ActionStep, AssertStep, TestCase
 
@@ -201,16 +202,18 @@ def _resolve_coordinates(attrs: dict, context: dict) -> tuple[int, int]:
 
 
 def _ensure_window_focus(context: dict):
+    print(f"[DEBUG] _ensure_window_focus called with context: {context}")
     app_name = context.get("app")
     if not app_name:
+        print("[DEBUG] _ensure_window_focus: no app_name in context")
         return
     try:
         from src.button_center import ButtonCenter
 
         bc = ButtonCenter(app_name, None)
         bc.focus_windows(app_name)
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[DEBUG] _ensure_window_focus exception: {e}")
 
 
 @dataclass
@@ -236,7 +239,7 @@ def _get_dog(context: dict, app: str | None = None):
         from src.dogtail_utils import DogtailUtils
 
         if app and "/" in app:
-            atspi_name = os.path.basename(app)
+            atspi_name = app.split()[0] if app.split()[0] else app
         else:
             atspi_name = app
         context["dog"] = DogtailUtils(atspi_name) if atspi_name else DogtailUtils()
@@ -306,14 +309,16 @@ def _handle_keyboard_press(step: ActionStep, context: dict) -> None:
 
 
 def _handle_keyboard_hot_key(step: ActionStep, context: dict) -> None:
+    _ensure_window_focus(context)
     mk = _get_mk(context)
     keys = step.keys
     if isinstance(keys, str):
-        key_list = [k.strip() for k in keys.split(",") if k.strip()]
+        sep = "+" if "+" in keys else ","
+        key_list = [k.strip().lower() for k in keys.split(sep) if k.strip()]
     elif isinstance(keys, list):
-        key_list = [str(k) for k in keys]
+        key_list = [str(k).lower() for k in keys]
     else:
-        key_list = [str(keys)]
+        key_list = [str(keys).lower()]
     mk.hot_key(*key_list)
 
 

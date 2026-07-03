@@ -616,13 +616,53 @@ class ButtonCenter:
          窗口置顶并聚焦
         :param app_name: 应用包名
         """
-        if GlobalConfig.IS_WAYLAND:
-            return
+        logger.debug(f"focus_windows called for {app_name}")
         app_id = self.get_windows_id(app_name if app_name else self.app_name)
+        if not app_id or len(app_id) <= self.number:
+            logger.warning(f"无法获取窗口ID或窗口编号超出范围: {app_name}")
+            return
+        
         windows = int(app_id[self.number])
-        cmd = f"xdotool windowactivate {windows}"
-        CmdCtl.run_cmd(cmd, interrupt=False, out_debug_flag=False, command_log=False)
-        logger.debug(f"<{app_name}> 窗口置顶并聚焦")
+        logger.debug(f"windows id: {windows}, IS_WAYLAND: {GlobalConfig.IS_WAYLAND}")
+        
+        if GlobalConfig.IS_WAYLAND:
+            # Wayland window focus via D-Bus
+            try:
+                import dbus
+                session_bus = dbus.SessionBus()
+                logger.debug("Created SessionBus for Wayland window focus")
+                
+                # Try DDE Window Manager D-Bus interface
+                dde_success = False
+                try:
+                    wm_obj = session_bus.get_object("com.deepin.dde.WindowManager1", "/com/deepin/dde/WindowManager1")
+                    wm_interface = dbus.Interface(wm_obj, "com.deepin.dde.WindowManager1")
+                    wm_interface.FocusWindow(windows)
+                    logger.info(f"<{app_name}> Wayland窗口置顶并聚焦 via DDE WindowManager: {windows}")
+                    dde_success = True
+                except Exception as e:
+                    logger.debug(f"DDE WindowManager D-Bus聚焦失败: {e}")
+                
+                if not dde_success:
+                    # Try KWin Wayland D-Bus interface
+                    kwin_success = False
+                    try:
+                        kwin_obj = session_bus.get_object("org.kde.KWin", "/Karousel")
+                        kwin_interface = dbus.Interface(kwin_obj, "org.kde.KWin")
+                        kwin_interface.activateWindow(windows)
+                        logger.info(f"<{app_name}> Wayland窗口置顶并聚焦 via KWin: {windows}")
+                        kwin_success = True
+                    except Exception as e:
+                        logger.debug(f"KWin Wayland D-Bus聚焦失败: {e}")
+                    
+                    if not kwin_success:
+                        logger.warning(f"<{app_name}> Wayland窗口聚焦失败: 所有D-Bus接口均不可用")
+            except Exception as exc:
+                logger.error(f"Wayland窗口聚焦异常: {exc}")
+        else:
+            cmd = f"xdotool windowactivate {windows}"
+            CmdCtl.run_cmd(cmd, interrupt=False, out_debug_flag=False, command_log=False)
+            logger.debug(f"<{app_name}> X11窗口置顶并聚焦: {windows}")
 
     def get_lastest_window_id(self, app_name: str) -> int:
         """
