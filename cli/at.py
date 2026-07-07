@@ -62,6 +62,13 @@ def cmd_generate(args):
 def cmd_run(args):
     try:
         from youqu.src.at.executor.runner import run_tests
-        run_tests(test_dir=args.testdir, suite=args.suite, keyword=args.k)
+        run_tests(
+            test_dir=args.testdir,
+            suite=args.suite,
+            keyword=args.k,
+            spec_ids=args.spec_ids,
+            tags=args.tags,
+            skip_env_check=args.skip_env_check,
+        )
     except ImportError:
         _not_implemented("run")

@@ -1,12 +1,14 @@
-# SPDX-FileCopyrightText: 2026 UnionTech Software Technology Co., Ltd.
-#
-# SPDX-License-Identifier: GPL-2.0-only
-
 from __future__ import annotations
 
 import logging
 from pathlib import Path
 from typing import Optional
+
+import yaml
+
+from src.at.executor.executor import AtSuiteExecutor
+from src.at.executor.models import SpecStatus
+from src.at.parser.models import SuiteConfig
 
 _log = logging.getLogger("youqu.at.executor")
 
@@ -21,21 +23,38 @@ def _find_suite_files(test_dir: str, suite_name: Optional[str] = None) -> list[P
     return sorted(base.rglob("*.suite.yaml"))
 
 
-def _load_and_run_suite(suite_path: Path, spec_ids: Optional[str] = None, tags: Optional[str] = None) -> dict:
-    from src.yaml_test.suite.executor import SuiteExecutor
-    from src.yaml_test.suite.models import SuiteSpec
+def _load_elements(suite_dir: Path) -> dict:
+    elements_path = suite_dir / "elements.yaml"
+    if elements_path.is_file():
+        try:
+            with open(elements_path, encoding="utf-8") as f:
+                data = yaml.safe_load(f)
+            if isinstance(data, dict):
+                return data.get("elements", data)
+        except Exception:
+            pass
+    return {}
 
+
+def _load_and_run_suite(
+    suite_path: Path,
+    spec_ids: Optional[str] = None,
+    tags: Optional[str] = None,
+    skip_env_check: bool = False,
+) -> dict:
     data = _parse_yaml(suite_path)
     if data is None:
         return {"suite": str(suite_path), "status": "error", "error": "invalid YAML"}
 
     try:
-        spec = SuiteSpec.model_validate(data)
+        config = SuiteConfig.model_validate(data)
     except Exception as exc:
         return {"suite": str(suite_path), "status": "error", "error": str(exc)}
 
-    executor = SuiteExecutor(spec)
-    result = executor.run(spec_ids=spec_ids, tags=tags)
+    elements = _load_elements(suite_path.parent)
+    context = {"elements": elements}
+    executor = AtSuiteExecutor(config, context)
+    result = executor.run(spec_ids=spec_ids, tags=tags, skip_env_check=skip_env_check)
     return {
         "suite": str(suite_path),
         "status": "ok",
@@ -48,7 +67,7 @@ def _load_and_run_suite(suite_path: Path, spec_ids: Optional[str] = None, tags: 
             {
                 "id": s.id,
                 "name": s.name,
-                "status": s.status,
+                "status": s.status.value if isinstance(s.status, SpecStatus) else s.status,
                 "error": s.error,
                 "duration": round(s.duration, 2),
             }
@@ -58,8 +77,6 @@ def _load_and_run_suite(suite_path: Path, spec_ids: Optional[str] = None, tags: 
 
 
 def _parse_yaml(path: Path) -> Optional[dict]:
-    import yaml
-
     try:
         with open(path, encoding="utf-8") as f:
             return yaml.safe_load(f)
@@ -74,6 +91,7 @@ def run_tests(
     keyword: Optional[str] = None,
     spec_ids: Optional[str] = None,
     tags: Optional[str] = None,
+    skip_env_check: bool = False,
 ) -> int:
     suite_files = _find_suite_files(test_dir, suite)
     if not suite_files:
@@ -87,7 +105,12 @@ def run_tests(
 
     for suite_path in suite_files:
         _log.info("running suite: %s", suite_path)
-        r = _load_and_run_suite(suite_path, spec_ids=spec_ids, tags=tags)
+        r = _load_and_run_suite(
+            suite_path,
+            spec_ids=spec_ids,
+            tags=tags,
+            skip_env_check=skip_env_check,
+        )
         results.append(r)
         if r["status"] == "ok":
             total_passed += r["passed"]

@@ -227,6 +227,9 @@ def main():
     p_at_run.add_argument("--testdir", default="tests/at/yaml", help="Test directory")
     p_at_run.add_argument("--suite", help="Run specific suite")
     p_at_run.add_argument("-k", help="Keyword filter")
+    p_at_run.add_argument("--spec-ids", help="Filter by spec IDs (comma-separated)")
+    p_at_run.add_argument("--tags", help="Filter by tags (comma-separated)")
+    p_at_run.add_argument("--skip-env-check", action="store_true", help="Skip environment checks")
 
     args, extra = parser.parse_known_args()
 

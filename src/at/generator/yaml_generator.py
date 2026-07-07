@@ -222,5 +222,5 @@ def generate_yaml(cases_path: str, mappings_path: str, output_dir: str) -> None:
         )
 
         suite_path = module_dir / f"{module}_suite.suite.yaml"
-        _write_yaml(suite_config.model_dump(mode="json", exclude_none=True), str(suite_path))
+        _write_yaml(suite_config.model_dump(mode="json", exclude_none=True, by_alias=True), str(suite_path))
         print(f"Wrote {suite_path} ({len(all_suite_cases)} suite cases)")

@@ -1,0 +1,372 @@
+from __future__ import annotations
+
+import logging
+import os
+import re
+import shlex
+import signal
+import subprocess
+import time
+from typing import Any, Callable
+
+from src.at.parser.models import SuiteActionStep
+
+logger = logging.getLogger(__name__)
+
+
+def resolve_ref(ref_name: str, elements: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    if ref_name not in elements:
+        raise ValueError(f"ref '{ref_name}' not found in elements registry")
+    return elements[ref_name]
+
+
+def get_mk(context: dict):
+    if context.get("mk") is None:
+        from src.mouse_key import MouseKey
+        context["mk"] = MouseKey()
+    return context["mk"]
+
+
+def get_dog(context: dict, app: str | None = None):
+    if context.get("dog") is None:
+        from src.dogtail_utils import DogtailUtils
+        if app and "/" in app:
+            atspi_name = app.split()[0] if app.split()[0] else app
+        else:
+            atspi_name = app
+        context["dog"] = DogtailUtils(atspi_name) if atspi_name else DogtailUtils()
+    return context["dog"]
+
+
+def resolve_step_attrs(step: SuiteActionStep, elements: dict) -> dict:
+    if step.ref:
+        attrs = dict(resolve_ref(step.ref, elements))
+    else:
+        attrs = {}
+
+    if step.x is not None:
+        attrs.setdefault("x", step.x)
+    if step.y is not None:
+        attrs.setdefault("y", step.y)
+    if step.items is not None:
+        attrs["items"] = step.items
+
+    return attrs
+
+
+def resolve_coordinates(attrs: dict, context: dict) -> tuple[int, int]:
+    name = attrs.get("name")
+    role = attrs.get("role")
+    accessible_id = attrs.get("accessible_id")
+
+    if name or role or accessible_id:
+        try:
+            dog = get_dog(context, context.get("app") or "")
+            if name:
+                found = dog.find_elements_by_attr(f"$//{name}/")
+            elif role:
+                from src.depends.dogtail.tree import predicate
+                found = dog.obj.findChildren(
+                    predicate.GenericPredicate(roleName=role), recursive=True
+                )
+            else:
+                found = []
+            if found:
+                for node in found:
+                    try:
+                        x, y, width, height = node.extents
+                        center = (x + width / 2, y + height / 2)
+                        if (
+                            center
+                            and center[0] >= 0
+                            and center[1] >= 0
+                            and width is not None
+                            and height is not None
+                            and width > 0
+                            and height > 0
+                        ):
+                            return center
+                    except BaseException:
+                        pass
+                try:
+                    center = dog.element_center(found[0])
+                    if center and center[0] >= 0 and center[1] >= 0:
+                        return center
+                except BaseException:
+                    pass
+        except BaseException:
+            pass
+
+    if attrs.get("x") is not None and attrs.get("y") is not None:
+        return attrs.get("x"), attrs.get("y")
+
+    return attrs.get("x") or 0, attrs.get("y") or 0
+
+
+def find_element(dog, attrs, idx=0):
+    name = attrs.get("name", "")
+    role = attrs.get("role", "")
+    if name:
+        expr = f"$//{name}/"
+        return dog.find_element_by_attr(expr, idx)
+    if role:
+        from src.depends.dogtail.tree import predicate
+        results = dog.obj.findChildren(
+            predicate.GenericPredicate(roleName=role), recursive=True
+        )
+        if not results:
+            from src.custom_exception import ElementNotFound
+            raise ElementNotFound(f"role={role}")
+        return results[idx]
+    from src.custom_exception import ElementNotFound
+    raise ElementNotFound("no name or role in element definition")
+
+
+# ---- Action Handlers ----
+
+
+def handle_session_start(step: SuiteActionStep, context: dict) -> None:
+    cmd = step.command or context.get("app", "")
+    if not cmd:
+        raise ValueError("session_start requires 'command' or app name")
+    context["app"] = cmd
+    if not any(c in cmd for c in "|&;><$`"):
+        parts = cmd.split()
+        if len(parts) == 1:
+            cmd = shlex.quote(cmd)
+    proc = subprocess.Popen(cmd, shell=True, start_new_session=True)
+    context["app_process"] = proc
+
+
+def handle_session_stop(step: SuiteActionStep, context: dict) -> None:
+    proc = context.get("app_process")
+    if proc and proc.poll() is None:
+        proc.terminate()
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait()
+    app = context.get("app", "")
+    if app:
+        pkill_name = os.path.basename(app) if "/" in app else app
+        pgrep = subprocess.run(
+            ["pgrep", "-f", re.escape(pkill_name)],
+            capture_output=True, text=True,
+        )
+        if pgrep.stdout.strip():
+            own_pid = os.getpid()
+            for pid in pgrep.stdout.strip().split():
+                pid_int = int(pid)
+                if pid_int == own_pid:
+                    continue
+                try:
+                    comm = open(f"/proc/{pid_int}/comm").read().strip()
+                except (FileNotFoundError, PermissionError):
+                    continue
+                if comm in ("python3", "python", "sh", "bash"):
+                    continue
+                try:
+                    os.kill(pid_int, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+
+
+def handle_keyboard_press(step: SuiteActionStep, context: dict) -> None:
+    mk = get_mk(context)
+    key = step.key if isinstance(step.key, str) else str(step.key or "")
+    mk.press_key(key)
+
+
+def handle_keyboard_hot_key(step: SuiteActionStep, context: dict) -> None:
+    mk = get_mk(context)
+    keys = step.key
+    if isinstance(keys, str):
+        sep = "+" if "+" in keys else ","
+        key_list = [k.strip().lower() for k in keys.split(sep) if k.strip()]
+    elif isinstance(keys, list):
+        key_list = [str(k).lower() for k in keys]
+    else:
+        key_list = [str(keys).lower()]
+    mk.hot_key(*key_list)
+
+
+def handle_keyboard_type(step: SuiteActionStep, context: dict) -> None:
+    mk = get_mk(context)
+    mk.input_message(step.text or "")
+
+
+def handle_mouse_click(step: SuiteActionStep, context: dict) -> None:
+    mk = get_mk(context)
+    attrs = resolve_step_attrs(step, context.get("elements", {}))
+    x, y = resolve_coordinates(attrs, context)
+    mk.click(x, y)
+
+
+def handle_mouse_right_click(step: SuiteActionStep, context: dict) -> None:
+    mk = get_mk(context)
+    attrs = resolve_step_attrs(step, context.get("elements", {}))
+    x, y = resolve_coordinates(attrs, context)
+    mk.right_click(x, y)
+
+
+def handle_mouse_double_click(step: SuiteActionStep, context: dict) -> None:
+    mk = get_mk(context)
+    attrs = resolve_step_attrs(step, context.get("elements", {}))
+    x, y = resolve_coordinates(attrs, context)
+    mk.double_click(x, y)
+
+
+def handle_mouse_scroll(step: SuiteActionStep, context: dict) -> None:
+    mk = get_mk(context)
+    mk.mouse_scroll(step.value or 0)
+
+
+def handle_mouse_drag(step: SuiteActionStep, context: dict) -> None:
+    mk = get_mk(context)
+    attrs = resolve_step_attrs(step, context.get("elements", {}))
+    x, y = resolve_coordinates(attrs, context)
+    mk.drag_to(x, y)
+
+
+def handle_element_action(step: SuiteActionStep, context: dict) -> None:
+    app_name = context.get("app") or ""
+    dog = get_dog(context, app_name)
+    elements = context.get("elements") or {}
+
+    attrs = resolve_step_attrs(step, elements)
+    idx = attrs.get("index", 0)
+    element = find_element(dog, attrs, idx)
+    action = step.do or "click"
+    if action == "click":
+        element.click()
+    elif action == "right_click":
+        element.click(button=3)
+    elif action == "double_click":
+        element.doubleClick()
+    elif action == "focus":
+        element.grabFocus()
+    else:
+        method = getattr(element, action, None)
+        if callable(method):
+            method()
+        else:
+            raise ValueError(f"Unknown element action: {action}")
+
+
+def handle_element_set_value(step: SuiteActionStep, context: dict) -> None:
+    app_name = context.get("app") or ""
+    dog = get_dog(context, app_name)
+    mk = get_mk(context)
+    elements = context.get("elements") or {}
+
+    attrs = resolve_step_attrs(step, elements)
+    idx = attrs.get("index", 0)
+    element = find_element(dog, attrs, idx)
+    element.click()
+    mk.input_message(step.text or "")
+
+
+def handle_main_menu_comb(step: SuiteActionStep, context: dict) -> None:
+    from src.at.executor.menu_nav import AtMenuNavigator
+
+    elements = context.get("elements") or {}
+    attrs = resolve_step_attrs(step, elements)
+    items = attrs.get("items", []) or []
+
+    nav = AtMenuNavigator(context.get("app", ""))
+    nav.open_main_menu()
+    if items:
+        nav.select(items)
+
+
+def handle_context_menu_comb(step: SuiteActionStep, context: dict) -> None:
+    from src.at.executor.menu_nav import AtMenuNavigator
+
+    elements = context.get("elements") or {}
+    attrs = resolve_step_attrs(step, elements)
+    x, y = resolve_coordinates(attrs, context)
+    items = attrs.get("items", []) or []
+
+    nav = AtMenuNavigator(context.get("app", ""))
+    nav.open_context_menu(x, y)
+    if items:
+        nav.select(items)
+
+
+def handle_dbus_call(step: SuiteActionStep, context: dict) -> None:
+    from src.dbus_utils import DbusUtils
+
+    v = step.value if isinstance(step.value, dict) else {}
+    dog = DbusUtils(
+        v.get("dbus_name", ""),
+        v.get("object_path", ""),
+        v.get("interface", ""),
+    )
+    bus_type = v.get("bus_type", "session")
+    if bus_type == "system":
+        methods = dog.system_object_methods()
+    else:
+        methods = dog.session_object_methods()
+    method_name = v.get("method", "")
+    args = v.get("args", [])
+    method = getattr(methods, method_name, None)
+    if callable(method):
+        method(*args)
+    else:
+        raise ValueError(f"Unknown DBus method: {method_name}")
+
+
+def handle_dbus_get_property(step: SuiteActionStep, context: dict) -> None:
+    from src.dbus_utils import DbusUtils
+
+    v = step.value if isinstance(step.value, dict) else {}
+    dog = DbusUtils(
+        v.get("dbus_name", ""),
+        v.get("object_path", ""),
+        v.get("interface", ""),
+    )
+    prop = v.get("property", "")
+    bus_type = v.get("bus_type", "session")
+    if bus_type == "system":
+        dog.get_system_properties_value(prop)
+    else:
+        dog.get_session_properties_value(prop)
+
+
+def handle_wait(step: SuiteActionStep, context: dict) -> None:
+    pass
+
+
+def handle_screenshot(step: SuiteActionStep, context: dict) -> None:
+    from src.image_utils import ImageUtils
+
+    try:
+        mk = get_mk(context)
+        w, h = mk.screen_size()
+    except Exception:
+        w, h = 1920, 1080
+    ImageUtils.save_temporary_picture(0, 0, w, h)
+
+
+HANDLERS: dict[str, Callable[[SuiteActionStep, dict], None]] = {
+    "session_start": handle_session_start,
+    "session_stop": handle_session_stop,
+    "keyboard_press": handle_keyboard_press,
+    "keyboard_hot_key": handle_keyboard_hot_key,
+    "keyboard_type": handle_keyboard_type,
+    "keyboard_type_text": handle_keyboard_type,
+    "mouse_click": handle_mouse_click,
+    "mouse_right_click": handle_mouse_right_click,
+    "mouse_double_click": handle_mouse_double_click,
+    "mouse_scroll": handle_mouse_scroll,
+    "mouse_drag": handle_mouse_drag,
+    "element_action": handle_element_action,
+    "element_set_value": handle_element_set_value,
+    "main_menu_comb": handle_main_menu_comb,
+    "context_menu_comb": handle_context_menu_comb,
+    "dbus_call": handle_dbus_call,
+    "dbus_get_property": handle_dbus_get_property,
+    "wait": handle_wait,
+    "screenshot": handle_screenshot,
+}

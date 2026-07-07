@@ -8,7 +8,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class SourceType(str, Enum):
@@ -144,7 +144,21 @@ class ElementMappingsDoc(BaseModel):
     mappings: list[MappingEntry] = Field(default_factory=list)
 
 
-# ---- Phase 4/5: Executable Suite YAML ----
+# ---- Phase 4/5: Executable Suite YAML (shared data contract) ----
+
+
+class EnvCheckItem(BaseModel):
+    """Environment pre-check entry.
+
+    type:
+      - process      — pgrep by process name
+      - file_exists  — file path existence
+    """
+    type: str
+    name: str
+    expect: str = "not_running"
+    spec_ids: Optional[list[str]] = None
+
 
 class SuiteActionStep(BaseModel):
     action: str
@@ -164,12 +178,18 @@ class SuiteActionStep(BaseModel):
     name_pattern: Optional[str] = None
     key: Optional[str] = None
     text: Optional[str] = None
+    value: Optional[Any] = None
 
 
 class SuiteCase(BaseModel):
     id: str
+    name: str = ""
+    description: str = ""
+    tags: list[str] = Field(default_factory=list)
+    skip: Optional[str] = None
     steps: list[SuiteActionStep] = Field(default_factory=list)
     assert_steps: list[SuiteActionStep] = Field(default_factory=list)
+    timeout: Optional[int] = None
 
 
 class SuiteConfig(BaseModel):
@@ -177,6 +197,16 @@ class SuiteConfig(BaseModel):
     app: str = ""
     description: str = ""
     module: str = ""
+    tags: list[str] = Field(default_factory=list)
+    skip: Optional[str] = None
+    fast_fail: bool = False
+    env_check: list[EnvCheckItem] = Field(default_factory=list)
     setup: list[SuiteActionStep] = Field(default_factory=list)
-    suites: list[SuiteCase] = Field(default_factory=list)
+    specs: list[SuiteCase] = Field(default_factory=list, alias="suites")
     teardown: list[SuiteActionStep] = Field(default_factory=list)
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    @property
+    def suites(self):
+        return self.specs
