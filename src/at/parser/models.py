@@ -79,6 +79,8 @@ class CaseSuite(BaseModel):
     name: str
     module: str
     description: str = ""
+    status: str = "active"
+    reason: str = ""
     steps: list[CaseStep] = Field(default_factory=list)
 
 

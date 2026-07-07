@@ -210,6 +210,7 @@ def main():
 
     p_at_parse = at_sub.add_parser("parse", help="Parse xlsx into cases.yaml")
     p_at_parse.add_argument("--input", required=True, help="Input xlsx or text directory")
+    p_at_parse.add_argument("--at-tree", default="", help="Path to at-tree.yaml (UI context)")
     p_at_parse.add_argument("--output", required=True, help="Output cases.yaml path")
 
     p_at_map = at_sub.add_parser("map", help="Map operations to AT-SPI elements")

@@ -34,7 +34,11 @@ def cmd_dump(args):
 def cmd_parse(args):
     try:
         from youqu.src.at.generator.case_parser import parse_to_cases
-        parse_to_cases(input_path=args.input, output_path=args.output)
+        parse_to_cases(
+            input_path=args.input,
+            output_path=args.output,
+            at_tree_path=getattr(args, "at_tree", ""),
+        )
     except ImportError:
         _not_implemented("parse")
 
