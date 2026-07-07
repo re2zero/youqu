@@ -201,26 +201,10 @@ cd <AUTOTEST_PATH> && youqu run --collect-only
    - 如果两者都不是编译产物，必须向用户确认构建命令或停止测试。
    `BUILD_COMMAND` 必须由 Issue 或用户明确提供；LLM 只能检查项目技术栈辅助确认，不得自行发明。
 
-```bash
-cd <PROJECT_ROOT> && <BUILD_COMMAND>
-```
-
-3. 验证编译产物存在且可执行：
+2. **安装构建依赖**：如果 `BUILD_DEP_COMMAND` 存在，则在编译前执行：
 
 ```bash
-test -x <APP_PATH>
-```
-
-4. 如果应用需要系统安装后才能验证，执行安装：
-
-```bash
-cd <PROJECT_ROOT> && <INSTALL_COMMAND>
-```
-
-5. 安装密码从环境变量 `$INSTALL_PASSWORD` 读取。例如：
-
-```bash
-echo "$INSTALL_PASSWORD" | sudo -S sh -c "<INSTALL_COMMAND>"
+echo "$INSTALL_PASSWORD" | sudo -S sh -c "<BUILD_DEP_COMMAND>"
 ```
 
    如果 `$INSTALL_PASSWORD` 为空，提示错误并中止：
@@ -228,6 +212,27 @@ echo "$INSTALL_PASSWORD" | sudo -S sh -c "<INSTALL_COMMAND>"
    错误：INSTALL_PASSWORD 环境变量为空，无法执行需要 sudo 权限的操作。
    请确保在执行环境中设置了 INSTALL_PASSWORD。
    ```
+
+3. 如果 `BUILD_COMMAND` 存在，执行编译：
+
+```bash
+cd <PROJECT_ROOT> && <BUILD_COMMAND>
+```
+
+4. 验证编译产物存在且可执行：
+
+```bash
+test -x <APP_PATH>
+```
+
+5. 如果应用需要系统安装后才能验证，执行安装：
+
+```bash
+echo "$INSTALL_PASSWORD" | sudo -S sh -c "<INSTALL_COMMAND>"
+```
+
+   安装密码从环境变量 `$INSTALL_PASSWORD` 读取。
+   如果 `$INSTALL_PASSWORD` 为空，提示错误并中止（同步骤 2 的错误信息）。
    `INSTALL_COMMAND` 必须由 Issue 或用户明确提供；LLM 只能检查项目技术栈辅助确认，不得自行发明。
 
 6. **禁止操作**：
