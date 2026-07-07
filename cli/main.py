@@ -198,6 +198,35 @@ def main():
     p_inspect.add_argument("app_path", help="Application executable path")
     p_inspect.add_argument("app_args", nargs="*", help="Arguments passed to application")
 
+    # youqu at <subcommand>
+    p_at = sub.add_parser("at", help="AT-SPI YAML test pipeline")
+    at_sub = p_at.add_subparsers(dest="at_command")
+
+    p_at_dump = at_sub.add_parser("dump", help="Dump AT-SPI tree")
+    p_at_dump.add_argument("type", choices=["dtk"], help="App framework type")
+    p_at_dump.add_argument("--app", required=True, help="App ID (e.g. dde-file-manager)")
+    p_at_dump.add_argument("--src", required=True, help="App source directory")
+    p_at_dump.add_argument("--output", default="tests/at", help="Output directory")
+
+    p_at_parse = at_sub.add_parser("parse", help="Parse xlsx into cases.yaml")
+    p_at_parse.add_argument("--input", required=True, help="Input xlsx or text directory")
+    p_at_parse.add_argument("--output", required=True, help="Output cases.yaml path")
+
+    p_at_map = at_sub.add_parser("map", help="Map operations to AT-SPI elements")
+    p_at_map.add_argument("--at-tree", required=True, help="Path to at-tree.yaml")
+    p_at_map.add_argument("--cases", required=True, help="Path to cases.yaml")
+    p_at_map.add_argument("--output", required=True, help="Output element-mappings.yaml path")
+
+    p_at_generate = at_sub.add_parser("generate", help="Generate executable YAML")
+    p_at_generate.add_argument("--cases", required=True, help="Path to cases.yaml")
+    p_at_generate.add_argument("--mappings", required=True, help="Path to element-mappings.yaml")
+    p_at_generate.add_argument("--output", required=True, help="Output directory")
+
+    p_at_run = at_sub.add_parser("run", help="Run AT-SPI YAML tests")
+    p_at_run.add_argument("--testdir", default="tests/at/yaml", help="Test directory")
+    p_at_run.add_argument("--suite", help="Run specific suite")
+    p_at_run.add_argument("-k", help="Keyword filter")
+
     args, extra = parser.parse_known_args()
 
     if args.command == "make":
@@ -257,6 +286,21 @@ def main():
             inspector.inspect(args.app_path, args.app_args)
         except ImportError as e:
             print(f"AT-SPI inspector requires: sudo apt install at-spi2-core python3-pyatspi\n{e}", file=sys.stderr)
+            sys.exit(1)
+    elif args.command == "at":
+        from youqu.cli.at import cmd_dump, cmd_parse, cmd_map, cmd_generate, cmd_run
+        dispatch = {
+            "dump": cmd_dump,
+            "parse": cmd_parse,
+            "map": cmd_map,
+            "generate": cmd_generate,
+            "run": cmd_run,
+        }
+        handler = dispatch.get(args.at_command)
+        if handler:
+            handler(args)
+        else:
+            print("Usage: youqu at {dump|parse|map|generate|run}")
             sys.exit(1)
     else:
         parser.print_help()
