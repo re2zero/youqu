@@ -148,7 +148,7 @@ class TestElementHint:
     def test_all_hints(self):
         from src.at.parser.models import ElementHint
         hints = list(ElementHint)
-        assert len(hints) == 9
+        assert len(hints) == 25
         assert ElementHint.main_menu_comb in hints
         assert ElementHint.context_menu_comb in hints
 

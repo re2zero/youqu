@@ -32,6 +32,22 @@ class ElementHint(str, Enum):
     dialog = "dialog"
     tooltip = "tooltip"
     dock = "dock"
+    click = "click"
+    hover = "hover"
+    keyboard_shortcut = "keyboard_shortcut"
+    scroll = "scroll"
+    input_text = "input_text"
+    drag_drop = "drag_drop"
+    dbus_call = "dbus_call"
+    screenshot = "screenshot"
+    vlm_assert = "vlm_assert"
+    assert_window = "assert_window"
+    assert_element = "assert_element"
+    assert_window_count = "assert_window_count"
+    assert_not_exists = "assert_not_exists"
+    visual_check = "visual_check"
+    physical_device = "physical_device"
+    cross_device = "cross_device"
 
 
 class MappingStatus(str, Enum):
@@ -146,6 +162,8 @@ class SuiteActionStep(BaseModel):
     app: Optional[str] = None
     expected: Optional[int] = None
     name_pattern: Optional[str] = None
+    key: Optional[str] = None
+    text: Optional[str] = None
 
 
 class SuiteCase(BaseModel):
