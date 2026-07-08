@@ -192,6 +192,21 @@ Ruff: line-length=100, 4-space indent, Python 3.10+。仅启用 E4/E7/E9/F 规�
 - DISPLAY=:0 在 `conftest.py` 中硬编码
 - 依赖通过 `env.sh` 安装 (无 requirements.txt / Pipfile / poetry.lock)
 - 可选依赖: letmego (重启类场景)，playwright (Web UI)，zerorpc (远程执行)，fastmcp-slim[server] (MCP HTTP transport)
+- libclang Python 绑定 (用于 `youqu at dump` 静态源码扫描): `python3-clang-18` + `libclang-18-dev` (或 17/19 版本)
+
+### AT-SPI YAML 测试管道 (youqu at)
+
+`youqu at dump <type> --app <app_id> --src <src_dir> --output <output_dir>` 用于生成 AT-SPI YAML 测试树。
+
+**静态扫描依赖**：
+- 需要 libclang Python 绑定以提取 DTK/Qt 控件声明骨架
+- 安装命令: `sudo apt install python3-clang-18 libclang-18-dev` (或 17/19 版本)
+- 若未安装，静态扫描将跳过，仅保留运行时 AT-SPI 树抓取
+
+**命令示例**：
+```bash
+youqu at dump dtk --app dde-file-manager --src /path/to/source --output /path/to/output
+```
 
 ### 远程执行
 `manage.py remote` 通过 SSH 分发代码，`--slaves` 参数格式: `user@ip:password`，多台用 `/` 分隔。

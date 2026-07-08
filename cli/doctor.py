@@ -35,7 +35,7 @@ class _Doctor:
         self._check_display()
         self._check_xauthority()
         self._check_accessibility()
-
+        self._check_libclang()
         self._check_java()
         self._check_skills()
 
@@ -298,7 +298,39 @@ class _Doctor:
         else:
             print(f"       gsettings failed: {r.stderr.strip()[-200:]}")
 
+    # ── libclang Python bindings ──────────────────────────────────────
+
+    def _check_libclang(self):
+        try:
+            import clang.cindex  # noqa: F401
+            self._ok("libclang Python bindings")
+            return
+        except ImportError:
+            pass
+        self._fail("libclang Python bindings missing — fixing")
+
+        # Strategy 1: apt install python3-clang-18 libclang-18-dev
+        result = self._sudo("apt", "install", "-y", "python3-clang-18", "libclang-18-dev")
+        if result.returncode == 0:
+            self._fixed_msg("apt install python3-clang-18 libclang-18-dev")
+            return
+
+        # Strategy 2: apt install python3-clang-17 libclang-17-dev
+        result = self._sudo("apt", "install", "-y", "python3-clang-17", "libclang-17-dev")
+        if result.returncode == 0:
+            self._fixed_msg("apt install python3-clang-17 libclang-17-dev")
+            return
+
+        # Strategy 3: apt install python3-clang libclang-dev
+        result = self._sudo("apt", "install", "-y", "python3-clang", "libclang-dev")
+        if result.returncode == 0:
+            self._fixed_msg("apt install python3-clang libclang-dev")
+            return
+
+        print(f"       all install strategies failed: {result.stderr.strip()[-200:]}")
+
     # ── java ──────────────────────────────────────────────────────────
+
 
     def _check_java(self):
         if shutil.which("java"):
