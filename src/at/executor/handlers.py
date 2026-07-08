@@ -267,12 +267,18 @@ def handle_element_set_value(step: SuiteActionStep, context: dict) -> None:
     mk.input_message(step.text or "")
 
 
-def handle_main_menu_comb(step: SuiteActionStep, context: dict) -> None:
+def handle_dtk_main_menu(step: SuiteActionStep, context: dict) -> None:
     from src.at.executor.menu_nav import AtMenuNavigator
 
     elements = context.get("elements") or {}
     attrs = resolve_step_attrs(step, elements)
-    items = attrs.get("items", []) or []
+    items = attrs.get("menu", []) or attrs.get("items", [])
+
+    if not items:
+        role = attrs.get("role", "")
+        name = attrs.get("name", "")
+        if name and "menu" in role.lower():
+            items = [name]
 
     nav = AtMenuNavigator(context.get("app", ""))
     nav.open_main_menu()
@@ -280,13 +286,19 @@ def handle_main_menu_comb(step: SuiteActionStep, context: dict) -> None:
         nav.select(items)
 
 
-def handle_context_menu_comb(step: SuiteActionStep, context: dict) -> None:
+def handle_dtk_context_menu(step: SuiteActionStep, context: dict) -> None:
     from src.at.executor.menu_nav import AtMenuNavigator
 
     elements = context.get("elements") or {}
     attrs = resolve_step_attrs(step, elements)
     x, y = resolve_coordinates(attrs, context)
-    items = attrs.get("items", []) or []
+    items = attrs.get("menu", []) or attrs.get("items", [])
+
+    if not items:
+        role = attrs.get("role", "")
+        name = attrs.get("name", "")
+        if name and "menu" in role.lower():
+            items = [name]
 
     nav = AtMenuNavigator(context.get("app", ""))
     nav.open_context_menu(x, y)
@@ -349,6 +361,98 @@ def handle_screenshot(step: SuiteActionStep, context: dict) -> None:
     ImageUtils.save_temporary_picture(0, 0, w, h)
 
 
+def _attrs_to_expr(attrs: dict) -> str:
+    name = attrs.get("name", "") if attrs else ""
+    return f"$//{name}/" if name else "$/"
+
+
+def _assert_element_expr(step: SuiteActionStep, context: dict) -> str:
+    elements = context.get("elements") or {}
+    if step.ref and step.ref in elements:
+        return _attrs_to_expr(elements[step.ref])
+    if step.selector:
+        return _attrs_to_expr(step.selector)
+    return ""
+
+
+def handle_assert_element(step: SuiteActionStep, context: dict) -> None:
+    from src.assert_common import AssertCommon
+
+    expr = _assert_element_expr(step, context)
+    AssertCommon.assert_element_exist(expr)
+
+
+def handle_assert_not_exists(step: SuiteActionStep, context: dict) -> None:
+    from src.assert_common import AssertCommon
+
+    expr = _assert_element_expr(step, context)
+    AssertCommon.assert_element_not_exist(expr)
+
+
+def handle_assert_window(step: SuiteActionStep, context: dict) -> None:
+    from src.assert_common import AssertCommon
+
+    app = step.app or context.get("app", "")
+    AssertCommon.assert_element_exist(f"$/{app}//DMainWindow")
+
+
+def handle_assert_window_count(step: SuiteActionStep, context: dict) -> None:
+    from src.assert_common import AssertCommon
+
+    app = step.app or context.get("app", "")
+    expected = step.expected or 1
+    AssertCommon.assert_window_amount(app, int(expected))
+
+
+def handle_assert_process_running(step: SuiteActionStep, context: dict) -> None:
+    from src.assert_common import AssertCommon
+
+    app = step.app or step.value or context.get("app", "")
+    AssertCommon.assert_process_status(True, app)
+
+
+def handle_assert_file_exists(step: SuiteActionStep, context: dict) -> None:
+    from src.assert_common import AssertCommon
+
+    path = step.path or step.value or ""
+    AssertCommon.assert_file_exist(path)
+
+
+def handle_assert_file_not_exists(step: SuiteActionStep, context: dict) -> None:
+    from src.assert_common import AssertCommon
+
+    path = step.path or step.value or ""
+    AssertCommon.assert_file_not_exist(path)
+
+
+def handle_assert_image_exists(step: SuiteActionStep, context: dict) -> None:
+    from src.assert_common import AssertCommon
+
+    path = step.path or step.value or ""
+    AssertCommon.assert_image_exist(path)
+
+
+def handle_assert_image_not_exists(step: SuiteActionStep, context: dict) -> None:
+    from src.assert_common import AssertCommon
+
+    path = step.path or step.value or ""
+    AssertCommon.assert_image_not_exist(path)
+
+
+def handle_assert_ocr_exists(step: SuiteActionStep, context: dict) -> None:
+    from src.assert_common import AssertCommon
+
+    text = step.value or step.expected or ""
+    AssertCommon.assert_ocr_exist(str(text))
+
+
+def handle_assert_ocr_not_exists(step: SuiteActionStep, context: dict) -> None:
+    from src.assert_common import AssertCommon
+
+    text = step.value or step.expected or ""
+    AssertCommon.assert_ocr_not_exist(str(text))
+
+
 HANDLERS: dict[str, Callable[[SuiteActionStep, dict], None]] = {
     "session_start": handle_session_start,
     "session_stop": handle_session_stop,
@@ -363,10 +467,21 @@ HANDLERS: dict[str, Callable[[SuiteActionStep, dict], None]] = {
     "mouse_drag": handle_mouse_drag,
     "element_action": handle_element_action,
     "element_set_value": handle_element_set_value,
-    "main_menu_comb": handle_main_menu_comb,
-    "context_menu_comb": handle_context_menu_comb,
+    "dtk_main_menu": handle_dtk_main_menu,
+    "dtk_context_menu": handle_dtk_context_menu,
     "dbus_call": handle_dbus_call,
     "dbus_get_property": handle_dbus_get_property,
     "wait": handle_wait,
     "screenshot": handle_screenshot,
+    "assert_element": handle_assert_element,
+    "assert_not_exists": handle_assert_not_exists,
+    "assert_window": handle_assert_window,
+    "assert_window_count": handle_assert_window_count,
+    "assert_process_running": handle_assert_process_running,
+    "assert_file_exists": handle_assert_file_exists,
+    "assert_file_not_exists": handle_assert_file_not_exists,
+    "assert_image_exists": handle_assert_image_exists,
+    "assert_image_not_exists": handle_assert_image_not_exists,
+    "assert_ocr_exists": handle_assert_ocr_exists,
+    "assert_ocr_not_exists": handle_assert_ocr_not_exists,
 }

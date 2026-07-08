@@ -14,6 +14,13 @@ _log = logging.getLogger("youqu.at.executor")
 
 
 def _find_suite_files(test_dir: str, suite_name: Optional[str] = None) -> list[Path]:
+    if suite_name and (suite_name.startswith("/") or suite_name.endswith(".suite.yaml")):
+        p = Path(suite_name)
+        if p.is_file():
+            return [p]
+        if p.is_dir():
+            return sorted(p.rglob("*.suite.yaml"))
+        return []
     base = Path(test_dir)
     if not base.is_dir():
         _log.error("test directory not found: %s", test_dir)

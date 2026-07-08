@@ -14,14 +14,14 @@ class AtMenuNavigator:
     def __init__(self, app_name: str = "", desc: str = ""):
         self.app_name = app_name
         self.desc = desc
-        self._mk = None
+        self._mk_inst = None
         self._app_node = None
 
-    def _mk(self):
-        if self._mk is None:
+    def _get_mk(self):
+        if self._mk_inst is None:
             from src.mouse_key import MouseKey
-            self._mk = MouseKey()
-        return self._mk
+            self._mk_inst = MouseKey()
+        return self._mk_inst
 
     def _app(self):
         if self._app_node is None:
@@ -31,7 +31,7 @@ class AtMenuNavigator:
         return self._app_node
 
     def open_main_menu(self):
-        self._mk().press_key("Alt")
+        self._get_mk().press_key("Alt")
         time.sleep(0.1)
         try:
             from src.dogtail_utils import DogtailUtils
@@ -44,7 +44,7 @@ class AtMenuNavigator:
             pass
 
     def open_context_menu(self, x: int, y: int):
-        self._mk().right_click(x, y)
+        self._get_mk().right_click(x, y)
         time.sleep(0.1)
 
     def _collect_menu_items(self, node, max_depth=3):
@@ -102,31 +102,30 @@ class AtMenuNavigator:
             matched = name == target if exact else target.lower() in name.lower()
             if matched:
                 for _ in range(idx):
-                    self._mk().press_key("Down")
+                    self._get_mk().press_key("Down")
                     time.sleep(0.1)
                 return True
         return False
 
+    def _read_focused_item(self, from_root=False):
+        result = self._scan_focused(self._app(), max_depth=3)
+        if not result and from_root:
+            try:
+                from src.depends.dogtail.tree import root as atspi_root
+                result = self._scan_focused(atspi_root, max_depth=4)
+            except Exception:
+                pass
+        return result
+
     def _navigate_by_focus(self, target, exact=False):
-        start_text = self._scan_focused(self._app(), max_depth=3)
+        start_text = self._read_focused_item()
         if not start_text:
             return False, ""
 
         for iteration in range(self.MAX_LOOP):
             current = self._scan_focused(self._app(), max_depth=3)
             if not current:
-                items = self._all_menu_items(from_root=True)
-                for name, child in items:
-                    try:
-                        states = set(
-                            s.lower() for s in getattr(child, "states", [])
-                            if hasattr(child, "states")
-                        )
-                    except Exception:
-                        continue
-                    if "focused" in states or "selected" in states:
-                        current = name
-                        break
+                current = self._read_focused_item(from_root=True)
 
             if not current and not start_text and iteration > 0:
                 return False, "menu closed"
@@ -142,7 +141,7 @@ class AtMenuNavigator:
             if iteration > 0 and current == start_text:
                 return False, f"menu item '{target}' not found"
 
-            self._mk().press_key("Down")
+            self._get_mk().press_key("Down")
             time.sleep(0.1)
 
         return False, f"menu item '{target}' not found after {self.MAX_LOOP} iterations"
@@ -156,7 +155,7 @@ class AtMenuNavigator:
         found = [False]
         iteration = [0]
         start_name = [None]
-        mk = self._mk()
+        mk = self._get_mk()
 
         def on_focus_event(event):
             try:
@@ -232,13 +231,13 @@ class AtMenuNavigator:
                 raise AtMenuNotFoundError(err or f"menu item '{target}' not found")
 
             if i < len(items) - 1:
-                self._mk().press_key("Right")
+                self._get_mk().press_key("Right")
                 time.sleep(0.3)
 
     def select(self, items, exact=False):
         self.navigate_to(items, exact)
-        self._mk().press_key("Return")
+        self._get_mk().press_key("Return")
         time.sleep(0.3)
 
     def cancel(self):
-        self._mk().press_key("Escape")
+        self._get_mk().press_key("Escape")

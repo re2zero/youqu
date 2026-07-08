@@ -25,7 +25,7 @@ def test_build_map_prompt():
     assert "UI element mapping expert" in prompt
     assert "cases text" in prompt
     assert "at-tree text" in prompt
-    assert "main_menu_comb" in prompt
+    assert "dtk_main_menu" in prompt
     assert "element_action" in prompt
 
 

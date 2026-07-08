@@ -25,7 +25,7 @@ element-mappings schema:
       "step_index": 0,
       "description": "string",
       "step_type": "action|assert|navigate",
-      "element_hint": "main_menu_comb|context_menu_comb|titlebar|toolbar|sidebar|tab_bar|dialog|tooltip|dock|null",
+      "element_hint": "dtk_main_menu|dtk_context_menu|titlebar|toolbar|sidebar|tab_bar|dialog|tooltip|dock|null",
       "menu_path": ["item1", "item2"] or null,
       "element_ref": "string or null",
       "selector": {"name": "string", "role": "string", "name_pattern": "string"} or null,
@@ -54,7 +54,7 @@ def _build_map_prompt(cases_text: str, at_tree_text: str) -> str:
         "Constraints:\n"
         f"- Follow role constraints: {constraints}\n"
         f"- Step type to operation: {step_map}\n"
-        "- main_menu_comb / context_menu_comb use menu_path instead of fixed ref\n"
+        "- dtk_main_menu / dtk_context_menu use menu_path instead of fixed ref\n"
         "- fix_suggestion must be specific (e.g. add setAccessibleName('xxx') in source)\n\n"
         f"{SCHEMA_DESCRIPTION}\n\n"
         "Output valid JSON matching the schema above. No markdown, no explanation.\n\n"

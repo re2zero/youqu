@@ -142,7 +142,7 @@ _SCHEMA_DESCRIPTION = """{
         {
           "step_type": "action|assert|navigate",
           "description": "步骤描述",
-          "element_hint": "main_menu_comb|context_menu_comb|titlebar|toolbar|sidebar|tab_bar|dialog|tooltip|dock|null",
+          "element_hint": "dtk_main_menu|dtk_context_menu|titlebar|toolbar|sidebar|tab_bar|dialog|tooltip|dock|null",
           "menu_path": ["菜单项1", "菜单项2"]
         }
       ]
@@ -171,14 +171,14 @@ _PARSE_PROMPT_TEMPLATE = """角色：测试用例整理专家
 - 玲珑环境、性能压测、触摸操作、重启类 -> status: "skipped"
 
 element_hint 枚举值：
-main_menu_comb, context_menu_comb, titlebar, toolbar, sidebar, tab_bar, dialog, tooltip, dock, null
+dtk_main_menu, dtk_context_menu, titlebar, toolbar, sidebar, tab_bar, dialog, tooltip, dock, null
 
 step_type 说明：
 - navigate: 导航类操作（打开菜单、切换tab等）
 - action: 执行类操作（点击按钮、输入文本、右键等）
 - assert: 验证类操作（检查弹窗、验证状态等）
 
-menu_path：仅 main_menu_comb 和 context_menu_comb 需要填写，其他为 null
+menu_path：仅 dtk_main_menu 和 dtk_context_menu 需要填写，其他为 null
 
 输出格式（严格遵循，输出纯JSON，不要markdown代码块）：
 {schema}

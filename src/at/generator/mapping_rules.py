@@ -3,8 +3,8 @@
 # SPDX-License-Identifier: GPL-2.0-only
 
 HINT_ROLE_CONSTRAINTS: dict[str, dict[str, str]] = {
-    "main_menu_comb": {"parent_role": "menu_bar", "item_role": "menu_item"},
-    "context_menu_comb": {"requires_context": True},
+    "dtk_main_menu": {"parent_role": "menu_bar", "item_role": "menu_item"},
+    "dtk_context_menu": {"requires_context": True},
     "titlebar": {"parent_role": "title_bar"},
     "toolbar": {"parent_role": "tool_bar"},
     "sidebar": {"role": "panel"},

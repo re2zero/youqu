@@ -29,7 +29,7 @@ CASES_YAML = {
             "module": "菜单",
             "status": "active",
             "steps": [
-                {"step_type": "navigate", "description": "打开文件菜单", "element_hint": "main_menu_comb", "menu_path": ["文件", "新建窗口"]},
+                {"step_type": "navigate", "description": "打开文件菜单", "element_hint": "dtk_main_menu", "menu_path": ["文件", "新建窗口"]},
                 {"step_type": "action", "description": "点击播放", "element_hint": "click"},
             ],
         },
@@ -63,7 +63,7 @@ MAPPINGS_YAML = {
             "step_index": 0,
             "description": "打开文件菜单",
             "step_type": "navigate",
-            "element_hint": "main_menu_comb",
+            "element_hint": "dtk_main_menu",
             "menu_path": ["文件", "新建窗口"],
             "status": "mapped",
         },
@@ -135,9 +135,9 @@ def test_step_to_action_menu_comb():
     from src.at.generator.yaml_generator import _step_to_action
     from src.at.parser.models import CaseStep, ElementHint, StepType
 
-    step = CaseStep(step_type=StepType.navigate, description="打开文件", element_hint=ElementHint.main_menu_comb, menu_path=["文件", "新建窗口"])
+    step = CaseStep(step_type=StepType.navigate, description="打开文件", element_hint=ElementHint.dtk_main_menu, menu_path=["文件", "新建窗口"])
     action = _step_to_action(step, None)
-    assert action.action == "main_menu_comb"
+    assert action.action == "dtk_main_menu"
     assert action.items == ["文件", "新建窗口"]
 
 

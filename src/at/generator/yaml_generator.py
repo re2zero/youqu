@@ -61,11 +61,11 @@ def _write_yaml(data: dict | list, path: str) -> None:
 def _step_to_action(step: CaseStep, mapping: MappingEntry | None) -> SuiteActionStep:
     action_name = STEP_TYPE_MAP.get(step.step_type.value, "element_action")
 
-    if step.element_hint == ElementHint.main_menu_comb and step.menu_path:
-        return SuiteActionStep(action="main_menu_comb", items=step.menu_path)
+    if step.element_hint == ElementHint.dtk_main_menu and step.menu_path:
+        return SuiteActionStep(action="dtk_main_menu", items=step.menu_path)
 
-    if step.element_hint == ElementHint.context_menu_comb and step.menu_path:
-        return SuiteActionStep(action="context_menu_comb", items=step.menu_path)
+    if step.element_hint == ElementHint.dtk_context_menu and step.menu_path:
+        return SuiteActionStep(action="dtk_context_menu", items=step.menu_path)
 
     if step.element_hint == ElementHint.titlebar:
         selector = mapping.selector.model_dump(mode="json", exclude_none=True) if mapping and mapping.selector else None

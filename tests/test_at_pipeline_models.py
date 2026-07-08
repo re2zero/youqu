@@ -56,9 +56,9 @@ class TestCasesModels:
         assert step.step_type == StepType.action
         step_navigate = CaseStep(
             step_type=StepType.navigate, description="open menu",
-            element_hint=ElementHint.main_menu_comb, menu_path=["文件"],
+            element_hint=ElementHint.dtk_main_menu, menu_path=["文件"],
         )
-        assert step_navigate.element_hint == ElementHint.main_menu_comb
+        assert step_navigate.element_hint == ElementHint.dtk_main_menu
 
     def test_case_suite(self):
         from src.at.parser.models import CaseStep, CaseSuite, ElementHint, StepType
@@ -66,7 +66,7 @@ class TestCasesModels:
             id="s1", name="Menu Test", module="菜单",
             steps=[
                 CaseStep(step_type=StepType.navigate, description="open file menu",
-                          element_hint=ElementHint.main_menu_comb, menu_path=["文件"]),
+                          element_hint=ElementHint.dtk_main_menu, menu_path=["文件"]),
                 CaseStep(step_type=StepType.action, description="click new window"),
             ],
         )
@@ -133,7 +133,7 @@ class TestSuiteConfigModels:
 
     def test_suite_action_step_all_fields(self):
         from src.at.parser.models import SuiteActionStep
-        step = SuiteActionStep(action="main_menu_comb", items=["文件", "新建窗口"])
+        step = SuiteActionStep(action="dtk_main_menu", items=["文件", "新建窗口"])
         assert step.items == ["文件", "新建窗口"]
 
     def test_suite_config_serialization(self):
@@ -149,8 +149,8 @@ class TestElementHint:
         from src.at.parser.models import ElementHint
         hints = list(ElementHint)
         assert len(hints) == 25
-        assert ElementHint.main_menu_comb in hints
-        assert ElementHint.context_menu_comb in hints
+        assert ElementHint.dtk_main_menu in hints
+        assert ElementHint.dtk_context_menu in hints
 
     def test_invalid_hint(self):
         from src.at.parser.models import CaseStep, StepType

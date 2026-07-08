@@ -23,8 +23,8 @@ class StepType(str, Enum):
 
 
 class ElementHint(str, Enum):
-    main_menu_comb = "main_menu_comb"
-    context_menu_comb = "context_menu_comb"
+    dtk_main_menu = "dtk_main_menu"
+    dtk_context_menu = "dtk_context_menu"
     titlebar = "titlebar"
     toolbar = "toolbar"
     sidebar = "sidebar"
