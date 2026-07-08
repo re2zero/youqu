@@ -36,9 +36,12 @@ class AtMenuNavigator:
         try:
             from src.dogtail_utils import DogtailUtils
             dog = DogtailUtils(self.app_name, self.desc) if self.app_name else DogtailUtils()
-            btn = dog.find_element_by_attr("$//DTitlebarDWindowOptionButton/")
+            btn = dog.find_element_by_attr("$//DTitlebarDWindowOptionButton/", index=-1)
             if btn:
-                btn.click()
+                if "Press" in getattr(btn, "actions", {}):
+                    btn.doActionNamed("Press")
+                else:
+                    btn.click()
                 time.sleep(0.15)
         except Exception:
             pass

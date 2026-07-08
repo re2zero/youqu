@@ -165,7 +165,7 @@ class SuiteActionStep(BaseModel):
     ref: Optional[str] = None
     selector: Optional[dict[str, Any]] = None
     command: Optional[str] = None
-    wait: Optional[int] = None
+    wait: Optional[float] = None
     do: Optional[str] = None
     x: Optional[int] = None
     y: Optional[int] = None

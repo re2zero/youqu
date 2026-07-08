@@ -1,0 +1,24 @@
+name: fm-open-close
+app: dde-file-manager
+tags: [smoke, e2e]
+
+env_check:
+  - type: process
+    name: dde-file-manager
+    expect: not_running
+
+specs:
+  - id: fm_001
+    name: open and close file manager
+    tags: [smoke]
+    steps:
+      - action: session_start
+        command: /usr/bin/dde-file-manager
+        wait: 3
+      - action: assert_window
+        wait: 1
+      - action: assert_window_count
+        expected: 1
+    teardown:
+      - action: session_stop
+        wait: 1

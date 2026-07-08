@@ -235,22 +235,21 @@ def _get_mk(context: dict):
 
 
 def _get_dog(context: dict, app: str | None = None):
-    if context.get("dog") is None:
-        from src.dogtail_utils import DogtailUtils
+        if context.get("dog") is None:
+            from src.dogtail_utils import DogtailUtils
 
-        if app and "/" in app:
-            atspi_name = app.split()[0] if app.split()[0] else app
-        else:
-            atspi_name = app
-        context["dog"] = DogtailUtils(atspi_name) if atspi_name else DogtailUtils()
-    return context["dog"]
+            if app and "/" in app:
+                atspi_name = os.path.basename(app.split()[0])
+            else:
+                atspi_name = app
+            context["dog"] = DogtailUtils(atspi_name) if atspi_name else DogtailUtils()
+        return context["dog"]
 
 
 def _handle_session_start(step: ActionStep, context: dict) -> None:
     cmd = step.command or context.get("app", "")
     if not cmd:
         raise ValueError("session_start requires 'command' or app name")
-    context["app"] = cmd
     if not any(c in cmd for c in "|&;><$`"):
         parts = cmd.split()
         if len(parts) == 1:

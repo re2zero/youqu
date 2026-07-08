@@ -129,7 +129,6 @@ def handle_session_start(step: SuiteActionStep, context: dict) -> None:
     cmd = step.command or context.get("app", "")
     if not cmd:
         raise ValueError("session_start requires 'command' or app name")
-    context["app"] = cmd
     if not any(c in cmd for c in "|&;><$`"):
         parts = cmd.split()
         if len(parts) == 1:

@@ -1,0 +1,26 @@
+name: "E2E: deepin-terminal 主菜单切换主题"
+app: "deepin-terminal"
+
+setup:
+  - action: session_start
+    command: "/usr/bin/deepin-terminal"
+    wait: 2.0
+
+teardown:
+  - action: session_stop
+
+specs:
+  - id: term_menu_theme_001
+    name: "切换主题-跟随系统→浅色→深色"
+    steps:
+      - action: dtk_main_menu
+        items: ["主题", "跟随系统"]
+        wait: 0.5
+      - action: dtk_main_menu
+        items: ["主题", "浅色"]
+        wait: 0.5
+      - action: dtk_main_menu
+        items: ["主题", "深色"]
+        wait: 0.5
+      - action: assert_window
+        window: "DMainWindow"
