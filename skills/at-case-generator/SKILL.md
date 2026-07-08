@@ -2,20 +2,31 @@
 name: at-case-generator
 version: "0.1.0"
 description: >
-  Generate AT-SPI test suites from xlsx/csv test case documents using the
-  `youqu at` CLI pipeline (parse → map → generate). Produces executable
-  suite YAML + elements.yaml for `youqu at run`. Use whenever: AT用例生成,
-  at-case generation, youqu at parse, youqu at map, youqu at generate,
-  AT suite generation, AT-SPI suite YAML, at-tree用例, 桌面应用AT测试,
-  AT自动化用例.
+  Use when needing to generate AT-SPI test suites from xlsx/csv test case
+  documents for a Linux desktop application. Triggers: AT用例生成,
+  at-case generation, AT suite generation, AT-SPI suite YAML, at-tree用例,
+  桌面应用AT测试, AT自动化用例, youqu at parse, youqu at map,
+  youqu at generate.
 ---
 
 # AT Case Generator
 
-Generate executable AT-SPI test suites from xlsx/csv test case documents using the
-`youqu at` CLI pipeline (parse → map → generate). The pipeline uses an LLM to
-understand test intent and map steps to AT-SPI elements from a tree dump.
-Output is executable by `youqu at run`.
+Orchestrate the `youqu at` CLI pipeline to convert xlsx/csv test case documents
+into executable AT-SPI suite YAML. The pipeline uses an LLM to understand test
+intent and map steps to AT-SPI elements from a tree dump. Output is executable
+by `youqu at run`.
+
+## When to Use
+
+- You have xlsx/csv test case documents for a Linux desktop application
+- You need executable AT-SPI test suites from those documents
+- Input is a PR/issue/requirement and you want to generate cases directly
+
+## When NOT to Use
+
+- You need standard YAML test cases (use `youqu-case-generator` instead)
+- You need to run existing AT suites (use `youqu at run` directly)
+- You need to dump the AT-SPI tree only (use `youqu at dump` directly)
 
 ## Two Operating Modes
 
@@ -28,77 +39,42 @@ Output is executable by `youqu at run`.
 
 ### Step 1: Pre-flight Checks
 
-Verify prerequisites before running the pipeline:
+- `youqu --version` — CLI installed
+- LLM API reachable (`YOUQU_AT_BASE_URL`, default `http://localhost:8000/v1`)
+- xlsx/csv input exists, columns match supported aliases (see pipeline-reference.md)
 
-- Verify `youqu` CLI is installed: `youqu --version`
-- Verify LLM API is reachable (parse/map need it): check `YOUQU_AT_BASE_URL`
-  env var (default: `http://localhost:8000/v1`)
-- Verify xlsx/csv input exists and columns are readable
+### Step 2: Acquire at-tree.yaml
 
-Supported xlsx/csv column aliases:
-- `id`: 用例编号, ID, 编号, 序号
-- `title`: 用例标题, 标题, 用例名称, 测试点
-- `module`: 所属模块, 模块, 功能模块, 测试模块
-- `priority`: 用例级别, 优先级, 级别, 重要程度
-- `precondition`: 前置条件, 前提条件, 预置条件
-- `steps`: 步骤, 测试步骤, 操作步骤, 用例步骤
-- `expected`: 预期, 预期结果, 期望结果, 预期输出
-- `case_type`: 用例类型, 类型, 测试类型
-
-### Step 2: Acquire at-tree.yaml (if stale or missing)
-
-Check if `at-tree.yaml` exists and is fresh (check `metadata.generated_at`).
-
-If stale or missing, re-run:
+Check `metadata.generated_at` for freshness. Re-dump if stale:
 ```bash
 youqu at dump dtk <app_name> --src <source_dir> --output <output_dir>
 ```
+Requires desktop environment with target app running.
 
-Note: This step requires the target app running on a desktop environment.
+### Step 3: Parse → cases.yaml
 
-Validate output: read `metadata.generated_at` from the produced `at-tree.yaml`.
-
-### Step 3: Parse Input → cases.yaml
-
-Command:
 ```bash
-youqu at parse --input <xlsx_or_csv_path> --output <cases_yaml_path> [--at-tree <at_tree_path>]
+youqu at parse --input <xlsx_or_csv> --output <cases_yaml> [--at-tree <at_tree>]
 ```
+Verify: `cases.yaml` has `suites` array with `steps`.
 
-Verify output: `cases.yaml` should contain `suites` array with `steps`.
+### Step 4: Map → mappings.yaml
 
-If parse fails with schema validation error → check LLM response quality, try
-different model.
-
-### Step 4: Map cases.yaml → mappings.yaml
-
-Command:
 ```bash
-youqu at map --at-tree <at_tree_path> --cases <cases_yaml_path> --output <mappings_yaml_path>
+youqu at map --at-tree <at_tree> --cases <cases_yaml> --output <mappings_yaml>
 ```
-
-Verify output: check for unmapped entries (`status=unmapped`).
-
-Unmapped entries → review `fix_suggestion`, may need to update at-tree or
-adjust element hints.
+Verify: check for `status: unmapped` entries → review `fix_suggestion`.
 
 ### Step 5: Generate Suite YAML
 
-Command:
 ```bash
-youqu at generate --cases <cases_yaml_path> --mappings <mappings_yaml_path> --output <output_dir>
+youqu at generate --cases <cases_yaml> --mappings <mappings_yaml> --output <output_dir>
 ```
-
-Verify output: check that `output_dir` contains `elements.yaml` and module
-subdirectories with suite files.
-
-If empty output → check `cases.yaml` for skipped suites.
+Verify: `output_dir` has `elements.yaml` + module subdirectories with suite files.
 
 ### Step 6: Validate Output
 
-Check the following:
-
-- `elements.yaml` exists and has entries
+- `elements.yaml` exists with entries
 - Suite files use `suites:` (NOT `specs:`)
 - `session_start.command` uses app launch path (NOT AT-SPI registered name)
 - `wait` values are in **milliseconds** (not seconds)
@@ -112,42 +88,28 @@ For multi-module generation, dispatch one sub-agent per batch in parallel.
 
 ```
 1. TASK: Generate AT-SPI test suite for app "<app_name>" from input at <input_path>.
-   Working directory: <project_root>. Output directory: <output_dir>.
+    Working directory: <project_root>. Output directory: <output_dir>.
 
 2. EXPECTED OUTCOME:
-   - Executable suite YAML in <output_dir>/<module>/ directory
-   - elements.yaml in <output_dir>/ with all element selectors
-   - Suite files with setup (session_start), cases (steps + assert_steps), teardown (session_stop)
-   - All suites use "suites:" field (NOT "specs:")
-   - Skipped cases from input: status=skipped with reason in suite
+    - Executable suite YAML in <output_dir>/<module>/
+    - elements.yaml in <output_dir>/
+    - Suite files: setup (session_start) → cases (steps + assert_steps) → teardown (session_stop)
+    - Skipped input cases: status=skipped with reason
 
 3. REQUIRED TOOLS: read, write, bash
 
 4. MUST DO:
-   - Run the full pipeline: parse → map → generate
-   - Verify at-tree.yaml freshness before map phase
-   - Check LLM API availability before parse/map
-   - Verify each phase output before proceeding to next
-   - Use exact CLI parameters (see CLI Quick Reference below)
-   - Check for unmapped elements in mappings.yaml and report them
-   - Ensure session_start.command is the app launch path
-   - Ensure wait values are in milliseconds
-   - Use "suites:" in suite YAML (NOT "specs:")
-   - Read references/pipeline-reference.md for CLI parameters and formats
-   - Read references/suite-format.md for output format details
-   - Read references/pitfalls.md for common issues
+    - Run full pipeline: parse → map → generate, verifying each phase output
+    - Check at-tree.yaml freshness and LLM API availability before starting
+    - Report unmapped elements from mappings.yaml
+    - Ensure: session_start.command = launch path, wait = milliseconds, suites: not specs:
+    - Read references/ directory for CLI params, output format, and pitfalls
 
 5. MUST NOT DO:
-   - Modify youqu framework source code
-   - Invent AT-SPI element names without at-tree.yaml evidence
-   - Skip the map phase (unmapped elements cause runtime failures)
-   - Use "specs:" instead of "suites:" in suite YAML
-   - Hardcode absolute paths
-
-6. CONTEXT:
-   - Pipeline overview: @references/pipeline-reference.md
-   - Output format: @references/suite-format.md
-   - Common issues: @references/pitfalls.md
+    - Modify youqu framework source code
+    - Invent AT-SPI element names without at-tree.yaml evidence
+    - Skip the map phase (unmapped elements cause runtime failures)
+    - Use "specs:" instead of "suites:" or hardcode absolute paths
 ```
 
 ## CLI Quick Reference
@@ -162,18 +124,13 @@ For multi-module generation, dispatch one sub-agent per batch in parallel.
 
 ## Pitfalls
 
-Reference `@references/pitfalls.md`. Top 5 critical issues:
-
-1. **at-tree.yaml staleness** — re-dump when UI changes; check `metadata.generated_at`.
-2. **LLM API unavailable** — verify before parse/map; check `YOUQU_AT_BASE_URL`.
-3. **suites: vs specs: spelling** — must be `suites:` in suite YAML, not `specs:`.
-4. **session_start command ≠ AT-SPI name** — command is the app launch path, not the AT-SPI registered name.
-5. **wait values in milliseconds** — AT suite `wait` values are in milliseconds (not seconds like standard YAML).
+See references/pitfalls.md. Critical: at-tree staleness, LLM API unreachable,
+`suites:` not `specs:`, command ≠ AT-SPI name, wait in milliseconds.
 
 ## Reference Files
 
 | File | Purpose |
 |------|---------|
-| `@references/pipeline-reference.md` | CLI commands, input/output formats, LLM config |
-| `@references/suite-format.md` | Generated suite YAML structure, action types, elements.yaml |
-| `@references/pitfalls.md` | Common pipeline failures and solutions |
+| `references/pipeline-reference.md` | CLI commands, input/output formats, LLM config |
+| `references/suite-format.md` | Generated suite YAML structure, action types, elements.yaml |
+| `references/pitfalls.md` | Common pipeline failures and solutions |
