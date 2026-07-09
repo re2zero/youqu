@@ -32,6 +32,7 @@ def main():
     _inject_paths()
     try:
         from importlib.metadata import version as _get_version
+
         _youqu_version = _get_version("youqu-ai")
     except Exception:
         _youqu_version = "unknown"
@@ -40,9 +41,7 @@ def main():
         prog="youqu",
         description="YouQu test framework CLI",
     )
-    parser.add_argument(
-        "--version", action="version", version=f"%(prog)s {_youqu_version}"
-    )
+    parser.add_argument("--version", action="version", version=f"%(prog)s {_youqu_version}")
     sub = parser.add_subparsers(dest="command")
 
     # youqu make <name>
@@ -143,7 +142,9 @@ def main():
     p_web_run.add_argument("--report-dir", default=None, help="Report output directory")
     p_web_run.add_argument("--dry-run", action="store_true", help="Load and validate specs only")
     p_web_run.add_argument("--no-screenshot", action="store_true", help="Disable step screenshots")
-    p_web_run.add_argument("--verbose", action="store_true", help="Show action and assertion details")
+    p_web_run.add_argument(
+        "--verbose", action="store_true", help="Show action and assertion details"
+    )
 
     p_web_list = web_spec_sub.add_parser("list", help="List Web specs")
     p_web_list.add_argument("spec_dir", help="Web spec directory")
@@ -158,7 +159,9 @@ def main():
     p_web_check.add_argument("spec_path", help="Web spec file or directory")
 
     p_web_init = web_spec_sub.add_parser("init", help="Initialize Web spec config file")
-    p_web_init.add_argument("config_path", nargs="?", default="web_spec.yaml", help="Config file path")
+    p_web_init.add_argument(
+        "config_path", nargs="?", default="web_spec.yaml", help="Config file path"
+    )
     p_web_init.add_argument("--force", action="store_true", help="Overwrite existing config file")
 
     p_web_suite = web_spec_sub.add_parser("suite", help="Run Web spec suite file")
@@ -167,8 +170,12 @@ def main():
     p_web_suite.add_argument("--headed", action="store_true", help="Run browser in headed mode")
     p_web_suite.add_argument("--report-dir", default=None, help="Report output directory")
     p_web_suite.add_argument("--dry-run", action="store_true", help="Load and validate suite only")
-    p_web_suite.add_argument("--no-screenshot", action="store_true", help="Disable step screenshots")
-    p_web_suite.add_argument("--verbose", action="store_true", help="Show action and assertion details")
+    p_web_suite.add_argument(
+        "--no-screenshot", action="store_true", help="Disable step screenshots"
+    )
+    p_web_suite.add_argument(
+        "--verbose", action="store_true", help="Show action and assertion details"
+    )
 
     # youqu dev <subcommand>
     p_dev = sub.add_parser("dev", help="Dev-mode suite management")
@@ -205,8 +212,22 @@ def main():
     p_at_dump = at_sub.add_parser("dump", help="Dump AT-SPI tree")
     p_at_dump.add_argument("type", choices=["dtk"], help="App framework type")
     p_at_dump.add_argument("--app", required=True, help="App ID (e.g. dde-file-manager)")
-    p_at_dump.add_argument("--src", required=True, help="App source directory")
+    p_at_dump.add_argument("--src", default="", help="App source directory")
+    p_at_dump.add_argument(
+        "--launch", default="", help="Launch command (e.g. /usr/bin/dde-file-manager)"
+    )
     p_at_dump.add_argument("--output", default="tests/at", help="Output directory")
+    p_at_dump.add_argument(
+        "--no-record",
+        action="store_true",
+        help="Skip interactive state recording (default: record)",
+    )
+    p_at_dump.add_argument(
+        "--include-dirs",
+        nargs="*",
+        default=None,
+        help="Only scan source files under these subdirectories (e.g. src widgets)",
+    )
 
     p_at_parse = at_sub.add_parser("parse", help="Parse xlsx into cases.yaml")
     p_at_parse.add_argument("--input", required=True, help="Input xlsx or text directory")
@@ -235,12 +256,14 @@ def main():
 
     if args.command == "make":
         from youqu.cli.make import generate
+
         generate(args.name, args.dir, fmt=args.format)
     elif args.command == "run":
         if args.multica_report and not args.issue_id:
             print("Error: --issue-id is required when --multica-report is set")
             sys.exit(1)
         from youqu.cli.run import run
+
         run(
             autotest_path=args.app or None,
             extra=extra,
@@ -253,18 +276,23 @@ def main():
         )
     elif args.command == "report":
         from youqu.cli.report import run as report_run
+
         report_run(autotest_path=args.app or None, clean=args.clean, serve=args.serve)
     elif args.command == "mcp":
         from youqu.src.mcp.server import start as mcp_start
+
         mcp_start(transport=args.transport, port=args.port, host=args.host)
     elif args.command == "doctor":
         from youqu.cli.doctor import run as doctor_run
+
         doctor_run()
     elif args.command == "index":
         from youqu.cli.index import run as index_run
+
         index_run(args)
     elif args.command == "dev":
         from youqu.cli.dev import cmd_init, cmd_list, cmd_make, cmd_run
+
         dispatch = {
             "init": cmd_init,
             "make": cmd_make,
@@ -279,20 +307,27 @@ def main():
             sys.exit(1)
     elif args.command == "web-spec":
         from youqu.cli.web_spec import run as web_spec_run
+
         web_spec_run(args)
     elif args.command == "startproject":
         from youqu.src.startproject import cli
+
         cli()
     elif args.command == "inspect":
         try:
             from youqu.src.atspi_inspector import AtspiInspector
+
             inspector = AtspiInspector()
             inspector.inspect(args.app_path, args.app_args)
         except ImportError as e:
-            print(f"AT-SPI inspector requires: sudo apt install at-spi2-core python3-pyatspi\n{e}", file=sys.stderr)
+            print(
+                f"AT-SPI inspector requires: sudo apt install at-spi2-core python3-pyatspi\n{e}",
+                file=sys.stderr,
+            )
             sys.exit(1)
     elif args.command == "at":
         from youqu.cli.at import cmd_dump, cmd_parse, cmd_map, cmd_generate, cmd_run
+
         dispatch = {
             "dump": cmd_dump,
             "parse": cmd_parse,

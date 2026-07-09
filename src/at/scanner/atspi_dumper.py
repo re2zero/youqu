@@ -21,7 +21,18 @@ import pyatspi
 
 logger = logging.getLogger(__name__)
 
-_SKIP_ROLES: frozenset[str] = frozenset({"unknown", "invalid"})
+_SKIP_ROLES: frozenset[str] = frozenset(
+    {
+        "unknown",
+        "invalid",
+        "scroll bar",
+        "scroll bar horizontal",
+        "scroll bar vertical",
+        "separator",
+        "divider",
+        "filler",
+    }
+)
 
 _MAX_DEPTH = 15
 _MAX_CHILDREN_PER_NODE = 100
@@ -157,7 +168,11 @@ def dump_at_spi_tree(app_name: str) -> list[dict[str, Any]]:
     if windows:
         logger.info(
             "Dumped %d window(s), %d nodes total (%d skipped, %d errors) in %.2fs",
-            len(windows), stats["total"], stats["skipped"], stats["errors"], elapsed,
+            len(windows),
+            stats["total"],
+            stats["skipped"],
+            stats["errors"],
+            elapsed,
         )
     else:
         logger.warning("Application '%s' not found in AT-SPI tree", app_name)

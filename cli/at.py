@@ -9,22 +9,172 @@ def _not_implemented(cmd: str):
 
 def cmd_dump(args):
     try:
-        from youqu.src.at.scanner.atspi_dumper import dump_at_spi_tree
-        from youqu.src.at.scanner.clang_scanner import scan_source_dir
-        from youqu.src.at.scanner.merger import merge_trees, write_at_tree_yaml
+        import os
+        import subprocess
+        import sys
+        import time
+        from concurrent.futures import ThreadPoolExecutor
+        from pathlib import Path
+        from src.at.scanner.atspi_dumper import dump_at_spi_tree
+        from src.at.scanner.clang_scanner import scan_source_dir
+        from src.at.scanner.merger import (
+            merge_trees,
+            write_at_tree_yaml,
+            write_runtime_dump,
+            write_static_dump,
+            generate_name_gaps_report,
+        )
 
-        print(f"Dumping AT-SPI tree for app: {args.app}")
+        output = Path(args.output)
+        dump_dir = output / "dump"
+        dump_dir.mkdir(parents=True, exist_ok=True)
+
+        launched_process = None
+
+        if getattr(args, "launch", None):
+            print(f"[1/3] Launching app: {args.launch}")
+            env = os.environ.copy()
+            env["QT_LINUX_ACCESSIBILITY_ALWAYS_ON"] = "1"
+            launched_process = subprocess.Popen(
+                args.launch.split(),
+                env=env,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            for sec in range(5, 0, -1):
+                print(f"  waiting{'.' * (5 - sec)} {sec}s", end="", flush=True)
+                time.sleep(1)
+            print(" done")
+        else:
+            print(f"[1/3] Dumping AT-SPI tree (app should be running)...")
+
         runtime_tree = dump_at_spi_tree(args.app)
+        if not runtime_tree:
+            print(f"  ERROR: Application '{args.app}' not found in AT-SPI tree")
+            if launched_process:
+                launched_process.terminate()
+            return
+        runtime_path = dump_dir / "runtime.yaml"
+        write_runtime_dump(runtime_tree, str(runtime_path), app_name=args.app)
+        print(f"  -> {runtime_path}")
 
-        print(f"Scanning source directory: {args.src}")
-        static_classes = scan_source_dir(args.src)
+        scan_result = None
+        do_record = not getattr(args, "no_record", False)
 
-        print("Merging static skeleton with runtime dump...")
+        if args.src:
+            _scan_progress: list[int] = [0]
+
+            def _progress_cb(i: int, total: int, fp: str):
+                _scan_progress[0] = i + 1
+                if (i + 1) % 10 == 0 or i + 1 == total:
+                    print(f"\r  scanning: {i + 1}/{total}", file=sys.stderr, end="", flush=True)
+
+            def _run_scan():
+                nonlocal scan_result
+                scan_result = scan_source_dir(
+                    args.src,
+                    progress_cb=_progress_cb,
+                    include_dirs=args.include_dirs,
+                )
+
+            executor = ThreadPoolExecutor(max_workers=1)
+            scan_future = executor.submit(_run_scan)
+            print(f"  Scanning source: {args.src} ...", file=sys.stderr, flush=True)
+        else:
+            scan_future = None
+
+        if do_record:
+            try:
+                from src.at.scanner.recorder import ATRecorderManager, qt_available
+
+                if not qt_available():
+                    print("  PyQt6 not installed, falling back to CLI recording")
+                    states_dir = dump_dir / "states"
+                    states_dir.mkdir(parents=True, exist_ok=True)
+                    state_index = 0
+                    print(f"\n[2/3] Recording states - operate the app, then capture:")
+                    while True:
+                        try:
+                            cmd = input("  [Enter=capture, done=finish] ").strip().lower()
+                        except (EOFError, KeyboardInterrupt):
+                            print()
+                            break
+                        if cmd in ("done", "q", "quit", "exit"):
+                            break
+                        print("  Capturing AT-SPI tree...", end="", flush=True)
+                        state_tree = dump_at_spi_tree(args.app)
+                        print(" done")
+                        try:
+                            label = input("  State name: ").strip()
+                        except (EOFError, KeyboardInterrupt):
+                            print()
+                            break
+                        if not label:
+                            label = f"unnamed_{state_index}"
+                        safe_label = "".join(
+                            c if c.isalnum() or c in "_-" else "_" for c in label
+                        )
+                        state_path = states_dir / f"{state_index:02d}_{safe_label}.yaml"
+                        write_runtime_dump(
+                            state_tree,
+                            str(state_path),
+                            app_name=args.app,
+                            state_label=label,
+                        )
+                        print(f"  -> {state_path}")
+                        state_index += 1
+                else:
+                    states_dir = dump_dir / "states"
+                    states_dir.mkdir(parents=True, exist_ok=True)
+                    recorder = ATRecorderManager(
+                        app_name=args.app,
+                        states_dir=states_dir,
+                        on_capture=lambda _label, _idx, _path: None,
+                    )
+                    print(f"\n[2/3] Recording states via GUI widget...")
+                    recorder.start()
+            except Exception as e:
+                print(f"  Recording error: {e}")
+                do_record = False
+        else:
+            print("\n[2/3] Recording skipped (--no-record)")
+
+        if scan_future is not None:
+            scan_future.result()
+            print(file=sys.stderr, flush=True)
+            executor.shutdown(wait=False)
+
+            if scan_result:
+                stats = scan_result.stats
+                static_path = dump_dir / "static.yaml"
+                write_static_dump(scan_result.classes, str(static_path))
+                msg = f"  Scan done: {len(scan_result.classes)} UI classes in {stats['total_files']} files"
+                if stats["failed_files"]:
+                    msg += f" ({stats['failed_files']} failed)"
+                print(msg, file=sys.stderr, flush=True)
+                print(f"  -> {static_path}")
+
+                gaps_path = dump_dir / "name_gaps.yaml"
+                gaps = generate_name_gaps_report(
+                    scan_result.classes,
+                    str(gaps_path),
+                    app_name=args.app,
+                )
+                if gaps["summary"]["classes_missing_names"] > 0:
+                    print(
+                        f"  -> {gaps_path} "
+                        f"({gaps['summary']['classes_missing_names']} classes missing names)"
+                    )
+        elif not args.src:
+            print("\n  No --src provided, skipping source scan")
+
+        print(f"\n[3/3] Merging and filtering...")
+        static_classes = scan_result.classes if scan_result else []
         merged = merge_trees(runtime_tree, static_classes)
+        final_path = output / "at-tree.yaml"
+        write_at_tree_yaml(merged, str(final_path), app_name=args.app)
+        print(f"  -> {final_path}")
 
-        output_path = f"{args.output}/at-tree.yaml"
-        write_at_tree_yaml(merged, output_path, app_name=args.app)
-        print(f"Wrote {output_path}")
     except ImportError as e:
         _not_implemented(f"dump ({e})")
     except Exception as e:
@@ -34,6 +184,7 @@ def cmd_dump(args):
 def cmd_parse(args):
     try:
         from youqu.src.at.generator.case_parser import parse_to_cases
+
         parse_to_cases(
             input_path=args.input,
             output_path=args.output,
@@ -46,6 +197,7 @@ def cmd_parse(args):
 def cmd_map(args):
     try:
         from youqu.src.at.generator.mapper import map_elements
+
         map_elements(at_tree_path=args.at_tree, cases_path=args.cases, output_path=args.output)
     except ImportError:
         _not_implemented("map")
@@ -54,6 +206,7 @@ def cmd_map(args):
 def cmd_generate(args):
     try:
         from youqu.src.at.generator.yaml_generator import generate_yaml
+
         generate_yaml(cases_path=args.cases, mappings_path=args.mappings, output_dir=args.output)
     except ImportError:
         _not_implemented("generate")
@@ -62,6 +215,7 @@ def cmd_generate(args):
 def cmd_run(args):
     try:
         from youqu.src.at.executor.runner import run_tests
+
         run_tests(
             test_dir=args.testdir,
             suite=args.suite,
