@@ -11,6 +11,7 @@ calls, DTK component instantiation. Requires ``pip install clang``.
 from __future__ import annotations
 
 import logging
+import multiprocessing
 import os
 import subprocess
 import sys
@@ -188,7 +189,10 @@ def _init_clang() -> Any:
 
     lib_path = _find_libclang_path()
     if lib_path:
-        Config.set_library_file(lib_path)
+        try:
+            Config.set_library_file(lib_path)
+        except Exception:
+            pass  # Already set (forked child inherits main process state)
 
     return Index.create()
 
@@ -326,10 +330,31 @@ def _scan_file(
         return [], f"{type(e).__name__}: {e}"
 
 
+def _worker_init(args: list[str]):
+    global _w_index, _w_extra
+    _w_index = _init_clang()
+    _w_extra = args
+
+
+def _worker_scan(item: tuple[str, str]) -> tuple[str, list[dict], str | None]:
+    file_path, source_file = item
+    return source_file, *_scan_file(_w_index, file_path, source_file, _w_extra)
+
+
+def _worker_scan_batch(batch: list[tuple[str, str]]) -> list[tuple[str, list[dict], str | None]]:
+    return [_worker_scan(item) for item in batch]
+
+
+_w_index: Any = None
+_w_extra: list[str] = []
+
+
 def scan_source_dir(
     src_dir: str,
     progress_cb: Callable[[int, int, str], None] | None = None,
+    file_done_cb: Callable[[str, list[dict], str | None], None] | None = None,
     include_dirs: list[str] | None = None,
+    pool: multiprocessing.Pool | None = None,
 ) -> ScanResult:
     """Scan C++ source directory for UI-relevant declarations.
 
@@ -345,6 +370,9 @@ def scan_source_dir(
             Errors are logged via logger when this callback is set.
         include_dirs: Optional subdirectory names to restrict scanning to.
             Only files whose path contains one of these directory segments are scanned.
+        pool: Optional pre-created multiprocessing.Pool. When provided, the caller
+            is responsible for creating (in the main thread) and closing the pool.
+            When None, a new pool is created and closed internally.
 
     Returns:
         A ``ScanResult`` with found classes and scan statistics.
@@ -363,14 +391,18 @@ def scan_source_dir(
             classes=[], stats={"total_files": 0, "parsed_files": 0, "failed_files": 0}
         )
 
-    index = _init_clang()
     extra_args = ["-x", "c++", "-std=c++17", "-fPIC"]
     extra_args.extend(_get_cxx_stdlib_flags())
     extra_args.extend(_get_qt_dtk_include_flags())
 
     extensions = {".cpp", ".cxx", ".h", ".hpp"}
-    _SKIP_DIRS = {"tests", "test", "autotests", "autotest"}
-    _SKIP_PREFIXES = ("test_", "moc_", "ui_")
+    _SKIP_DIRS = {
+        "tests", "test", "autotests", "autotest",
+        "build", "Build", "builddir", "_build",
+        "cmake-build", "CMakeFiles", ".cmake",
+        "debian", ".git",
+    }
+    _SKIP_PREFIXES = ("test_", "moc_", "mocs_", "ui_", "qrc_")
     include_set = frozenset(include_dirs) if include_dirs else None
     all_files: list[Path] = []
     for p in root.rglob("*"):
@@ -386,29 +418,55 @@ def scan_source_dir(
                 continue
         all_files.append(p)
     all_files.sort()
+
+    if not all_files:
+        return ScanResult(
+            classes=[], stats={"total_files": 0, "parsed_files": 0, "failed_files": 0}
+        )
+
+    task_items = [(str(p), str(p.relative_to(root))) for p in all_files]
+    total = len(task_items)
+    n_workers = min(os.cpu_count() or 4, 8)
+    batch_size = max(1, (total + n_workers - 1) // n_workers)
+    batches = [task_items[i : i + batch_size] for i in range(0, total, batch_size)]
+
     results: list[dict[str, Any]] = []
     parsed = 0
     failed = 0
+    done = 0
 
-    for i, path in enumerate(all_files):
-        if progress_cb:
-            progress_cb(i, len(all_files), str(path))
-        rel_path = str(path.relative_to(root))
-        classes, error = _scan_file(index, str(path), rel_path, extra_args)
-        if error:
-            logger.warning("Failed to parse %s: %s", rel_path, error)
-            failed += 1
-        else:
-            parsed += 1
-        results.extend(classes)
+    if progress_cb:
+        progress_cb(0, total, f"scanning {total} files with {n_workers} processes")
+
+    def _consume(pool_obj):
+        nonlocal parsed, failed, done
+        for batch_results in pool_obj.imap_unordered(_worker_scan_batch, batches):
+            for rel_path, classes, error in batch_results:
+                if error:
+                    logger.warning("Failed to parse %s: %s", rel_path, error)
+                    failed += 1
+                else:
+                    parsed += 1
+                results.extend(classes)
+                done += 1
+                if progress_cb:
+                    progress_cb(done, total, rel_path)
+                if file_done_cb:
+                    file_done_cb(rel_path, classes, error)
+
+    if pool is not None:
+        _consume(pool)
+    else:
+        with multiprocessing.Pool(processes=n_workers, initializer=_worker_init, initargs=(extra_args,)) as p:
+            _consume(p)
 
     logger.info(
         "Scanned %d files, found %d UI classes in %s",
-        len(all_files),
+        total,
         len(results),
         src_dir,
     )
     return ScanResult(
         classes=results,
-        stats={"total_files": len(all_files), "parsed_files": parsed, "failed_files": failed},
+        stats={"total_files": total, "parsed_files": parsed, "failed_files": failed},
     )

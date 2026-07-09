@@ -9,20 +9,20 @@ def _not_implemented(cmd: str):
 
 def cmd_dump(args):
     try:
+        import multiprocessing
         import os
         import subprocess
         import sys
+        import threading
         import time
-        from concurrent.futures import ThreadPoolExecutor
         from pathlib import Path
         from src.at.scanner.atspi_dumper import dump_at_spi_tree
-        from src.at.scanner.clang_scanner import scan_source_dir
+        from src.at.scanner.clang_scanner import _worker_init, scan_source_dir
         from src.at.scanner.merger import (
+            append_scan_entry,
             merge_trees,
             write_at_tree_yaml,
             write_runtime_dump,
-            write_static_dump,
-            generate_name_gaps_report,
         )
 
         output = Path(args.output)
@@ -42,9 +42,10 @@ def cmd_dump(args):
                 stderr=subprocess.DEVNULL,
             )
             for sec in range(5, 0, -1):
-                print(f"  waiting{'.' * (5 - sec)} {sec}s", end="", flush=True)
+                dots = "." * (5 - sec)
+                print(f"\r  waiting{dots} {sec}s", end="", flush=True)
                 time.sleep(1)
-            print(" done")
+            print("\r  waiting.... done")
         else:
             print(f"[1/3] Dumping AT-SPI tree (app should be running)...")
 
@@ -59,29 +60,60 @@ def cmd_dump(args):
         print(f"  -> {runtime_path}")
 
         scan_result = None
+        scan_pool = None
+        scan_thread = None
         do_record = not getattr(args, "no_record", False)
 
         if args.src:
-            _scan_progress: list[int] = [0]
+            ok_path = dump_dir / "scanned_ok.yaml"
+            gaps_path = dump_dir / "scanned_gaps.yaml"
+
+            _last_pct = -1
 
             def _progress_cb(i: int, total: int, fp: str):
-                _scan_progress[0] = i + 1
-                if (i + 1) % 10 == 0 or i + 1 == total:
-                    print(f"\r  scanning: {i + 1}/{total}", file=sys.stderr, end="", flush=True)
+                nonlocal _last_pct
+                pct = (i * 100 // total) if total else 0
+                if pct != _last_pct or i == total:
+                    _last_pct = pct
+                    bar_w = 20
+                    filled = bar_w * i // total if total else 0
+                    bar = "█" * filled + "░" * (bar_w - filled)
+                    print(f"\r\033[K  scanning: {bar} {i}/{total} ({pct}%)", file=sys.stderr, end="", flush=True)
 
-            def _run_scan():
-                nonlocal scan_result
-                scan_result = scan_source_dir(
-                    args.src,
-                    progress_cb=_progress_cb,
-                    include_dirs=args.include_dirs,
-                )
+            def _file_done_cb(rel_path: str, classes: list, error):
+                for cls in classes:
+                    has_names = cls.get("object_names") or cls.get("accessible_names")
+                    target = ok_path if has_names else gaps_path
+                    append_scan_entry(str(target), cls)
 
-            executor = ThreadPoolExecutor(max_workers=1)
-            scan_future = executor.submit(_run_scan)
-            print(f"  Scanning source: {args.src} ...", file=sys.stderr, flush=True)
-        else:
-            scan_future = None
+            from src.at.scanner.clang_scanner import _get_qt_dtk_include_flags, _get_cxx_stdlib_flags
+
+            extra_args = ["-x", "c++", "-std=c++17", "-fPIC"]
+            extra_args.extend(_get_cxx_stdlib_flags())
+            extra_args.extend(_get_qt_dtk_include_flags())
+            n_workers = min(os.cpu_count() or 4, 8)
+
+            scan_pool = multiprocessing.Pool(
+                processes=n_workers, initializer=_worker_init, initargs=(extra_args,)
+            )
+
+            scan_holder = [None, None]  # [ScanResult, Exception]
+
+            def _run_scan_thread():
+                try:
+                    scan_holder[0] = scan_source_dir(
+                        args.src,
+                        progress_cb=_progress_cb,
+                        file_done_cb=_file_done_cb,
+                        include_dirs=args.include_dirs,
+                        pool=scan_pool,
+                    )
+                except Exception as e:
+                    scan_holder[1] = e
+
+            scan_thread = threading.Thread(target=_run_scan_thread, daemon=True)
+            scan_thread.start()
+            print(f"  Scanning source: {args.src} ...", file=sys.stderr, end="", flush=True)
 
         if do_record:
             try:
@@ -139,32 +171,29 @@ def cmd_dump(args):
         else:
             print("\n[2/3] Recording skipped (--no-record)")
 
-        if scan_future is not None:
-            scan_future.result()
+        if scan_thread is not None:
+            scan_thread.join()
+            scan_pool.close()
+            scan_pool.join()
             print(file=sys.stderr, flush=True)
-            executor.shutdown(wait=False)
+            scan_result = scan_holder[0]
+            scan_error = scan_holder[1]
+            if scan_error:
+                print(f"  Scan error: {scan_error}", file=sys.stderr, flush=True)
 
-            if scan_result:
-                stats = scan_result.stats
-                static_path = dump_dir / "static.yaml"
-                write_static_dump(scan_result.classes, str(static_path))
-                msg = f"  Scan done: {len(scan_result.classes)} UI classes in {stats['total_files']} files"
-                if stats["failed_files"]:
-                    msg += f" ({stats['failed_files']} failed)"
-                print(msg, file=sys.stderr, flush=True)
-                print(f"  -> {static_path}")
-
-                gaps_path = dump_dir / "name_gaps.yaml"
-                gaps = generate_name_gaps_report(
-                    scan_result.classes,
-                    str(gaps_path),
-                    app_name=args.app,
-                )
-                if gaps["summary"]["classes_missing_names"] > 0:
-                    print(
-                        f"  -> {gaps_path} "
-                        f"({gaps['summary']['classes_missing_names']} classes missing names)"
-                    )
+        if args.src and scan_result:
+            stats = scan_result.stats
+            n_ok = sum(1 for c in scan_result.classes if c.get("object_names") or c.get("accessible_names"))
+            n_gaps = len(scan_result.classes) - n_ok
+            msg = f"  Scan done: {len(scan_result.classes)} UI classes in {stats['total_files']} files"
+            if stats["failed_files"]:
+                msg += f" ({stats['failed_files']} failed)"
+            print(msg, file=sys.stderr, flush=True)
+            print(f"  -> {ok_path} ({n_ok} with names)")
+            if n_gaps > 0:
+                print(f"  -> {gaps_path} ({n_gaps} missing names)")
+        elif args.src and not scan_result:
+            print("  Scan failed — no static data merged")
         elif not args.src:
             print("\n  No --src provided, skipping source scan")
 

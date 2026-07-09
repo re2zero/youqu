@@ -21,6 +21,13 @@ def _is_noise_leaf(node: dict) -> bool:
     return not node.get("name") and not node.get("object_name") and not node.get("accessible_id")
 
 
+def append_scan_entry(path: str, entry: dict) -> None:
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "a", encoding="utf-8") as f:
+        f.write("---\n")
+        yaml.dump(entry, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
+
+
 def filter_noise(tree: list[dict]) -> list[dict]:
     def _filter_recursive(nodes: list[dict]) -> list[dict]:
         result = []

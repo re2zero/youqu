@@ -13,6 +13,7 @@ so the rest of `src.at.scanner` remains usable without a GUI toolkit.
 
 import logging
 import os
+import signal
 import time
 from pathlib import Path
 from typing import Any, Callable, Optional
@@ -228,10 +229,18 @@ class ATRecorderManager:
             )
 
         app = ensure_qapp()
+
+        # Allow CTRL+C to quit the Qt event loop
+        def _sigint_handler(sig, frame):
+            if not self._finished:
+                self._finished = True
+            app.quit()
+
+        signal.signal(signal.SIGINT, _sigint_handler)
+
         self.widget = ATRecorderWidget()
         self.widget.stop_requested.connect(self._handle_stop)
         self.widget.finish_requested.connect(self._handle_finish)
-        self.widget.finish_requested.connect(self._mark_finished)
         self.widget.show()
         self.widget.raise_()
         self.widget.activateWindow()
@@ -239,9 +248,6 @@ class ATRecorderManager:
 
         app.exec()
         logger.info("Recording finished, %d states captured", self.state_index)
-
-    def _mark_finished(self) -> None:
-        self._finished = True
 
     def _handle_stop(self, label: str) -> None:
         from src.at.scanner.atspi_dumper import dump_at_spi_tree
@@ -275,6 +281,7 @@ class ATRecorderManager:
     def _handle_finish(self) -> None:
         if self._finished:
             return
+        self._finished = True
         if self.widget and self.widget._recording:
             self.widget._timer.stop()
             self.widget._recording = False

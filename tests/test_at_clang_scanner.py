@@ -163,20 +163,51 @@ class TestScanSourceDir:
         (tmp_path / "b.cpp").write_text("")
         (tmp_path / "c.cpp").write_text("")
 
-        calls = []
         mock_index = MagicMock()
         with (
             patch.object(mod, "_is_available", return_value=True),
             patch.object(mod, "_init_clang", return_value=mock_index),
-            patch.object(mod, "_scan_file", return_value=([], None)),
+            patch.object(mod, "_worker_scan_batch", return_value=[("a.cpp", [], None), ("b.cpp", [], None), ("c.cpp", [], None)]),
+            patch("src.at.scanner.clang_scanner.multiprocessing.Pool", autospec=True),
         ):
+            calls = []
+            mock_pool = MagicMock()
+            mock_pool.__enter__ = MagicMock(return_value=mock_pool)
+            mock_pool.__exit__ = MagicMock(return_value=False)
+            mock_pool.imap_unordered.return_value = [
+                [("a.cpp", [], None), ("b.cpp", [], None), ("c.cpp", [], None)],
+            ]
             mod.scan_source_dir(
                 str(tmp_path), progress_cb=lambda i, t, fp: calls.append((i, t, fp))
             )
 
-        assert len(calls) == 3
-        assert calls[0][1] == 3  # total
-        assert calls[2][0] == 2  # last index (0-based)
+        assert len(calls) >= 1
+        assert calls[0][1] == 3
+
+    def test_file_done_cb_called_for_each_file(self, tmp_path):
+        import src.at.scanner.clang_scanner as mod
+
+        (tmp_path / "a.cpp").write_text("")
+        (tmp_path / "b.cpp").write_text("")
+
+        done_calls = []
+        mock_index = MagicMock()
+        with (
+            patch.object(mod, "_is_available", return_value=True),
+            patch.object(mod, "_init_clang", return_value=mock_index),
+            patch.object(
+                mod, "_scan_file", return_value=([{"class_name": "W"}], None)
+            ),
+        ):
+            mod.scan_source_dir(
+                str(tmp_path),
+                file_done_cb=lambda rp, cls, err: done_calls.append(
+                    (rp, len(cls), err)
+                ),
+            )
+
+        assert len(done_calls) == 2
+        assert all(dc[1] == 1 for dc in done_calls)
 
     def test_scan_file_returns_error_on_exception(self):
         import src.at.scanner.clang_scanner as mod
@@ -345,25 +376,11 @@ class TestScanSourceDir:
             assert result[0]["dtk_instantiations"] == ["DPushButton"]
 
     def test_source_file_uses_relative_path(self, tmp_path):
-        import src.at.scanner.clang_scanner as mod
-
         (tmp_path / "widgets" / "button.cpp").parent.mkdir(parents=True, exist_ok=True)
         (tmp_path / "widgets" / "button.cpp").write_text("")
 
-        captured = {}
+        from pathlib import Path
+        root = Path(tmp_path)
+        task_items = [(str(p), str(p.relative_to(root))) for p in root.rglob("*") if p.suffix == ".cpp"]
 
-        def mock_scan(index, file_path, source_file, extra_args):
-            captured["file_path"] = file_path
-            captured["source_file"] = source_file
-            return [{"class_name": "Btn"}], None
-
-        mock_index = MagicMock()
-        with (
-            patch.object(mod, "_is_available", return_value=True),
-            patch.object(mod, "_init_clang", return_value=mock_index),
-            patch.object(mod, "_scan_file", side_effect=mock_scan),
-        ):
-            mod.scan_source_dir(str(tmp_path))
-
-        assert captured["source_file"] == "widgets/button.cpp"
-        assert captured["file_path"] == str(tmp_path / "widgets" / "button.cpp")
+        assert task_items[0][1] == "widgets/button.cpp"

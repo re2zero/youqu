@@ -5,6 +5,7 @@
 from src.at.scanner.atspi_dumper import dump_at_spi_tree
 from src.at.scanner.clang_scanner import ScanResult, scan_source_dir
 from src.at.scanner.merger import (
+    append_scan_entry,
     filter_noise,
     generate_name_gaps_report,
     merge_trees,
@@ -14,6 +15,7 @@ from src.at.scanner.merger import (
 )
 
 __all__ = [
+    "append_scan_entry",
     "dump_at_spi_tree",
     "scan_source_dir",
     "ScanResult",
