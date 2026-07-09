@@ -25,10 +25,12 @@ _DTK_WIDGET_CLASSES: frozenset[str] = frozenset(
     {
         "DWidget",
         "DMainWindow",
+        "DAbstractDialog",
         "DDialog",
         "DFloatingWidget",
         "DPushButton",
         "DToolButton",
+        "DIconButton",
         "DLineEdit",
         "DTextEdit",
         "DComboBox",
@@ -40,10 +42,11 @@ _DTK_WIDGET_CLASSES: frozenset[str] = frozenset(
         "DButtonBox",
         "DSwitchButton",
         "DProgressBar",
+        "DIndeterminateProgressBar",
+        "DWaterProgress",
         "DTabBar",
         "DListView",
         "DTreeView",
-        "DListView",
         "DStyledItemDelegate",
         "DSuggestButton",
         "DCommandLinkButton",
@@ -53,12 +56,20 @@ _DTK_WIDGET_CLASSES: frozenset[str] = frozenset(
         "DAlertControl",
         "DFileChooserEdit",
         "DFlowLayout",
-        "DListView",
         "DStackWidget",
         "DShadowLine",
         "DSearchEdit",
-        "DComboBox",
         "DFloatingButton",
+        "DFrame",
+        "DWindow",
+        "DDrawer",
+        "DSegmentedControl",
+        "DArrowRectangle",
+        "DToolTip",
+        "DHeaderLine",
+        "DMenuBar",
+        "DStatusBar",
+        "DToolBox",
     }
 )
 
@@ -308,11 +319,13 @@ def _extract_ui_classes(tu: Any, source_file: str) -> list[dict[str, Any]]:
                 base_classes.append(base_name)
 
         if base_classes or info["object_names"] or info["accessible_names"] or info["dtk_instantiations"]:
+            is_ui_widget = any(base in _ALL_UI_CLASSES for base in base_classes)
             classes.append(
                 {
                     "class_name": name,
                     "source_file": source_file,
                     "base_classes": base_classes,
+                    "is_ui_widget": is_ui_widget,
                     **info,
                 }
             )

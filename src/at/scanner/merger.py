@@ -12,6 +12,8 @@ from typing import Any
 
 import yaml
 
+from src.at.scanner.clang_scanner import _ALL_UI_CLASSES
+
 logger = logging.getLogger(__name__)
 
 
@@ -66,24 +68,22 @@ def write_static_dump(classes: list[dict], path: str) -> None:
 
 
 def generate_name_gaps_report(classes: list[dict], path: str, app_name: str = "") -> dict[str, Any]:
+    ui_classes = [c for c in classes if _is_ui_widget(c)]
     gaps = []
-    for cls in classes:
-        bases = cls.get("base_classes", [])
-        if not bases:
-            continue
+    for cls in ui_classes:
         if cls.get("object_names") or cls.get("accessible_names"):
             continue
         gaps.append(
             {
                 "class_name": cls.get("class_name", ""),
                 "source_file": cls.get("source_file", ""),
-                "base_classes": bases,
+                "base_classes": cls.get("base_classes", []),
                 "object_names": cls.get("object_names", []),
                 "accessible_names": cls.get("accessible_names", []),
                 "dtk_instantiations": cls.get("dtk_instantiations", []),
             }
         )
-    total_ui = len([c for c in classes if c.get("base_classes")])
+    total_ui = len(ui_classes)
     report = {
         "version": "1.0",
         "app": app_name,
@@ -128,6 +128,183 @@ def _flatten_runtime_tree(nodes: list[dict]) -> list[dict]:
     return flat
 
 
+_NODE_DEFAULTS: dict[str, Any] = {
+    "role": "",
+    "name": "",
+    "object_name": "",
+    "accessible_id": "",
+    "description": "",
+    "actions": [],
+    "index_in_parent": -1,
+    "states": [],
+    "state_labels": [],
+    "source": "runtime",
+    "class_name": "",
+}
+
+_NODE_KEY_ORDER = [
+    "id",
+    "role",
+    "name",
+    "object_name",
+    "accessible_id",
+    "description",
+    "actions",
+    "index_in_parent",
+    "states",
+    "state_labels",
+    "source",
+    "class_name",
+    "children",
+]
+
+
+def _identity_key(node: dict) -> tuple[str, str, str, str]:
+    return (
+        node.get("role", ""),
+        node.get("name", ""),
+        node.get("object_name", ""),
+        node.get("accessible_id", ""),
+    )
+
+
+def _has_name(node: dict) -> bool:
+    return bool(node.get("name") or node.get("object_name") or node.get("accessible_id"))
+
+
+def _merge_duplicate(base: dict, dup: dict) -> None:
+    existing_states = set(base.get("states", []))
+    for st in dup.get("states", []):
+        if st not in existing_states:
+            base.setdefault("states", []).append(st)
+            existing_states.add(st)
+    for sl in dup.get("state_labels", []):
+        if sl not in base.setdefault("state_labels", []):
+            base["state_labels"].append(sl)
+    if "children" in dup:
+        if "children" not in base:
+            base["children"] = []
+        _dedup_into(base["children"], dup["children"])
+
+
+def _dedup_into(base_nodes: list[dict], new_nodes: list[dict]) -> None:
+    for new_node in new_nodes:
+        if not _has_name(new_node):
+            base_nodes.append(new_node)
+            continue
+        key = _identity_key(new_node)
+        for b in base_nodes:
+            if _identity_key(b) == key and _has_name(b):
+                _merge_duplicate(b, new_node)
+                break
+        else:
+            base_nodes.append(new_node)
+
+
+def dedup_runtime_tree(tree: list[dict]) -> list[dict]:
+    """Merge root nodes with the same non-anonymous identity key.
+
+    Only merges when the identity key has at least one non-empty identifying
+    field (name, object_name, or accessible_id). Fully anonymous nodes are
+    kept separate — the identity key cannot distinguish same-element
+    duplicates from different unnamed elements.
+    """
+    result: list[dict] = []
+    index: dict[tuple, int] = {}
+
+    for node in tree:
+        if not _has_name(node):
+            result.append(node)
+            continue
+        key = _identity_key(node)
+        if key not in index:
+            result.append(node)
+            index[key] = len(result) - 1
+        else:
+            _merge_duplicate(result[index[key]], node)
+
+    return result
+
+
+def _normalize_node(node: dict) -> None:
+    for key, default in _NODE_DEFAULTS.items():
+        if key not in node:
+            node[key] = default
+    if "children" in node:
+        for child in node["children"]:
+            _normalize_node(child)
+
+
+def _normalize_tree(tree: list[dict]) -> None:
+    for node in tree:
+        _normalize_node(node)
+
+
+def load_state_snapshots(states_dir: str) -> list[tuple[str, list[dict]]]:
+    dir_path = Path(states_dir)
+    if not dir_path.is_dir():
+        return []
+
+    snapshots: list[tuple[str, list[dict]]] = []
+    for f in sorted(dir_path.glob("*.yaml")):
+        with open(f, encoding="utf-8") as fh:
+            data = yaml.safe_load(fh)
+        if data and "tree" in data:
+            label = data.get("state_label", f.stem)
+            snapshots.append((label, data["tree"]))
+    return snapshots
+
+
+def _merge_one_state(
+    base_nodes: list[dict],
+    state_nodes: list[dict],
+    state_label: str,
+) -> None:
+    for s_node in state_nodes:
+        s_key = _identity_key(s_node)
+        matched = None
+        for b_node in base_nodes:
+            if _identity_key(b_node) == s_key:
+                matched = b_node
+                break
+
+        if matched:
+            if "state_labels" not in matched:
+                matched["state_labels"] = []
+            if state_label not in matched["state_labels"]:
+                matched["state_labels"].append(state_label)
+            existing_states = set(matched.get("states", []))
+            for st in s_node.get("states", []):
+                if st not in existing_states:
+                    matched.setdefault("states", []).append(st)
+                    existing_states.add(st)
+            if "children" in s_node:
+                if "children" not in matched:
+                    matched["children"] = []
+                _merge_one_state(matched["children"], s_node["children"], state_label)
+        else:
+            new_node = dict(s_node)
+            if "children" in s_node:
+                new_node["children"] = [dict(c) for c in s_node["children"]]
+            new_node["state_labels"] = [state_label]
+            base_nodes.append(new_node)
+
+
+def merge_state_snapshots(
+    base_tree: list[dict],
+    state_snapshots: list[tuple[str, list[dict]]],
+) -> list[dict]:
+    result = [dict(n) for n in base_tree]
+    for node in result:
+        if "children" in node:
+            node["children"] = [dict(c) for c in node["children"]]
+
+    for state_label, state_tree in state_snapshots:
+        _merge_one_state(result, state_tree, state_label)
+
+    return result
+
+
 def _match_static_to_runtime(
     static_classes: list[dict], runtime_nodes: list[dict]
 ) -> dict[str, dict]:
@@ -138,17 +315,25 @@ def _match_static_to_runtime(
          setAccessibleName("X") maps to AT-SPI name="X" (DTK convention).
       2. class_name → runtime name
          DTK class names used as AT-SPI name (e.g. DMainWindow, DTitlebar).
-      3. object_names → runtime name (fallback)
+      3. object_names → runtime name (fallback, rarely matches)
          Rare: app code may happen to set objectName matching an AT-SPI name.
+      4. object_names → runtime object_name
+         setObjectName("X") maps to AT-SPI object-name attribute → object_name field.
+      5. class_name → runtime object_name (less common)
+         Some apps set objectName to the class name.
     """
     matches: dict[str, dict] = {}
     runtime_flat = _flatten_runtime_tree(runtime_nodes)
 
     runtime_by_name: dict[str, dict] = {}
+    runtime_by_object_name: dict[str, dict] = {}
     for rn in runtime_flat:
         name = rn.get("name", "")
         if name:
             runtime_by_name[name] = rn
+        on = rn.get("object_name", "")
+        if on:
+            runtime_by_object_name[on] = rn
 
     for cls in static_classes:
         matched = False
@@ -182,6 +367,25 @@ def _match_static_to_runtime(
                     matched = True
                     break
 
+        # Pass 4: object_names → runtime object_name
+        if not matched:
+            for on in cls.get("object_names", []):
+                if not on:
+                    continue
+                if on in runtime_by_object_name:
+                    rn = runtime_by_object_name[on]
+                    matches[rn["id"]] = cls
+                    matched = True
+                    break
+
+        # Pass 5: class_name → runtime object_name
+        if not matched:
+            cn = cls.get("class_name", "")
+            if cn and cn in runtime_by_object_name:
+                rn = runtime_by_object_name[cn]
+                matches[rn["id"]] = cls
+                matched = True
+
     return matches
 
 
@@ -191,10 +395,57 @@ def _enrich_runtime_nodes(runtime_nodes: list[dict], static_classes: list[dict])
             node["object_name"] = ""
         if "accessible_id" not in node:
             node["accessible_id"] = ""
+        if "states" not in node:
+            node["states"] = []
         if "source" not in node:
             node["source"] = "runtime"
         if "children" in node:
             _enrich_runtime_nodes(node["children"], static_classes)
+
+
+def _dedup_static_classes(static_classes: list[dict]) -> list[dict]:
+    """Merge duplicate class entries (same class_name) from multi-TU scans.
+
+    clang may find the same class in multiple translation units with different
+    base_classes completeness. Union object_names/accessible_names; prefer
+    is_ui_widget=True.
+    """
+    by_name: dict[str, dict] = {}
+    for cls in static_classes:
+        cn = cls.get("class_name", "")
+        if not cn:
+            continue
+        if cn not in by_name:
+            by_name[cn] = dict(cls)
+            continue
+        existing = by_name[cn]
+        for on in cls.get("object_names", []):
+            if on and on not in existing.setdefault("object_names", []):
+                existing["object_names"].append(on)
+        for an in cls.get("accessible_names", []):
+            if an and an not in existing.setdefault("accessible_names", []):
+                existing["accessible_names"].append(an)
+        if cls.get("is_ui_widget") and not existing.get("is_ui_widget"):
+            existing["is_ui_widget"] = True
+        if cls.get("base_classes") and not existing.get("base_classes"):
+            existing["base_classes"] = cls["base_classes"]
+    return list(by_name.values())
+
+
+def _is_ui_widget(cls: dict) -> bool:
+    """Check if a class is a UI widget using is_ui_widget flag, with base-class fallback."""
+    val = cls.get("is_ui_widget")
+    if val is not None:
+        return val
+    bases = cls.get("base_classes", [])
+    return any(b in _ALL_UI_CLASSES for b in bases)
+
+
+def _is_noise_static_class(cls: dict) -> bool:
+    """True if a static class is not a UI widget (filter from merged tree)."""
+    if cls.get("object_names") or cls.get("accessible_names"):
+        return False
+    return not _is_ui_widget(cls)
 
 
 def _add_unmatched_static_nodes(
@@ -204,22 +455,43 @@ def _add_unmatched_static_nodes(
     for cls in static_classes:
         if id(cls) in matched_classes:
             continue
-        names = cls.get("object_names", []) or [cls.get("class_name", "")]
+        if _is_noise_static_class(cls):
+            continue
+        cn = cls.get("class_name", "")
+        names = cls.get("object_names", [])
+        if not names and cn:
+            names = [cn]
+        children = []
         for on in names:
             if not on:
                 continue
-            node = {
+            children.append(
+                {
+                    "id": "",
+                    "name": on,
+                    "role": "panel",
+                    "object_name": on,
+                    "accessible_id": "",
+                    "source": "static",
+                    "class_name": cn,
+                }
+            )
+        if not children:
+            continue
+        if len(children) == 1 and children[0]["name"] == cn:
+            runtime_nodes.append(children[0])
+        else:
+            parent = {
                 "id": "",
-                "name": on,
+                "name": cn,
                 "role": "panel",
-                "object_name": on,
-                "accessible_id": (cls.get("accessible_names") or [""])[0],
+                "object_name": "",
+                "accessible_id": "",
                 "source": "static",
-                "class_name": cls.get("class_name", ""),
-                "source_file": cls.get("source_file", ""),
-                "match_status": "unresolved",
+                "class_name": cn,
+                "children": children,
             }
-            runtime_nodes.append(node)
+            runtime_nodes.append(parent)
 
 
 def merge_trees(runtime_tree: list[dict], static_classes: list[dict]) -> list[dict]:
@@ -234,6 +506,7 @@ def merge_trees(runtime_tree: list[dict], static_classes: list[dict]) -> list[di
     _enrich_runtime_nodes(result, static_classes)
 
     if static_classes:
+        static_classes = _dedup_static_classes(static_classes)
         _assign_ids(result)
         matches = _match_static_to_runtime(static_classes, result)
 
@@ -246,7 +519,6 @@ def merge_trees(runtime_tree: list[dict], static_classes: list[dict]) -> list[di
                         node["accessible_id"] = cls["accessible_names"][0]
                     node["source"] = "static+runtime"
                     node["class_name"] = cls.get("class_name", "")
-                    node["source_file"] = cls.get("source_file", "")
                     break
 
         _add_unmatched_static_nodes(result, static_classes, matches)
@@ -261,6 +533,7 @@ def write_at_tree_yaml(merged_tree: list[dict], output_path: str, app_name: str 
     removed = len(merged_tree) - len(filtered)
     if removed:
         logger.info("Filter removed %d noise nodes from %d", removed, len(merged_tree))
+    _normalize_tree(filtered)
     path = Path(output_path)
     path.parent.mkdir(parents=True, exist_ok=True)
 

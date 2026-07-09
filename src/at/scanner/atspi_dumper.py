@@ -38,6 +38,13 @@ _MAX_DEPTH = 15
 _MAX_CHILDREN_PER_NODE = 100
 _MAX_NAME_LENGTH = 100
 
+# Build reverse map: state int → name (e.g. STATE_SHOWING → "showing")
+_STATE_MAP: dict[int, str] = {
+    getattr(pyatspi, attr): attr.replace("STATE_", "").lower()
+    for attr in dir(pyatspi)
+    if attr.startswith("STATE_") and isinstance(getattr(pyatspi, attr), int)
+}
+
 
 def _get_node_attrs(obj: pyatspi.Accessible) -> tuple[str, str]:
     """Extract object_name and accessible_id from AT-SPI object attributes.
@@ -80,11 +87,43 @@ def _extract_node(obj: pyatspi.Accessible, depth: int, stats: dict[str, int]) ->
         stats["errors"] += 1
         return {"role": "unknown", "name": "", "source": "runtime"}
 
+    try:
+        state_set = obj.getState()
+        state_names = sorted(
+            _STATE_MAP.get(s, str(s)) for s in state_set.getStates()
+        )
+    except Exception:
+        state_names = []
+
+    try:
+        description = obj.description or ""
+    except Exception:
+        description = ""
+
+    try:
+        action_iface = obj.queryAction()
+        actions = [
+            action_iface.getName(i)
+            for i in range(action_iface.nActions)
+            if action_iface.getName(i)
+        ]
+    except Exception:
+        actions = []
+
+    try:
+        index_in_parent = obj.getIndexInParent()
+    except Exception:
+        index_in_parent = -1
+
     node: dict[str, Any] = {
         "role": role_name,
         "name": name[:_MAX_NAME_LENGTH],
         "object_name": object_name,
         "accessible_id": accessible_id,
+        "description": description,
+        "actions": actions,
+        "index_in_parent": index_in_parent,
+        "states": state_names,
         "source": "runtime",
     }
 

@@ -20,6 +20,8 @@ def cmd_dump(args):
         from src.at.scanner.clang_scanner import _worker_init, scan_source_dir
         from src.at.scanner.merger import (
             append_scan_entry,
+            load_state_snapshots,
+            merge_state_snapshots,
             merge_trees,
             write_at_tree_yaml,
             write_runtime_dump,
@@ -199,6 +201,16 @@ def cmd_dump(args):
 
         print(f"\n[3/3] Merging and filtering...")
         static_classes = scan_result.classes if scan_result else []
+
+        from src.at.scanner.merger import dedup_runtime_tree
+        runtime_tree = dedup_runtime_tree(runtime_tree)
+
+        states_dir = dump_dir / "states"
+        state_snapshots = load_state_snapshots(str(states_dir))
+        if state_snapshots:
+            print(f"  Merging {len(state_snapshots)} state snapshots...")
+            runtime_tree = merge_state_snapshots(runtime_tree, state_snapshots)
+
         merged = merge_trees(runtime_tree, static_classes)
         final_path = output / "at-tree.yaml"
         write_at_tree_yaml(merged, str(final_path), app_name=args.app)
