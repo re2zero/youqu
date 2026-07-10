@@ -393,8 +393,8 @@ def test_build_suite_cases_session_start_breaks_context():
     )
     suite_cases = _build_suite_cases(suite)
     assert len(suite_cases) == 2
-    assert len(suite_cases[0].steps) == 2
-    assert len(suite_cases[1].steps) == 2
+    assert len(suite_cases[0].steps) == 1
+    assert len(suite_cases[1].steps) == 1
 
 
 def test_build_suite_cases_accumulates_steps():

@@ -4,12 +4,10 @@
 
 from __future__ import annotations
 
-import re
 from collections import defaultdict
 from pathlib import Path
 
 import yaml
-from pydantic import ValidationError
 
 from src.at.generator.mapping_rules import STEP_TYPE_MAP
 from src.at.parser.models import (
@@ -61,6 +59,14 @@ def _extract_elements_from_cases(cases_doc: CasesDoc) -> dict[str, dict]:
         for step in suite.steps:
             if step.element_ref and step.selector:
                 elements[step.element_ref] = step.selector
+            elif step.selector and not step.element_ref:
+                # v2: selector-only steps — register by name as synthetic ref
+                sel = step.selector
+                name = sel.get("name", "") if isinstance(sel, dict) else ""
+                if name:
+                    ref_key = name
+                    if ref_key not in elements:
+                        elements[ref_key] = sel
     return elements
 
 
@@ -194,8 +200,25 @@ def _step_to_action(step: CaseStep) -> SuiteActionStep | None:
         if step.action == "keyboard_press":
             return SuiteActionStep(action="keyboard_press", key=key)
 
+        if step.action == "keyboard_hot_key":
+            return SuiteActionStep(action="keyboard_hot_key", key=step.key)
+
         if step.action == "keyboard_type":
             return SuiteActionStep(action="keyboard_type", text=step.text)
+
+        if step.action == "mouse_click":
+            return SuiteActionStep(
+                action="mouse_click",
+                ref=step.element_ref,
+                selector=step.selector,
+            )
+
+        if step.action == "mouse_drag":
+            return SuiteActionStep(
+                action="mouse_drag",
+                ref=step.element_ref,
+                selector=step.selector,
+            )
 
         if step.action == "element_action":
             do = "click"
@@ -213,7 +236,10 @@ def _step_to_action(step: CaseStep) -> SuiteActionStep | None:
             )
 
         if step.action == "mouse_scroll":
-            return SuiteActionStep(action="mouse_scroll", value=step.text or -3)
+            scroll_val = -3
+            if step.text and step.text.lstrip("-").isdigit():
+                scroll_val = int(step.text)
+            return SuiteActionStep(action="mouse_scroll", value=scroll_val)
 
         if step.action == "dbus_call":
             return SuiteActionStep(action="dbus_call", command=step.description)
@@ -271,15 +297,16 @@ def _build_suite_cases(suite: CaseSuite) -> list[SuiteCase]:
         if action_step is None:
             continue
 
-        if action_step.action == "session_start":
-            if current and (current.steps or current.assert_steps):
-                suite_cases.append(current)
-            case_counter += 1
-            current = SuiteCase(
-                id=f"{suite.id}_s{case_counter}",
-                name=step.description[:60],
-                steps=[action_step],
-            )
+        if action_step.action in ("session_start", "session_stop"):
+            if action_step.action == "session_start":
+                if current and (current.steps or current.assert_steps):
+                    suite_cases.append(current)
+                case_counter += 1
+                current = SuiteCase(
+                    id=f"{suite.id}_s{case_counter}",
+                    name=step.description[:60],
+                    steps=[],
+                )
             continue
 
         if step.step_type == StepType.assert_:

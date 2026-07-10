@@ -365,8 +365,17 @@ def handle_screenshot(step: SuiteActionStep, context: dict) -> None:
 
 
 def _attrs_to_expr(attrs: dict) -> str:
-    name = attrs.get("name", "") if attrs else ""
-    return f"$//{name}/" if name else "$/"
+    if not attrs:
+        return "$/"
+    name = attrs.get("name", "")
+    role = attrs.get("role", "")
+    if name and role:
+        return f"$//{name}/{role}/"
+    if name:
+        return f"$//{name}/"
+    if role:
+        return f"$//{role}/"
+    return "$/"
 
 
 def _assert_element_expr(step: SuiteActionStep, context: dict) -> str:
@@ -375,7 +384,7 @@ def _assert_element_expr(step: SuiteActionStep, context: dict) -> str:
         return _attrs_to_expr(elements[step.ref])
     if step.selector:
         return _attrs_to_expr(step.selector)
-    return ""
+    return "$/"
 
 
 def handle_assert_element(step: SuiteActionStep, context: dict) -> None:

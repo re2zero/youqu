@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import subprocess
 import time
 from pathlib import Path
@@ -9,6 +10,8 @@ from src.at.executor.crash_monitor import CrashMonitor
 from src.at.executor.handlers import HANDLERS
 from src.at.executor.models import AtSpecResult, AtSpecResult as SpecResult, AtSuiteResult, SpecStatus
 from src.at.parser.models import EnvCheckItem, SuiteActionStep, SuiteCase, SuiteConfig
+
+_log = logging.getLogger(__name__)
 
 
 def check_env_process(item: EnvCheckItem) -> bool:
@@ -143,8 +146,8 @@ class AtSuiteExecutor:
         if self.suite.teardown:
             try:
                 execute_steps(self.suite.teardown, self.context)
-            except Exception:
-                pass
+            except Exception as exc:
+                _log.warning("teardown failed: %s", exc)
 
         result.duration = time.monotonic() - start
         return result
