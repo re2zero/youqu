@@ -104,6 +104,28 @@ Note: `suites:` is the YAML alias — the file MUST use `suites:` not `specs:`.
 | assert_window_count | app, expected | Window count matches |
 | assert_element_not_exists | ref, selector | Element NOT in AT-SPI tree |
 
+## dtk_context_menu Action Format
+
+The `dtk_context_menu` action requires TWO pieces of information:
+
+1. **Whose context menu** — `selector` to identify the target component where the right-click happens (e.g., `{"name": "TerminalDisplay", "role": "panel"}` for terminal area, or coordinates via `x`/`y`)
+2. **Menu item names** — `items` list for navigating the dynamic menu, including sub-menu items if any (e.g., `["设置"]`, `["横向分屏"]`, or `["自定义命令", "添加自定义命令"]` for sub-menus)
+
+See e2e test pattern: `context_menu_comb` uses `x`/`y` + `items` — the AT executor `dtk_context_menu` follows the same logic.
+
+Current framework limitation: the generator only outputs `items` without `selector`. The agent should verify dtk_context_menu steps capture both pieces.
+
+Example of ideal dtk_context_menu suite step:
+```yaml
+- action: dtk_context_menu
+  selector:
+    name: TerminalDisplay
+    role: panel
+  items:
+    - 自定义命令
+    - 添加自定义命令
+```
+
 ## elements.yaml
 
 The `elements.yaml` file is the shared element registry.

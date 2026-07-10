@@ -43,6 +43,21 @@ by `youqu at run`.
 - LLM API reachable (`YOUQU_AT_BASE_URL`, default `http://localhost:8000/v1`)
 - xlsx/csv input exists, columns match supported aliases (see pipeline-reference.md)
 
+**LLM Environment Prerequisites:**
+
+`youqu at parse` and `youqu at map` require an OpenAI-compatible LLM API. Check these environment variables before calling the CLI:
+- `YOUQU_AT_API_KEY` — API key (default: `not-needed` for local servers)
+- `YOUQU_AT_BASE_URL` — API endpoint (default: `http://localhost:8000/v1`)
+- `YOUQU_AT_MODEL` — model name (default: `Qwen/Qwen2.5-VL-7B-Instruct`)
+
+**Agent-as-LLM Fallback:**
+
+If LLM API is not configured, the agent itself can act as the LLM:
+1. Read the xlsx/csv data directly (using openpyxl or similar)
+2. Structure each row into the cases.yaml schema: `suites[].steps[].step_type`, `element_hint`, `menu_path`, `description`
+3. Write cases.yaml and validate with Pydantic: `CasesDoc.model_validate(yaml_data)` against the `src.at.parser.models.CasesDoc` schema
+4. For the map phase, read cases.yaml + at-tree.yaml, match each step to at-tree elements, and write mappings.yaml against the `ElementMappingsDoc` schema
+
 ### Step 2: Acquire at-tree.yaml
 
 Check `metadata.generated_at` for freshness. Re-dump if stale:
@@ -64,6 +79,19 @@ Verify: `cases.yaml` has `suites` array with `steps`.
 youqu at map --at-tree <at_tree> --cases <cases_yaml> --output <mappings_yaml>
 ```
 Verify: check for `status: unmapped` entries → review `fix_suggestion`.
+
+**Special Case: dtk_context_menu — two requirements**
+
+Right-click context menus are **dynamically generated** at runtime. Their menu items are NOT present in at-tree.yaml. The map phase should NOT attempt to match context menu items to at-tree nodes.
+
+A dtk_context_menu step requires TWO pieces of information:
+
+1. **Whose context menu** — the target UI component where the right-click happens. This determines WHERE to open the context menu. The map phase must provide a `selector` (or coordinates) for this component (e.g., terminal display area, tab bar, dock icon).
+2. **Menu item names** — the menu_path items for navigating the dynamically opened menu, including sub-menu items if any (e.g., `["编码"]` or `["自定义命令", "添加自定义命令"]`).
+
+See e2e test case pattern: `context_menu_comb` action uses `x`/`y` (target location) + `items` (menu item names) — the AT executor `dtk_context_menu` follows the same logic.
+
+Current framework limitation: the generator outputs only `items` (menu_path) without a `selector` for the target component. The agent should verify dtk_context_menu steps capture both target component info and menu items during parse.
 
 ### Step 5: Generate Suite YAML
 

@@ -42,6 +42,19 @@ Parameters:
 - `--cases`: required. path to cases.yaml.
 - `--output`: required. output mappings.yaml path.
 
+**Special Case: dtk_context_menu — two requirements**
+
+Right-click context menus are **dynamically generated** at runtime. Their menu items are NOT present in at-tree.yaml. The map phase should NOT attempt to match context menu items to at-tree nodes.
+
+A dtk_context_menu step requires TWO pieces of information:
+
+1. **Whose context menu** — the target UI component where the right-click happens. The map phase must provide a `selector` (or coordinates) for this component (e.g., terminal display area, tab bar, dock icon).
+2. **Menu item names** — the menu_path items for navigating the dynamically opened menu, including sub-menu items if any (e.g., `["编码"]` or `["自定义命令", "添加自定义命令"]`).
+
+See e2e test case pattern: `context_menu_comb` action uses `x`/`y` (target location) + `items` (menu item names). The AT executor `dtk_context_menu` follows the same logic.
+
+Current framework limitation: the generator outputs only `items` (menu_path) without a `selector` for the target component. The agent should verify dtk_context_menu steps capture both target component info and menu items during parse.
+
 ### generate
 
 Generates suite YAML and elements.yaml from `cases.yaml` and `mappings.yaml`.
@@ -144,6 +157,38 @@ mappings:
     note: ""
     context: ""
 ```
+
+## Element Hint Mapping Requirements
+
+The following table shows which element_hints need at-tree mapping vs not:
+
+| element_hint | Needs at-tree selector? | Notes |
+|---|---|---|
+| keyboard_shortcut | No | Converts directly to `keyboard_press` action |
+| input_text | No | Converts directly to `keyboard_type` action |
+| assert_window | No | Uses description as name_pattern |
+| scroll | No | No target element |
+| dbus_call | No | Not a UI operation |
+| screenshot | No | Captures screen |
+| dtk_main_menu | No (uses menu_path) | Menu items found in at-tree under DTitlebarMainMenu |
+| dtk_context_menu | Yes (target component) | Menu items are dynamic; only need selector for WHERE to right-click |
+| click | Yes | Need selector for target element |
+| hover | Yes | Need selector for target element |
+| drag_drop | Yes | Need selector for drag source (and drop target) |
+| titlebar | Yes | Need selector for titlebar element |
+| tab_bar | Yes | Need selector for tab bar element |
+| dialog | Yes | Need selector — see dialog mapping strategy below |
+| toolbar | Yes | Need selector for toolbar element |
+| sidebar | Yes | Need selector for sidebar element |
+| tooltip | Yes | Need selector for tooltip element |
+| dock | Yes | Need selector for dock element |
+| assert_element | Yes | Need selector for element being asserted |
+| assert_window_count | No | Just count windows |
+| assert_not_exists | Yes | Need selector for element that should not exist |
+| vlm_assert | No | Uses VLM model for assertion |
+| visual_check | N/A | Skip — not automatable |
+| physical_device | N/A | Skip — not automatable |
+| cross_device | N/A | Skip — not automatable |
 
 ## LLM Configuration
 

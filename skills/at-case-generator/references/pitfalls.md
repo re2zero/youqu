@@ -69,3 +69,41 @@
   - Priority: 用例级别, 优先级, 级别, 重要程度
   - Precondition: 前置条件, 前提条件, 预置条件
   - Case type: 用例类型, 类型, 测试类型
+
+## 9. dtk_context_menu menu_path must contain complete menu item names
+
+**Problem**: menu_path values must contain the **complete** menu item name (e.g., `["设置"]`, `["远程管理"]`, `["横向分屏"]`), NOT truncated fragments (e.g., `["置"]`, `["理"]`, `["屏"]`).
+
+**Impact**: The executor cannot navigate the context menu correctly; menu selection fails.
+
+**Solution**: This happens when regex-based extraction is used instead of LLM semantic understanding. If the agent is performing parse manually (without LLM API), it must verify that every menu_path entry is a complete, meaningful menu item name extracted from the step description.
+
+- Example of correct extraction: description="右键菜单选择设置" → menu_path=["设置"]
+- Example of broken extraction: description="右键/菜单栏选择设置" → menu_path=["置"] (truncated)
+
+## 10. Dialog name="" mapping strategy
+
+**Problem**: In at-tree.yaml, dialog nodes often have `name=""` (empty). This is a known DTK6/Qt6 limitation — objectName is not exposed via AT-SPI attributes.
+
+**Impact**: The map phase cannot match dialog steps to at-tree nodes using the dialog's name.
+
+**Solution**: Use child panel names to reverse-lookup the dialog. Common patterns:
+  - Child panel named `CustomCommandOptDlg` → "自定义命令" dialog
+  - Child panel named `CustomThemeSettingDialog` → "自定义主题" dialog
+  - Child panel named `TabRenameDlg` → "重命名标签" dialog
+  - Child panel named `GroupConfigOptDlg` → "服务器分组配置" dialog
+  - Child panel named `ServerConfigOptDlg` → "服务器配置" dialog
+  - Child panel named `SearchBar` or `PageSearchBar` → "搜索" dialog/bar
+
+The LLM (or agent acting as LLM) should use these child panel class names as the selector.name for dialog mapping.
+
+## 11. DTK button names — spacing varies by character translation
+
+**Problem**: DTK dialog buttons may have AT-SPI names with inter-character spacing, but this is **inconsistent** — it depends on DTK's character translation behavior:
+- Some buttons have a regular space (0x20): `"取 消"`, `"添 加"`
+- Some buttons have a non-breaking space (U+00A0): `"取\xa0消"`, `"添\xa0加"`
+- Some buttons have no space at all: `"继续"`, `"高级选项"`, `"删除服务器"`
+
+**Impact**: The map phase selector.name does not match the actual AT-SPI name; mapping fails.
+
+**Solution**: The map phase selector.name MUST match whatever is in at-tree.yaml exactly — including spaces, non-breaking spaces, or lack thereof. Do not assume a button name has or does not have spaces. Always copy the name from at-tree.yaml, not from the visible UI text.

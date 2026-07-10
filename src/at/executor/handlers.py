@@ -44,6 +44,10 @@ def resolve_step_attrs(step: SuiteActionStep, elements: dict) -> dict:
     else:
         attrs = {}
 
+    if step.selector and not step.ref:
+        if isinstance(step.selector, dict):
+            attrs.update({k: v for k, v in step.selector.items() if v is not None})
+
     if step.x is not None:
         attrs.setdefault("x", step.x)
     if step.y is not None:

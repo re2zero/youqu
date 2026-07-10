@@ -65,7 +65,17 @@ def _step_to_action(step: CaseStep, mapping: MappingEntry | None) -> SuiteAction
         return SuiteActionStep(action="dtk_main_menu", items=step.menu_path)
 
     if step.element_hint == ElementHint.dtk_context_menu and step.menu_path:
-        return SuiteActionStep(action="dtk_context_menu", items=step.menu_path)
+        selector = (
+            mapping.selector.model_dump(mode="json", exclude_none=True)
+            if mapping and mapping.selector
+            else None
+        )
+        return SuiteActionStep(
+            action="dtk_context_menu",
+            ref=mapping.element_ref if mapping else None,
+            selector=selector,
+            items=step.menu_path,
+        )
 
     if step.element_hint == ElementHint.titlebar:
         selector = mapping.selector.model_dump(mode="json", exclude_none=True) if mapping and mapping.selector else None
