@@ -41,7 +41,7 @@ def main():
         sys.exit(1)
 
     try:
-        executor = SuiteExecutor(suite)
+        executor = SuiteExecutor(suite, suite_path=suite_path)
         result = executor.run(
             spec_ids=spec_ids, tags=tags, skip_env_check=skip_env_check,
         )

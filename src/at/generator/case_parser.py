@@ -2,23 +2,22 @@
 #
 # SPDX-License-Identifier: GPL-2.0-only
 
-"""Parse xlsx/csv test case files into structured cases.yaml via LLM.
+"""Parse xlsx/csv test case files into raw cases.yaml (format conversion only).
+
+Semantic mapping (action/key/text/element_ref/selector) is done by the AI
+in the session, not by this CLI command. Use ``youqu at tree-info`` to
+produce a compact at-tree listing for AI context.
 
 Pipeline:
 1. Read xlsx/csv -> normalized case list
-2. Build prompt with cases + at-tree context (optional)
-3. Call OpenAI-compatible LLM
-4. Parse LLM output -> CasesDoc (Pydantic validation)
-5. Write cases.yaml
+2. Build minimal CasesDoc (description-only steps, no semantic mapping)
+3. Write raw cases.yaml
 """
 
 from __future__ import annotations
 
 import csv
-import json
-import os
 import sys
-import time
 from pathlib import Path
 
 COLUMN_ALIASES = {
@@ -95,180 +94,57 @@ def normalize_cases(raw_data: list[dict]) -> list[dict]:
     return cases
 
 
-def _get_llm_config() -> dict:
-    """Read LLM config from globalconfig.ini [vlm] section with env var overrides."""
+def _compact_at_tree(at_tree_text: str) -> str:
     try:
-        from setting.globalconfig import GetCfg, GlobalConfig
+        import yaml
 
-        cfg_file = GlobalConfig.GLOBAL_CONFIG_FILE_PATH
-        cfg = GetCfg(cfg_file, "vlm")
-        return {
-            "base_url": cfg.get("VLM_BASE_URL", default="http://localhost:8000/v1"),
-            "model": os.environ.get(
-                "YOUQU_AT_MODEL",
-                cfg.get("VLM_MODEL", default="Qwen/Qwen2.5-VL-7B-Instruct"),
-            ),
-            "api_key": cfg.get("VLM_API_KEY", default="not-needed"),
-            "timeout": int(cfg.get("VLM_TIMEOUT", default=30)),
-            "max_retries": int(cfg.get("VLM_MAX_RETRIES", default=3)),
-            "retry_delay": int(cfg.get("VLM_RETRY_DELAY", default=1)),
-        }
+        tree = yaml.safe_load(at_tree_text)
     except Exception:
-        return {
-            "base_url": os.environ.get("YOUQU_AT_BASE_URL", "http://localhost:8000/v1"),
-            "model": os.environ.get("YOUQU_AT_MODEL", "Qwen/Qwen2.5-VL-7B-Instruct"),
-            "api_key": os.environ.get("YOUQU_AT_API_KEY", "not-needed"),
-            "timeout": 30,
-            "max_retries": 3,
-            "retry_delay": 1,
-        }
+        return at_tree_text
 
+    if not tree or not isinstance(tree, dict):
+        return at_tree_text
 
-# JSON schema description embedded in prompt — LLM outputs this structure
-_SCHEMA_DESCRIPTION = """{
-  "metadata": {
-    "generated_at": "ISO8601",
-    "source": "input file name"
-  },
-  "suites": [
-    {
-      "id": "suite_id",
-      "name": "suite名称",
-      "module": "模块名",
-      "description": "suite描述",
-      "status": "active",
-      "reason": "",
-      "steps": [
-        {
-          "step_type": "action|assert|navigate",
-          "description": "步骤描述",
-          "element_hint": "dtk_main_menu|dtk_context_menu|titlebar|toolbar|sidebar|tab_bar|dialog|tooltip|dock|null",
-          "menu_path": ["菜单项1", "菜单项2"]
-        }
-      ]
-    }
-  ]
-}"""
+    lines: list[str] = []
 
-_PARSE_PROMPT_TEMPLATE = """角色：测试用例整理专家
-
-输入：
-1. 原始测试用例列表（xlsx解析结果）
-2. at-tree.yaml（UI结构上下文，可能为空）
-
-任务：
-- 将相关用例整合为 suites（共享 session 的用例归为一组）
-- 过滤不可自动化用例（标记 status: "skipped" + reason）
-- 为每个步骤生成 step_type（action/assert/navigate）
-- 为每个步骤生成 element_hint
-- 确保步骤粒度：每步对应一个可映射的 UI 操作
-
-过滤规则：
-- 需要 AT-SPI/键鼠/DBus/CLI 能模拟的 -> 保留（status: "active"）
-- 需要人工视觉主观判断的 -> status: "skipped"
-- 需要物理设备交互的 -> status: "skipped"
-- 需要跨设备协调的 -> status: "skipped"
-- 玲珑环境、性能压测、触摸操作、重启类 -> status: "skipped"
-
-element_hint 枚举值：
-dtk_main_menu, dtk_context_menu, titlebar, toolbar, sidebar, tab_bar, dialog, tooltip, dock, null
-
-step_type 说明：
-- navigate: 导航类操作（打开菜单、切换tab等）
-- action: 执行类操作（点击按钮、输入文本、右键等）
-- assert: 验证类操作（检查弹窗、验证状态等）
-
-menu_path：仅 dtk_main_menu 和 dtk_context_menu 需要填写，其他为 null
-
-输出格式（严格遵循，输出纯JSON，不要markdown代码块）：
-{schema}
-
-原始用例数据：
-{cases_json}
-
-UI结构上下文（at-tree.yaml）：
-{at_tree_context}
-"""
-
-
-def build_parse_prompt(cases: list[dict], at_tree_context: str = "") -> str:
-    cases_json = json.dumps(cases, ensure_ascii=False, indent=2)
-    return _PARSE_PROMPT_TEMPLATE.format(
-        schema=_SCHEMA_DESCRIPTION,
-        cases_json=cases_json,
-        at_tree_context=at_tree_context or "（无UI上下文）",
-    )
-
-
-def call_llm(prompt: str, config: Optional[dict] = None) -> str:
-    if config is None:
-        config = _get_llm_config()
-    try:
-        import httpx
-    except ImportError:
-        print("Error: httpx not installed. pip install httpx")
-        sys.exit(1)
-    url = "{}/chat/completions".format(config["base_url"].rstrip("/"))
-    headers = {
-        "Authorization": "Bearer {}".format(config["api_key"]),
-        "Content-Type": "application/json",
-    }
-    payload = {
-        "model": config["model"],
-        "messages": [{"role": "user", "content": prompt}],
-        "max_tokens": 16384,
-        "temperature": 0.1,
-    }
-    for attempt in range(config["max_retries"]):
-        try:
-            with httpx.Client(timeout=config["timeout"]) as client:
-                resp = client.post(url, headers=headers, json=payload)
-                resp.raise_for_status()
-                data = resp.json()
-                if "choices" in data and data["choices"]:
-                    return data["choices"][0].get("message", {}).get("content", "")
-                return ""
-        except httpx.HTTPStatusError as e:
-            if attempt == config["max_retries"] - 1:
-                print("Error: HTTP {} calling LLM API".format(e.response.status_code))
-                return ""
-            time.sleep(config["retry_delay"])
-        except Exception as e:
-            if attempt == config["max_retries"] - 1:
-                print("Error calling LLM API: {}".format(e))
-                return ""
-            time.sleep(config["retry_delay"])
-    return ""
-
-
-def _extract_json(text: str) -> Any:
-    if not text:
-        return None
-    text = text.strip()
-    if text.startswith("```"):
-        lines = text.split("\n")
-        json_lines = []
-        in_block = False
-        for line in lines:
-            if line.startswith("```"):
-                in_block = not in_block
+    def _walk(nodes: list[dict], parent_path: list[str]) -> None:
+        for node in nodes:
+            if not isinstance(node, dict):
                 continue
-            if in_block:
-                json_lines.append(line)
-        text = "\n".join(json_lines)
-    try:
-        return json.loads(text)
-    except (json.JSONDecodeError, TypeError):
-        return None
+            nid = node.get("id", "")
+            role = node.get("role", "")
+            name = node.get("name", "")
+            obj_name = node.get("object_name", "")
+            path = parent_path + [nid] if nid else parent_path
+            parent_str = " > ".join(path[:-1]) if len(path) > 1 else ""
+            parts = ["{} | role: {} | name: {} | object_name: {}".format(nid, role, name, obj_name)]
+            if parent_str:
+                parts.append(" | parent: {}".format(parent_str))
+            lines.append("".join(parts))
+            children = node.get("children", [])
+            if children:
+                _walk(children, path)
+
+    tree_nodes = tree.get("tree", [])
+    if isinstance(tree_nodes, list):
+        _walk(tree_nodes, [])
+
+    return "\n".join(lines)
+
+
+def compact_at_tree_to_file(at_tree_path: str, output_path: str) -> None:
+    raw = Path(at_tree_path).read_text(encoding="utf-8")
+    compacted = _compact_at_tree(raw)
+    Path(output_path).write_text(compacted, encoding="utf-8")
+    print("Wrote {} ({} bytes, {} nodes)".format(
+        output_path, len(compacted), len(compacted.splitlines())))
 
 
 def parse_to_cases(input_path: str, output_path: str, at_tree_path: str = "") -> None:
-    """Parse xlsx/csv input into structured cases.yaml via LLM.
+    """Parse xlsx/csv into raw cases.yaml (format conversion only).
 
-    Args:
-        input_path: Path to xlsx or csv file.
-        output_path: Path to write cases.yaml.
-        at_tree_path: Optional path to at-tree.yaml for UI context.
+    Semantic mapping (action/key/text/element_ref/selector) is done by the AI
+    in the session, not by this CLI command.
     """
     path = Path(input_path)
     if not path.exists():
@@ -291,34 +167,37 @@ def parse_to_cases(input_path: str, output_path: str, at_tree_path: str = "") ->
     cases = normalize_cases(raw_data)
     print("Read {} cases from {}".format(len(cases), input_path))
 
-    at_tree_context = ""
     if at_tree_path:
-        tree_path = Path(at_tree_path)
-        if tree_path.exists():
-            at_tree_context = tree_path.read_text(encoding="utf-8")
-            print("Loaded at-tree context ({} bytes)".format(len(at_tree_context)))
-        else:
-            print("Warning: at-tree file not found: {}".format(at_tree_path))
+        print("Warning: --at-tree is deprecated for parse. Semantic mapping is now done by AI. Use 'youqu at tree-info' instead.")
 
-    prompt = build_parse_prompt(cases, at_tree_context)
-    print("Calling LLM API...")
-    response = call_llm(prompt)
-    if not response:
-        print("Error: LLM returned empty response")
-        sys.exit(1)
+    from src.at.parser.models import CaseStep, CaseSuite, CasesDoc, CasesMetadata, StepType
 
-    data = _extract_json(response)
-    if data is None:
-        print("Error: failed to parse LLM response as JSON")
-        sys.exit(1)
+    suites = []
+    for case in cases:
+        steps = []
+        step_texts = case.get("steps", "")
+        for line in step_texts.split("\n"):
+            line = line.strip()
+            if not line:
+                continue
+            steps.append(CaseStep(
+                step_type=StepType.action,
+                description=line,
+            ))
+        if steps:
+            suites.append(CaseSuite(
+                id="case_{}".format(case["id"]),
+                name=case.get("title", ""),
+                module=case.get("module", ""),
+                description=case.get("title", ""),
+                status="active",
+                steps=steps,
+            ))
 
-    from src.at.parser.models import CasesDoc
-
-    try:
-        doc = CasesDoc.model_validate(data)
-    except Exception as e:
-        print("Error: LLM output failed schema validation: {}".format(e))
-        sys.exit(1)
+    doc = CasesDoc(
+        metadata=CasesMetadata(source=path.name),
+        suites=suites,
+    )
 
     out = Path(output_path)
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -333,6 +212,7 @@ def parse_to_cases(input_path: str, output_path: str, at_tree_path: str = "") ->
             sort_keys=False,
         )
     except ImportError:
+        import json
         content = json.dumps(
             doc.model_dump(by_alias=False, exclude_none=True),
             ensure_ascii=False,
@@ -341,9 +221,5 @@ def parse_to_cases(input_path: str, output_path: str, at_tree_path: str = "") ->
 
     out.write_text(content, encoding="utf-8")
     total_steps = sum(len(s.steps) for s in doc.suites)
-    skipped = sum(1 for s in doc.suites if s.status == "skipped")
-    print(
-        "Wrote {} ({} suites, {} steps, {} skipped)".format(
-            output_path, len(doc.suites), total_steps, skipped
-        )
-    )
+    print("Wrote {} ({} suites, {} raw steps)".format(
+        output_path, len(doc.suites), total_steps))

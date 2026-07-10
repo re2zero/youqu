@@ -78,7 +78,7 @@ def _execute_lifecycle_steps(
             return f"unknown action '{step.action}'"
         try:
             handler(step, context)
-        except Exception as exc:
+        except BaseException as exc:
             return f"action '{step.action}' failed: {exc}"
         if step.wait:
             time.sleep(step.wait)
@@ -97,7 +97,7 @@ def _execute_spec_steps(
             return f"unknown action '{step.action}'"
         try:
             handler(step, context)
-        except Exception as exc:
+        except BaseException as exc:
             return f"action '{step.action}' failed: {exc}"
         if step.wait:
             time.sleep(step.wait)
@@ -113,11 +113,17 @@ class SuiteExecutor:
     affect subsequent specs (unless fast_fail is enabled).
     """
 
-    def __init__(self, suite: SuiteSpec):
+    def __init__(self, suite: SuiteSpec, suite_path: str | None = None):
         self.suite = suite
         self.context: dict[str, Any] = {
             "app": suite.app,
         }
+        if suite_path:
+            from src.yaml_test.elements import load_elements
+            try:
+                self.context["elements"] = load_elements(Path(suite_path))
+            except Exception:
+                pass
 
     def run(
         self,

@@ -235,6 +235,18 @@ def cmd_parse(args):
         _not_implemented("parse")
 
 
+def cmd_tree_info(args):
+    try:
+        from youqu.src.at.generator.case_parser import compact_at_tree_to_file
+
+        compact_at_tree_to_file(
+            at_tree_path=args.at_tree,
+            output_path=args.output,
+        )
+    except ImportError:
+        _not_implemented("tree-info")
+
+
 def cmd_map(args):
     try:
         from youqu.src.at.generator.mapper import map_elements
@@ -248,7 +260,13 @@ def cmd_generate(args):
     try:
         from youqu.src.at.generator.yaml_generator import generate_yaml
 
-        generate_yaml(cases_path=args.cases, mappings_path=args.mappings, output_dir=args.output)
+        generate_yaml(
+            cases_path=args.cases,
+            mappings_path=getattr(args, "mappings", ""),
+            output_dir=args.output,
+            app_name=getattr(args, "app", ""),
+            at_tree_path=getattr(args, "at_tree", ""),
+        )
     except ImportError:
         _not_implemented("generate")
 

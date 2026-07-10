@@ -1,109 +1,152 @@
-## 1. at-tree.yaml is stale
+# AT Case Generator Pitfalls
 
-**Problem**: UI changed after at-tree was generated; elements no longer match.
+## 1. Compound steps not split
 
-**Impact**: map phase produces unmapped elements, generate produces incomplete selectors.
+**Problem**: xlsx test steps often combine multiple operations in one
+description (e.g., "打开终端，主菜单点击主题，切换深色" = 3 operations).
 
-**Solution**: Re-run `youqu at dump` whenever the app's UI changes; check metadata.generated_at.
+**Impact**: If not split, only the first operation matches a regex/action,
+the rest are lost. The generated suite has incomplete operations.
 
-## 2. LLM API unavailable
+**Solution**: The AI MUST split compound steps into individual CaseStep
+entries during semantic mapping. See SKILL.md "Compound Step Splitting" table.
 
-**Problem**: parse and map phases call an OpenAI-compatible LLM; if the API server is down or unreachable, both phases fail.
+## 2. Menu items using element_action instead of dtk_main_menu
 
-**Impact**: parse exits with "Error calling LLM API" or empty response; no cases.yaml produced.
+**Problem**: Menu items appear in at-tree as `role: menu item` nodes.
+The AI may map them to `element_action` (AT-SPI click).
 
-**Solution**: Before running parse/map, verify the API is reachable. Check env vars: YOUQU_AT_BASE_URL (default: http://localhost:8000/v1), YOUQU_AT_MODEL.
+**Impact**: Menu items are NOT visible/clickable in AT-SPI until the menu
+is opened. `element_action` on a menu item fails at runtime.
 
-## 3. Parse output fails schema validation
+**Solution**: Menu items MUST use `dtk_main_menu` (main menu) or
+`dtk_context_menu` (right-click menu) with `items` field for keyboard
+navigation. NEVER use `element_action` for menu items.
 
-**Problem**: LLM returns JSON that doesn't match the expected cases.yaml schema (missing fields, wrong types, invalid enum values).
+## 3. DTK menu does not use AT-SPI element click
 
-**Impact**: parse exits with "LLM output failed schema validation".
+**Problem**: DTK main menu (`DTitlebarMainMenu`) creates transient popup
+menus not in the AT-SPI accessibility tree until opened.
 
-**Solution**: Check LLM response quality — try a different model, increase max_tokens, or adjust input data format. Ensure xlsx columns match supported aliases.
+**Impact**: `element_action` cannot find/click menu items. The executor
+returns "element not found".
 
-## 4. Map produces unmapped elements
+**Solution**: `dtk_main_menu` uses keyboard navigation (Alt → Down → Enter),
+not AT-SPI element lookup. `dtk_context_menu` uses right-click → keyboard
+navigation. Both use `items` field, not `ref`/`selector`.
 
-**Problem**: Some steps cannot be matched to any AT-SPI element in at-tree.yaml; their mapping status is "unmapped".
+## 4. keyboard_press (single) vs keyboard_hot_key (combo)
 
-**Impact**: Those steps get no selector in the generated suite; they may fail at runtime but generate does NOT crash.
+**Problem**: Using `keyboard_press` for key combinations (Ctrl+C) or
+`keyboard_hot_key` for single keys (Enter).
 
-**Solution**: Check unmapped entries in mappings.yaml (status=unmapped). Review fix_suggestion. May need to update at-tree.yaml or adjust element hints in cases.yaml.
+**Impact**: `keyboard_press` handler only handles single keys.
+`keyboard_hot_key` handler handles combinations with `+` separator.
 
-## 5. Generate produces empty output
+**Solution**:
+- Single key (Enter, Escape, F1, Tab) → `keyboard_press`, `key: "enter"`
+- Key combination (Ctrl+C, Alt+Tab) → `keyboard_hot_key`, `key: "ctrl+c"`
 
-**Problem**: All suites in cases.yaml are skipped (status=skipped), or all steps have visual_check/physical_device/cross_device hints (which are excluded).
+## 5. dtk_context_menu missing right-click target coordinates
 
-**Impact**: Output directory has elements.yaml but no module subdirectories or suite files.
+**Problem**: `dtk_context_menu` needs to know WHERE to right-click before
+navigating the menu. Missing target → executor cannot open context menu.
 
-**Solution**: Check cases.yaml for suite status and step element_hint values. Ensure some suites are active and steps use mappable hints (click, dialog, toolbar, etc.).
+**Impact**: Context menu never opens; menu navigation fails.
 
-## 6. suites: vs specs: field name
+**Solution**: Provide either:
+- `ref`/`selector` — AT-SPI element to right-click (executor resolves center
+  coordinates)
+- `x`/`y` — direct coordinates for fixed positions
+Both need `items` for the menu path.
 
-**Problem**: The suite config YAML uses `suites:` as the field name for test cases; writing `specs:` instead will cause parsing errors at execution time.
+## 6. needs_accessible_name elements
+
+**Problem**: Some AT-SPI elements lack accessible names (empty `name` field).
+DTK6/Qt6 does not expose objectName via AT-SPI.
+
+**Impact**: Steps requiring these elements cannot be reliably mapped.
+
+**Solution**: Set `needs_accessible_name: true` and
+`accessible_name_suggestion: "suggested name"`. The generate phase collects
+these into `app-optimization.md` for future app source code fixes.
+
+## 7. session_start.command must be app name
+
+**Problem**: Using AT-SPI registered name or full path in `command` field.
+
+**Impact**: App fails to launch.
+
+**Solution**: `session_start.command` is the app's executable name (e.g.,
+"deepin-terminal"), not the AT-SPI name or full path. Pass `--app` to
+`youqu at generate` to set this.
+
+## 8. suites: vs specs: field name
+
+**Problem**: Writing `specs:` instead of `suites:` in suite config YAML.
 
 **Impact**: `youqu at run` fails to load the suite file.
 
-**Solution**: Always use `suites:` in the YAML output. Do not write `specs:`.
+**Solution**: Always use `suites:` (the YAML alias). The pydantic model field
+is `specs` with `alias="suites"` — YAML must use the alias.
 
-## 7. session_start command is not AT-SPI name
+## 9. at-tree.yaml is stale
 
-**Problem**: The `session_start` step's `command` field is the app launch path (e.g., "deepin-music"), not the AT-SPI registered name. The AT-SPI name is configured separately.
+**Problem**: UI changed after at-tree was generated; elements no longer match.
 
-**Impact**: Using the wrong value in command causes the app to fail to launch.
+**Impact**: AI semantic mapping produces incorrect element_ref/selector.
 
-**Solution**: Set command to the app's executable name or path. The AT-SPI registered name comes from the suite config's `app` field.
+**Solution**: Re-run `youqu at dump` whenever the app's UI changes. Check
+`metadata.generated_at` for freshness.
 
-## 8. xlsx column names not recognized
+## 10. xlsx column names not recognized
 
-**Problem**: The input xlsx/csv uses column names that don't match any supported aliases (e.g., "操作" instead of "步骤").
+**Problem**: Input xlsx uses column names that don't match supported aliases.
 
-**Impact**: Those columns are read as empty; cases have missing data.
+**Impact**: Columns read as empty; cases have missing data.
 
-**Solution**: Ensure column names match the supported aliases. Supported name sets:
-  - Steps: 步骤, 测试步骤, 操作步骤, 用例步骤
-  - Expected: 预期, 预期结果, 期望结果, 预期输出
-  - Module: 所属模块, 模块, 功能模块, 测试模块
-  - ID: 用例编号, ID, 编号, 序号
-  - Title: 用例标题, 标题, 用例名称, 测试点
-  - Priority: 用例级别, 优先级, 级别, 重要程度
-  - Precondition: 前置条件, 前提条件, 预置条件
-  - Case type: 用例类型, 类型, 测试类型
+**Solution**: Ensure column names match supported aliases (see
+pipeline-reference.md).
 
-## 9. dtk_context_menu menu_path must contain complete menu item names
+## 11. at-tree simplification loses parent-child hierarchy
 
-**Problem**: menu_path values must contain the **complete** menu item name (e.g., `["设置"]`, `["远程管理"]`, `["横向分屏"]`), NOT truncated fragments (e.g., `["置"]`, `["理"]`, `["屏"]`).
+**Problem**: If compact tree drops parent path, the AI cannot distinguish
+same-named elements under different parents.
 
-**Impact**: The executor cannot navigate the context menu correctly; menu selection fails.
+**Impact**: AI maps to wrong element; executor clicks wrong component.
 
-**Solution**: This happens when regex-based extraction is used instead of LLM semantic understanding. If the agent is performing parse manually (without LLM API), it must verify that every menu_path entry is a complete, meaningful menu item name extracted from the step description.
+**Solution**: `youqu at tree-info` includes full parent path
+(e.g., `parent: n5 > n6 > n7`). The AI uses this to disambiguate.
 
-- Example of correct extraction: description="右键菜单选择设置" → menu_path=["设置"]
-- Example of broken extraction: description="右键/菜单栏选择设置" → menu_path=["置"] (truncated)
+## 12. DTK button names — spacing varies
 
-## 10. Dialog name="" mapping strategy
+**Problem**: DTK dialog buttons may have AT-SPI names with inter-character
+spacing (e.g., "添 加" not "添加"). Inconsistent across buttons.
 
-**Problem**: In at-tree.yaml, dialog nodes often have `name=""` (empty). This is a known DTK6/Qt6 limitation — objectName is not exposed via AT-SPI attributes.
+**Impact**: selector.name does not match actual AT-SPI name.
 
-**Impact**: The map phase cannot match dialog steps to at-tree nodes using the dialog's name.
+**Solution**: Copy name from at-tree.yaml exactly (including spaces,
+non-breaking spaces, or lack thereof). Do not assume from visible UI text.
 
-**Solution**: Use child panel names to reverse-lookup the dialog. Common patterns:
-  - Child panel named `CustomCommandOptDlg` → "自定义命令" dialog
-  - Child panel named `CustomThemeSettingDialog` → "自定义主题" dialog
-  - Child panel named `TabRenameDlg` → "重命名标签" dialog
-  - Child panel named `GroupConfigOptDlg` → "服务器分组配置" dialog
-  - Child panel named `ServerConfigOptDlg` → "服务器配置" dialog
-  - Child panel named `SearchBar` or `PageSearchBar` → "搜索" dialog/bar
+## 13. Dialog name="" mapping
 
-The LLM (or agent acting as LLM) should use these child panel class names as the selector.name for dialog mapping.
+**Problem**: DTK6/Qt6 dialog nodes have `name=""` (objectName not exposed).
 
-## 11. DTK button names — spacing varies by character translation
+**Impact**: Cannot match dialog steps using dialog's name.
 
-**Problem**: DTK dialog buttons may have AT-SPI names with inter-character spacing, but this is **inconsistent** — it depends on DTK's character translation behavior:
-- Some buttons have a regular space (0x20): `"取 消"`, `"添 加"`
-- Some buttons have a non-breaking space (U+00A0): `"取\xa0消"`, `"添\xa0加"`
-- Some buttons have no space at all: `"继续"`, `"高级选项"`, `"删除服务器"`
+**Solution**: Use child panel class names to reverse-lookup dialogs.
+Common patterns:
+- `CustomCommandOptDlg` → "自定义命令" dialog
+- `CustomThemeSettingDialog` → "自定义主题" dialog
+- `TabRenameDlg` → "重命名标签" dialog
 
-**Impact**: The map phase selector.name does not match the actual AT-SPI name; mapping fails.
+## 14. Invalid action names
 
-**Solution**: The map phase selector.name MUST match whatever is in at-tree.yaml exactly — including spaces, non-breaking spaces, or lack thereof. Do not assume a button name has or does not have spaces. Always copy the name from at-tree.yaml, not from the visible UI text.
+**Problem**: AI outputs action names that don't match executor HANDLERS
+(e.g., "assert_element_exists" instead of "assert_element").
+
+**Impact**: `youqu at run` fails with "no handler for action" error.
+
+**Solution**: Generate post-validates action names against HANDLERS registry.
+Invalid actions are skipped with a warning. Always use exact names from the
+Action Types table in suite-format.md (30 handlers).

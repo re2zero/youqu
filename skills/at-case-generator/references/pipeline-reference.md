@@ -1,117 +1,95 @@
 # AT Case Generator Pipeline Reference
 
-This document provides a reference for the YouQu AT test pipeline CLI commands, input formats, intermediate YAML formats, and LLM configuration. It is intended for AI agents and developers using the `youqu at` pipeline.
+CLI commands, input/output formats, and cases.yaml schema for the `youqu at`
+pipeline. The pipeline is AI-driven: the AI in the session does semantic
+mapping, not a CLI LLM call.
 
 ## Pipeline Overview
 
 ```
-xlsx/csv ──[parse]──→ cases.yaml ──[map]──→ mappings.yaml
-                                                 │
-                      at-tree.yaml ──────────────┘
-                                                 │
-                 cases.yaml + mappings.yaml ──[generate]──→ suite YAML + elements.yaml
+xlsx/csv ──[parse]──→ cases.yaml (raw) ──[AI mapping]──→ cases.yaml (mapped)
+                                                                     │
+at-tree.yaml ──[tree-info]──→ compact_tree.txt ────────────────────────┘
+                                                                         │
+                             cases.yaml (mapped) ──[generate]──→ suite YAML
 ```
+
+1. `youqu at parse` — format-only conversion (no LLM, no semantic mapping)
+2. `youqu at tree-info` — compact tree for AI reading
+3. AI in session — semantic mapping (fills action, element_ref, selector, etc.)
+4. `youqu at generate` — pure rules-based generation with post-validation
 
 ## CLI Commands
 
 ### parse
 
-Converts xlsx or text input into `cases.yaml`.
+Format-only conversion of xlsx/csv into raw cases.yaml. No LLM, no semantic
+mapping. Produces CaseStep entries with step_type, description, element_hint,
+menu_path — but action/element_ref/selector are null.
 
-Command:
 ```bash
-youqu at parse --input <path> --output <path> [--at-tree <path>]
+youqu at parse --input <path> --output <path>
 ```
 
 Parameters:
-- `--input`: required. xlsx or text directory path.
-- `--at-tree`: optional (default=""). path to at-tree.yaml for UI context.
+- `--input`: required. xlsx or csv file path.
 - `--output`: required. output cases.yaml path.
 
-### map
+### tree-info
 
-Maps `cases.yaml` steps to AT-SPI elements using `at-tree.yaml`, producing `mappings.yaml`.
+Generates a compact, human-readable text file from at-tree.yaml for AI
+in-session reading. Each line: `nID | role: <role> | name: <name> | parent: <path>`.
 
-Command:
 ```bash
-youqu at map --at-tree <path> --cases <path> --output <path>
+youqu at tree-info --at-tree <path> --output <path>
 ```
 
 Parameters:
 - `--at-tree`: required. path to at-tree.yaml.
-- `--cases`: required. path to cases.yaml.
-- `--output`: required. output mappings.yaml path.
+- `--output`: required. output compact_tree.txt path.
 
-**Special Case: dtk_context_menu — two requirements**
+### map (deprecated)
 
-Right-click context menus are **dynamically generated** at runtime. Their menu items are NOT present in at-tree.yaml. The map phase should NOT attempt to match context menu items to at-tree nodes.
+```bash
+youqu at map --at-tree <path> --cases <path> --output <path>  # DEPRECATED
+```
 
-A dtk_context_menu step requires TWO pieces of information:
-
-1. **Whose context menu** — the target UI component where the right-click happens. The map phase must provide a `selector` (or coordinates) for this component (e.g., terminal display area, tab bar, dock icon).
-2. **Menu item names** — the menu_path items for navigating the dynamically opened menu, including sub-menu items if any (e.g., `["编码"]` or `["自定义命令", "添加自定义命令"]`).
-
-See e2e test case pattern: `context_menu_comb` action uses `x`/`y` (target location) + `items` (menu item names). The AT executor `dtk_context_menu` follows the same logic.
-
-Current framework limitation: the generator outputs only `items` (menu_path) without a `selector` for the target component. The agent should verify dtk_context_menu steps capture both target component info and menu items during parse.
+Emits a DeprecationWarning. Use AI semantic mapping in session instead.
 
 ### generate
 
-Generates suite YAML and elements.yaml from `cases.yaml` and `mappings.yaml`.
+Generates suite YAML and elements.yaml from semantically mapped cases.yaml.
 
-Command:
 ```bash
-youqu at generate --cases <path> --mappings <path> --output <dir>
+youqu at generate --cases <path> --output <dir> --app <app_name> [--at-tree <path>]
 ```
 
 Parameters:
-- `--cases`: required. path to cases.yaml.
-- `--mappings`: required. path to mappings.yaml.
+- `--cases`: required. path to mapped cases.yaml.
 - `--output`: required. output directory.
+- `--app`: recommended. application name for session_start.command and suite app.
+- `--at-tree`: recommended. path to at-tree.yaml (for full elements.yaml extraction).
+
+Post-validation: generate validates action names against executor HANDLERS
+registry. Invalid actions are skipped with a warning.
 
 ## xlsx/csv Input Format
 
-The input xlsx or csv file should contain the following columns. Supported column name aliases are:
+Supported column name aliases:
 
-- `id`: 用例编号, ID, 编号, 序号
-- `title`: 用例标题, 标题, 用例名称, 测试点
-- `module`: 所属模块, 模块, 功能模块, 测试模块
-- `priority`: 用例级别, 优先级, 级别, 重要程度
-- `precondition`: 前置条件, 前提条件, 预置条件
-- `steps`: 步骤, 测试步骤, 操作步骤, 用例步骤
-- `expected`: 预期, 预期结果, 期望结果, 预期输出
-- `case_type`: 用例类型, 类型, 测试类型
-
-## at-tree.yaml Structure
-
-The `at-tree.yaml` file contains the AT-SPI tree structure of the application.
-
-Example structure:
-```yaml
-metadata:
-  app: "app-name"
-  source_commit: ""
-  generated_at: "ISO8601"
-  scan_mode: "hybrid"
-structure:
-  windows:
-    - id: "node-id"
-      role: "panel"
-      name: "Window Title"
-      object_name: "ClassName"
-      accessible_id: ""
-      source: "runtime"  # or "static"
-      note: ""
-      children: [...]
-```
-
-**Note**: The agent should check `metadata.generated_at` and `metadata.source_commit` to verify the freshness of the at-tree.yaml file before using it.
+| Field | Aliases |
+|-------|---------|
+| id | 用例编号, ID, 编号, 序号 |
+| title | 用例标题, 标题, 用例名称, 测试点 |
+| module | 所属模块, 模块, 功能模块, 测试模块 |
+| priority | 用例级别, 优先级, 级别, 重要程度 |
+| precondition | 前置条件, 前提条件, 预置条件 |
+| steps | 步骤, 测试步骤, 操作步骤, 用例步骤 |
+| expected | 预期, 预期结果, 期望结果, 预期输出 |
+| case_type | 用例类型, 类型, 测试类型 |
 
 ## cases.yaml Structure
 
-The `cases.yaml` file contains the parsed test cases from the xlsx/csv input.
-
-Example structure:
 ```yaml
 metadata:
   generated_at: "ISO8601"
@@ -121,83 +99,73 @@ suites:
     name: "Suite name"
     module: "module-name"
     description: ""
-    status: "active"   # or "skipped"
+    status: "active"
     reason: ""
     steps:
-      - step_type: "action"  # action | assert | navigate
+      - step_type: "action"
         description: "step description"
-        element_hint: "dtk_main_menu"  # see element hint list
+        element_hint: "dtk_main_menu"
         menu_path: ["Item1", "Item2"]
+        action: "dtk_main_menu"          # filled by AI
+        key: null                         # keyboard combo
+        text: null                        # input text
+        element_ref: null                 # at-tree node ID
+        selector: null                    # {"name": ..., "role": ...}
+        assertion: null                   # assert type
+        needs_accessible_name: false
+        accessible_name_suggestion: null
 ```
 
-## mappings.yaml Structure
+### CaseStep Fields
 
-The `mappings.yaml` file contains the mapping between test case steps and AT-SPI elements.
+| Field | Type | Description |
+|-------|------|-------------|
+| step_type | string | "action" \| "assert" \| "navigate" |
+| description | string | Step description from xlsx |
+| element_hint | string | Hint for element type |
+| menu_path | list[string]/null | Menu navigation path |
+| action | string/null | Action type (AI fills — see valid values below) |
+| key | string/null | Keyboard combo (e.g., "ctrl+shift+a", "enter") |
+| text | string/null | Text to type for keyboard_type |
+| element_ref | string/null | AT-SPI element reference (at-tree node ID) |
+| selector | dict/null | {"name": str, "role": str, "name_pattern": str} |
+| assertion | string/null | Assert type for assert steps |
+| needs_accessible_name | bool | True if element lacks accessible name |
+| accessible_name_suggestion | string/null | Suggested name for app fix |
 
-Example structure:
-```yaml
-metadata:
-  generated_at: "ISO8601"
-  at_tree_source: ""
-mappings:
-  - case_id: "suite-id"
-    step_index: 0
-    description: "step description"
-    step_type: "action"
-    element_hint: "click"
-    menu_path: null
-    element_ref: "ref-name"
-    selector:
-      name: "OK"
-      role: "push button"
-      name_pattern: null
-    status: "mapped"  # mapped | unmapped | deprecated
-    reason: ""
-    fix_suggestion: ""
-    note: ""
-    context: ""
-```
+### Valid action Values
 
-## Element Hint Mapping Requirements
+Action values must match executor HANDLERS exactly (30 handlers):
 
-The following table shows which element_hints need at-tree mapping vs not:
-
-| element_hint | Needs at-tree selector? | Notes |
-|---|---|---|
-| keyboard_shortcut | No | Converts directly to `keyboard_press` action |
-| input_text | No | Converts directly to `keyboard_type` action |
-| assert_window | No | Uses description as name_pattern |
-| scroll | No | No target element |
-| dbus_call | No | Not a UI operation |
-| screenshot | No | Captures screen |
-| dtk_main_menu | No (uses menu_path) | Menu items found in at-tree under DTitlebarMainMenu |
-| dtk_context_menu | Yes (target component) | Menu items are dynamic; only need selector for WHERE to right-click |
-| click | Yes | Need selector for target element |
-| hover | Yes | Need selector for target element |
-| drag_drop | Yes | Need selector for drag source (and drop target) |
-| titlebar | Yes | Need selector for titlebar element |
-| tab_bar | Yes | Need selector for tab bar element |
-| dialog | Yes | Need selector — see dialog mapping strategy below |
-| toolbar | Yes | Need selector for toolbar element |
-| sidebar | Yes | Need selector for sidebar element |
-| tooltip | Yes | Need selector for tooltip element |
-| dock | Yes | Need selector for dock element |
-| assert_element | Yes | Need selector for element being asserted |
-| assert_window_count | No | Just count windows |
-| assert_not_exists | Yes | Need selector for element that should not exist |
-| vlm_assert | No | Uses VLM model for assertion |
-| visual_check | N/A | Skip — not automatable |
-| physical_device | N/A | Skip — not automatable |
-| cross_device | N/A | Skip — not automatable |
-
-## LLM Configuration
-
-The `parse` and `map` phases require an OpenAI-compatible LLM API.
-
-Configuration is read from the `globalconfig.ini` `[vlm]` section with environment variable overrides:
-
-- `YOUQU_AT_MODEL`: model name (default: `Qwen/Qwen2.5-VL-7B-Instruct`)
-- `YOUQU_AT_BASE_URL`: API base URL (default: `http://localhost:8000/v1`)
-- `VLM_BASE_URL`: fallback from `globalconfig.ini` if the env var is not set
-
-Verify LLM availability before running the `parse` or `map` phases.
+| action | Key Fields | Description |
+|--------|-----------|-------------|
+| session_start | command, wait | Launch app |
+| session_stop | — | Terminate app |
+| dtk_main_menu | items | Navigate DTK main menu by keyboard |
+| dtk_context_menu | items | Navigate DTK context menu by keyboard |
+| element_action | ref, selector, do | AT-SPI element operation |
+| element_set_value | ref, selector, text | Set text value on element |
+| keyboard_press | key | Press single key (e.g., "enter") |
+| keyboard_hot_key | key | Press key combo (e.g., "ctrl+c") |
+| keyboard_type | text | Type text string |
+| mouse_click | ref/selector or x/y | Left click |
+| mouse_right_click | ref/selector or x/y | Right click |
+| mouse_double_click | ref/selector or x/y | Double click |
+| mouse_drag | ref/selector | Drag |
+| mouse_scroll | value | Scroll (negative=down, positive=up) |
+| dbus_call | command | D-Bus method call |
+| dbus_get_property | value | Read D-Bus property |
+| screenshot | — | Capture screenshot |
+| assert_element | ref, selector | Assert element exists |
+| assert_window | name_pattern | Assert window exists |
+| assert_not_exists | ref, selector | Assert element NOT exists |
+| assert_window_count | app, expected | Assert window count |
+| assert_process_running | app | Assert process running |
+| assert_process_not_running | app | Assert process NOT running |
+| assert_file_exists | path | Assert file exists |
+| assert_file_not_exists | path | Assert file NOT exists |
+| assert_image_exists | path | Assert image matches |
+| assert_image_not_exists | path | Assert image NOT matches |
+| assert_ocr_exists | text | Assert OCR text exists |
+| assert_ocr_not_exists | text | Assert OCR text NOT exists |
+| wait | wait | Wait |

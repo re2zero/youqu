@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-import json
 import sys
 import types
 from pathlib import Path
@@ -125,119 +124,38 @@ def test_normalize_cases_fallback_id():
     assert cases[0]["id"] == "000"
 
 
-def test_build_parse_prompt():
-    from src.at.generator.case_parser import build_parse_prompt
+def test_compact_at_tree_returns_nodes():
+    from src.at.generator.case_parser import _compact_at_tree
 
-    cases = [{"title": "播放音乐", "module": "播放", "steps": "1.点击播放"}]
-    prompt = build_parse_prompt(cases, "at-tree context")
-    assert "播放音乐" in prompt
-    assert "at-tree context" in prompt
-    assert "action" in prompt
-    assert "element_hint" in prompt
-
-
-def test_build_parse_prompt_no_context():
-    from src.at.generator.case_parser import build_parse_prompt
-
-    cases = [{"title": "测试"}]
-    prompt = build_parse_prompt(cases, "")
-    assert "（无UI上下文）" in prompt
+    tree_yaml = "tree:\n  - id: n1\n    role: push button\n    name: OK\n    children:\n      - id: n2\n        role: label\n        name: label1\n"
+    result = _compact_at_tree(tree_yaml)
+    assert "n1" in result
+    assert "push button" in result
+    assert "OK" in result
+    assert "n2" in result
+    assert "parent: n1" in result
 
 
-def test_call_llm_success():
-    from src.at.generator.case_parser import call_llm
+def test_compact_at_tree_empty():
+    from src.at.generator.case_parser import _compact_at_tree
 
-    mock_response = MagicMock()
-    mock_response.json.return_value = {
-        "choices": [{"message": {"content": '{"suites": []}'}}]
-    }
-    mock_response.raise_for_status = MagicMock()
-
-    mock_client = MagicMock()
-    mock_client.post.return_value = mock_response
-    mock_client.__enter__ = MagicMock(return_value=mock_client)
-    mock_client.__exit__ = MagicMock(return_value=False)
-
-    with patch("httpx.Client", return_value=mock_client):
-        result = call_llm("test prompt", {"base_url": "http://localhost:8000/v1", "model": "test", "api_key": "k", "timeout": 10, "max_retries": 1, "retry_delay": 0})
-    assert result == '{"suites": []}'
+    assert _compact_at_tree("") == ""
+    assert _compact_at_tree("not yaml: [") == "not yaml: ["
 
 
-def test_call_llm_empty_response():
-    from src.at.generator.case_parser import call_llm
+def test_compact_at_tree_to_file(tmp_path):
+    from src.at.generator.case_parser import compact_at_tree_to_file
 
-    mock_response = MagicMock()
-    mock_response.json.return_value = {"choices": []}
-    mock_response.raise_for_status = MagicMock()
-
-    mock_client = MagicMock()
-    mock_client.post.return_value = mock_response
-    mock_client.__enter__ = MagicMock(return_value=mock_client)
-    mock_client.__exit__ = MagicMock(return_value=False)
-
-    with patch("httpx.Client", return_value=mock_client):
-        result = call_llm("prompt", {"base_url": "http://x/v1", "model": "test", "api_key": "k", "timeout": 5, "max_retries": 1, "retry_delay": 0})
-    assert result == ""
+    tree_file = tmp_path / "at-tree.yaml"
+    tree_file.write_text("tree:\n  - id: n1\n    role: push button\n    name: OK\n", encoding="utf-8")
+    out_file = tmp_path / "tree-info.txt"
+    compact_at_tree_to_file(str(tree_file), str(out_file))
+    content = out_file.read_text(encoding="utf-8")
+    assert "n1" in content
+    assert "OK" in content
 
 
-def test_call_llm_retry_exhausted():
-    from src.at.generator.case_parser import call_llm
-
-    mock_client = MagicMock()
-    mock_client.post.side_effect = Exception("connection refused")
-    mock_client.__enter__ = MagicMock(return_value=mock_client)
-    mock_client.__exit__ = MagicMock(return_value=False)
-
-    with patch("httpx.Client", return_value=mock_client):
-        result = call_llm("prompt", {"base_url": "http://x/v1", "model": "test", "api_key": "k", "timeout": 5, "max_retries": 2, "retry_delay": 0})
-    assert result == ""
-    assert mock_client.post.call_count == 2
-
-
-def test_extract_json_plain():
-    from src.at.generator.case_parser import _extract_json
-
-    assert _extract_json('{"suites": []}') == {"suites": []}
-
-
-def test_extract_json_markdown_block():
-    from src.at.generator.case_parser import _extract_json
-
-    text = '```json\n{"suites": [{"id": "s1"}]}\n```'
-    assert _extract_json(text) == {"suites": [{"id": "s1"}]}
-
-
-def test_extract_json_invalid():
-    from src.at.generator.case_parser import _extract_json
-
-    assert _extract_json("not json") is None
-    assert _extract_json("") is None
-
-
-def test_extract_json_list_wrapped():
-    from src.at.generator.case_parser import _extract_json
-
-    assert _extract_json("[1, 2, 3]") == [1, 2, 3]
-
-
-def test_get_llm_config_env_override():
-    from src.at.generator.case_parser import _get_llm_config
-
-    with patch.dict("os.environ", {"YOUQU_AT_MODEL": "gpt-4"}):
-        config = _get_llm_config()
-    assert config["model"] == "gpt-4"
-
-
-def test_get_llm_config_fallback():
-    from src.at.generator.case_parser import _get_llm_config
-
-    with patch("setting.globalconfig.GetCfg", side_effect=Exception("no config")):
-        config = _get_llm_config()
-    assert config["base_url"] == "http://localhost:8000/v1"
-    assert config["timeout"] == 30
-
-
-def test_parse_to_cases_end_to_end(tmp_path):
+def test_parse_to_cases_format_only(tmp_path):
     from src.at.generator.case_parser import parse_to_cases
 
     csv_file = tmp_path / "input.csv"
@@ -247,127 +165,31 @@ def test_parse_to_cases_end_to_end(tmp_path):
         encoding="utf-8-sig",
     )
 
-    at_tree_file = tmp_path / "at-tree.yaml"
-    at_tree_file.write_text("metadata:\n  app: test\n", encoding="utf-8")
-
-    llm_response = json.dumps({
-        "metadata": {"generated_at": "2026-07-07", "source": "input.csv"},
-        "suites": [{
-            "id": "playback",
-            "name": "播放控制",
-            "module": "播放",
-            "status": "active",
-            "steps": [
-                {
-                    "step_type": "action",
-                    "description": "点击播放按钮",
-                    "element_hint": None,
-                    "menu_path": None,
-                },
-                {
-                    "step_type": "assert",
-                    "description": "验证音乐播放中",
-                    "element_hint": None,
-                    "menu_path": None,
-                },
-            ],
-        }],
-    })
-
-    mock_client = MagicMock()
-    mock_resp = MagicMock()
-    mock_resp.json.return_value = {
-        "choices": [{"message": {"content": llm_response}}],
-    }
-    mock_resp.raise_for_status = MagicMock()
-    mock_client.post.return_value = mock_resp
-    mock_client.__enter__ = MagicMock(return_value=mock_client)
-    mock_client.__exit__ = MagicMock(return_value=False)
-
     output_file = tmp_path / "cases.yaml"
-    with patch("httpx.Client", return_value=mock_client):
-        parse_to_cases(
-            input_path=str(csv_file),
-            output_path=str(output_file),
-            at_tree_path=str(at_tree_file),
-        )
+    parse_to_cases(
+        input_path=str(csv_file),
+        output_path=str(output_file),
+    )
 
     assert output_file.exists()
     content = output_file.read_text(encoding="utf-8")
-    assert "playback" in content
-    assert "播放控制" in content
+    assert "播放音乐" in content
+    assert "点击播放按钮" in content
 
 
-def test_parse_to_cases_skipped_suite(tmp_path):
+def test_parse_to_cases_at_tree_deprecated_warning(tmp_path, capsys):
     from src.at.generator.case_parser import parse_to_cases
 
     csv_file = tmp_path / "input.csv"
     csv_file.write_text(
-        "用例标题,所属模块,操作步骤,预期结果\n"
-        "音质主观评价,播放,1.听音乐音质,音质优美\n",
+        "用例标题,所属模块,操作步骤\n测试,模块,1.步骤\n",
         encoding="utf-8-sig",
     )
-
-    llm_response = json.dumps({
-        "metadata": {"generated_at": "2026-07-07", "source": "input.csv"},
-        "suites": [{
-            "id": "audio_quality",
-            "name": "音质评价",
-            "module": "播放",
-            "status": "skipped",
-            "reason": "需要人工主观判断",
-            "steps": [],
-        }],
-    })
-
-    mock_client = MagicMock()
-    mock_resp = MagicMock()
-    mock_resp.json.return_value = {
-        "choices": [{"message": {"content": llm_response}}],
-    }
-    mock_resp.raise_for_status = MagicMock()
-    mock_client.post.return_value = mock_resp
-    mock_client.__enter__ = MagicMock(return_value=mock_client)
-    mock_client.__exit__ = MagicMock(return_value=False)
-
     output_file = tmp_path / "cases.yaml"
-    with patch("httpx.Client", return_value=mock_client):
-        parse_to_cases(
-            input_path=str(csv_file),
-            output_path=str(output_file),
-        )
-
-    content = output_file.read_text(encoding="utf-8")
-    assert "skipped" in content
-    assert "人工主观判断" in content
-
-
-def test_parse_to_cases_invalid_llm_output(tmp_path, capsys):
-    from src.at.generator.case_parser import parse_to_cases
-
-    csv_file = tmp_path / "input.csv"
-    csv_file.write_text(
-        "用例标题,所属模块,操作步骤,预期结果\n"
-        "播放音乐,播放,1.点击播放,音乐播放\n",
-        encoding="utf-8-sig",
+    parse_to_cases(
+        input_path=str(csv_file),
+        output_path=str(output_file),
+        at_tree_path="fake-tree.yaml",
     )
-
-    mock_client = MagicMock()
-    mock_resp = MagicMock()
-    mock_resp.json.return_value = {
-        "choices": [{"message": {"content": "not valid json at all"}}],
-    }
-    mock_resp.raise_for_status = MagicMock()
-    mock_client.post.return_value = mock_resp
-    mock_client.__enter__ = MagicMock(return_value=mock_client)
-    mock_client.__exit__ = MagicMock(return_value=False)
-
-    output_file = tmp_path / "cases.yaml"
-    with patch("httpx.Client", return_value=mock_client):
-        with pytest.raises(SystemExit):
-            parse_to_cases(
-                input_path=str(csv_file),
-                output_path=str(output_file),
-            )
-
-    assert "failed to parse" in capsys.readouterr().out
+    captured = capsys.readouterr()
+    assert "deprecated" in captured.out.lower()

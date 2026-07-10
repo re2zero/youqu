@@ -229,20 +229,26 @@ def main():
         help="Only scan source files under these subdirectories (e.g. src widgets)",
     )
 
-    p_at_parse = at_sub.add_parser("parse", help="Parse xlsx into cases.yaml")
+    p_at_parse = at_sub.add_parser("parse", help="Parse xlsx into cases.yaml (format conversion only)")
     p_at_parse.add_argument("--input", required=True, help="Input xlsx or text directory")
-    p_at_parse.add_argument("--at-tree", default="", help="Path to at-tree.yaml (UI context)")
+    p_at_parse.add_argument("--at-tree", default="", help="(deprecated) Path to at-tree.yaml")
     p_at_parse.add_argument("--output", required=True, help="Output cases.yaml path")
 
-    p_at_map = at_sub.add_parser("map", help="Map operations to AT-SPI elements")
+    p_at_tree_info = at_sub.add_parser("tree-info", help="Export compact at-tree listing for AI context")
+    p_at_tree_info.add_argument("--at-tree", required=True, help="Path to at-tree.yaml")
+    p_at_tree_info.add_argument("--output", required=True, help="Output compact tree-info file path")
+
+    p_at_map = at_sub.add_parser("map", help="(deprecated) Map operations to AT-SPI elements")
     p_at_map.add_argument("--at-tree", required=True, help="Path to at-tree.yaml")
     p_at_map.add_argument("--cases", required=True, help="Path to cases.yaml")
     p_at_map.add_argument("--output", required=True, help="Output element-mappings.yaml path")
 
     p_at_generate = at_sub.add_parser("generate", help="Generate executable YAML")
     p_at_generate.add_argument("--cases", required=True, help="Path to cases.yaml")
-    p_at_generate.add_argument("--mappings", required=True, help="Path to element-mappings.yaml")
+    p_at_generate.add_argument("--mappings", default="", help="(deprecated) Path to element-mappings.yaml")
     p_at_generate.add_argument("--output", required=True, help="Output directory")
+    p_at_generate.add_argument("--app", default="", help="Application name (e.g. deepin-terminal)")
+    p_at_generate.add_argument("--at-tree", dest="at_tree", default="", help="Path to at-tree.yaml (for app name fallback)")
 
     p_at_run = at_sub.add_parser("run", help="Run AT-SPI YAML tests")
     p_at_run.add_argument("--testdir", default="tests/at/yaml", help="Test directory")
@@ -326,11 +332,12 @@ def main():
             )
             sys.exit(1)
     elif args.command == "at":
-        from youqu.cli.at import cmd_dump, cmd_parse, cmd_map, cmd_generate, cmd_run
+        from youqu.cli.at import cmd_dump, cmd_generate, cmd_map, cmd_parse, cmd_run, cmd_tree_info
 
         dispatch = {
             "dump": cmd_dump,
             "parse": cmd_parse,
+            "tree-info": cmd_tree_info,
             "map": cmd_map,
             "generate": cmd_generate,
             "run": cmd_run,
@@ -339,7 +346,7 @@ def main():
         if handler:
             handler(args)
         else:
-            print("Usage: youqu at {dump|parse|map|generate|run}")
+            print("Usage: youqu at {dump|parse|tree-info|map|generate|run}")
             sys.exit(1)
     else:
         parser.print_help()

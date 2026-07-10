@@ -89,6 +89,15 @@ class CaseStep(BaseModel):
     element_hint: Optional[ElementHint] = None
     menu_path: Optional[list[str]] = None
 
+    action: Optional[str] = None
+    key: Optional[str] = None
+    text: Optional[str] = None
+    element_ref: Optional[str] = None
+    selector: Optional[dict[str, Any]] = None
+    assertion: Optional[str] = None
+    needs_accessible_name: bool = False
+    accessible_name_suggestion: Optional[str] = None
+
 
 class CaseSuite(BaseModel):
     id: str
@@ -179,6 +188,7 @@ class SuiteActionStep(BaseModel):
     key: Optional[str] = None
     text: Optional[str] = None
     value: Optional[Any] = None
+    note: Optional[str] = None
 
 
 class SuiteCase(BaseModel):
