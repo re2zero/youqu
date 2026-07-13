@@ -25,7 +25,10 @@ at-tree.yaml ──[tree-info]──→ compact_tree.txt ───────�
 
 Format-only conversion of xlsx/csv into raw cases.yaml. No LLM, no semantic
 mapping. Produces CaseStep entries with step_type, description, element_hint,
-items — but action/element_ref/selector are null.
+items — but action/element_ref/selector are null. The parser classifies
+step_type by keyword heuristic (verification keywords: 检查, 查看, 验证,
+确认, 是否, 应该, 符合, 出现, 消失, 正确, 可见 → "assert") and appends
+the xlsx "expected" column as assert steps.
 
 ```bash
 youqu at parse --input <path> --output <path>
@@ -135,5 +138,5 @@ suites:
 | accessible_name_suggestion | string/null | Suggested name for app fix |
 | value | any/null | Dict for dbus_call/dbus_get_property params; int for mouse_scroll |
 
-See `suite-format.md` for the complete list of 31 action types and their
+See `suite-format.md` for the complete list of action types and their
 key fields. Action values must match executor HANDLERS exactly.

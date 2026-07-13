@@ -149,7 +149,7 @@ without a target is a vacuous no-op.
 fragments. If text is "任意长度字符" → use placeholder "test_input_123".
 If text contains "后" → it's a precondition, skip.
 
-See `references/pitfalls.md` for 18 documented edge cases and their correct
+See `references/pitfalls.md` for documented edge cases and their correct
 handling. Review pitfalls before starting Step 3 and verify
 output against them after mapping.
 
@@ -180,7 +180,79 @@ suites:
 ```
 
 See `references/pipeline-reference.md` for full cases.yaml schema and
-`references/suite-format.md` for all 30 action types and their fields.
+`references/suite-format.md` for all action types and their fields.
+
+## Step 3.5: Assertion Coverage Gate (CRITICAL)
+
+**Before proceeding to Step 4, every suite in cases.yaml MUST have at least
+one assertion step.** A test case that performs actions without verifying the
+result is a no-op — it will execute steps but never fail, wasting runtime and
+providing no coverage signal.
+
+### Gate Procedure
+
+1. Scan every suite in cases.yaml:
+   ```
+   For each suite:
+     has_assert = any(
+       step.step_type == "assert" or
+       (step.action and step.action.startswith("assert_"))
+       for step in suite.steps
+     )
+     if not has_assert:
+         → FAILS quality gate
+   ```
+
+2. For each failing suite, read the raw descriptions from cases_raw.yaml
+   and identify verification intent (检查, 查看, 验证, 确认, 是否, 应该,
+   符合, 出现, 消失, 正确, 可见, etc.).
+
+3. Determine the appropriate assertion:
+   - **Automatable (AT-SPI findable element exists)**:
+     Insert a `step_type: assert` step with `action: assert_element` and
+     a concrete `selector: {name, role}` targeting the element or state
+     that the test description intended to verify.
+     
+     The `description` field of any assertion step MUST contain a
+     verification keyword (检查, 查看, 验证, 确认, 是否, 应该, 符合,
+     出现, 消失, 正确, 可见) so the parser can classify it correctly.
+     
+     Example: raw step "检查光标焦点" → insert `assert_element` with
+     `selector: {role: "text", name: "cursor"}` after the focus operation.
+     
+     Example: raw step "右键菜单显示" → insert `assert_element` with
+     `selector: {role: "menu", name: ""}` after the right-click.
+
+   - **Not automatable (purely visual, no AT-SPI element)**:
+     Mark the suite as `status: unsupported` and write the reason:
+     ```yaml
+     status: unsupported
+     reason: "纯视觉验证：<description of what cannot be automated>"
+     ```
+
+   - **No verification intent at all (bare functional operations)**:
+     If the case has only `session_start` + bare operations and no step
+     description contains verification language, add a basic assertion
+     at minimum: `assert_element` checking the application window exists
+     (e.g., `selector: {role: "frame", name: "deepin-terminal"}`).
+
+4. Re-verify after supplementing: the gate must pass with ALL suites having
+   at least one assertion before proceeding to Step 4.
+
+### Programmatic Enforcement
+
+Use `youqu at generate --assert-gate` to enforce the gate at generation
+time. The generator scans all generated SuiteCases and reports any without
+assert_steps. With `--assert-gate`, it exits with error if any are found.
+Without the flag, it prints warnings but proceeds.
+
+### Why This Matters
+
+Without this gate, many generated cases end up with zero assertion steps —
+every test executes actions but never verifies anything. The quality gate
+catches this gap before generation, ensuring every generated test case
+provides meaningful coverage signal. Cases that cannot supply an assertion
+are candidly marked `unsupported` rather than shipped as silent no-ops.
 
 ## Step 4: Generate + Validate
 
@@ -204,6 +276,7 @@ Output: `elements.yaml`, `<module>/suite.suite.yaml`, `app-optimization.md`.
 
 **Quality checks**: Verify output against `references/pitfalls.md` — no empty
 selectors, no garbage keyboard_type text, no precondition fragments as steps.
+Re-verify the assertion coverage gate conditions still hold.
 
 **Runtime validation** (requires desktop):
 ```bash
@@ -219,7 +292,7 @@ The AT pipeline uses `AtSuiteExecutor` in `src/at/executor/`.
 | `youqu at dump dtk` | type, --app, --src | --output |
 | `youqu at parse` | --input, --output | — |
 | `youqu at tree-info` | --at-tree, --output | — |
-| `youqu at generate` | --cases, --output | --app, --at-tree |
+| `youqu at generate` | --cases, --output | --app, --at-tree, --assert-gate |
 | `youqu at run` | — | --suite, --testdir, -k, --spec-ids, --tags |
 
 ## Reference Files
@@ -227,5 +300,5 @@ The AT pipeline uses `AtSuiteExecutor` in `src/at/executor/`.
 | File | Purpose |
 |------|---------|
 | `references/pipeline-reference.md` | CLI commands, input/output formats, cases.yaml schema |
-| `references/suite-format.md` | Generated suite YAML structure, action fields, elements.yaml, 30 action types |
+| `references/suite-format.md` | Generated suite YAML structure, action fields, elements.yaml, action types |
 | `references/pitfalls.md` | 18 documented edge cases — review before Step 3, verify after |

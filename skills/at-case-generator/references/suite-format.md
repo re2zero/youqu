@@ -116,7 +116,7 @@ Requires TWO pieces:
 1. **Where to right-click**: `ref`/`selector` (AT-SPI element) or `x`/`y`
 2. **Menu path**: `items` list
 
-## Action Types (31 handlers)
+## Action Types
 
 | Action | Key Fields | Description |
 |--------|-----------|-------------|

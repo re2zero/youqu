@@ -193,3 +193,86 @@ def test_parse_to_cases_at_tree_deprecated_warning(tmp_path, capsys):
     )
     captured = capsys.readouterr()
     assert "deprecated" in captured.out.lower()
+
+
+def test_guess_step_type_action_no_keywords():
+    from src.at.generator.case_parser import _guess_step_type
+    from src.at.parser.models import StepType
+
+    assert _guess_step_type("点击播放按钮") == StepType.action
+    assert _guess_step_type("1.输入文字hello") == StepType.action
+    assert _guess_step_type("") == StepType.action
+
+
+def test_guess_step_type_assert_with_keywords():
+    from src.at.generator.case_parser import _guess_step_type
+    from src.at.parser.models import StepType
+
+    assert _guess_step_type("检查搜索结果") == StepType.assert_
+    assert _guess_step_type("确认窗口已打开") == StepType.assert_
+    assert _guess_step_type("验证文件存在") == StepType.assert_
+    assert _guess_step_type("查看列表是否显示") == StepType.assert_
+    assert _guess_step_type("是否出现对话框") == StepType.assert_
+    assert _guess_step_type("应该显示正确状态") == StepType.assert_
+
+
+def test_parse_to_cases_expected_column_becomes_assert(tmp_path):
+    from src.at.generator.case_parser import parse_to_cases
+
+    csv_file = tmp_path / "input.csv"
+    csv_file.write_text(
+        "用例标题,所属模块,操作步骤,预期结果\n"
+        "播放音乐,播放,1.点击播放按钮,音乐开始播放\n",
+        encoding="utf-8-sig",
+    )
+    output_file = tmp_path / "cases.yaml"
+    parse_to_cases(input_path=str(csv_file), output_path=str(output_file))
+
+    import yaml
+
+    data = yaml.safe_load(output_file.read_text(encoding="utf-8"))
+    suite = data["suites"][0]
+    steps = suite["steps"]
+    assert steps[0]["step_type"] == "action"
+    assert "点击播放按钮" in steps[0]["description"]
+    assert steps[-1]["step_type"] == "assert"
+    assert "音乐开始播放" in steps[-1]["description"]
+
+
+def test_parse_to_cases_keyword_classification_in_steps(tmp_path):
+    from src.at.generator.case_parser import parse_to_cases
+
+    csv_file = tmp_path / "input.csv"
+    csv_file.write_text(
+        "用例标题,所属模块,操作步骤\n"
+        "检查状态,测试,1.检查按钮是否可见\n",
+        encoding="utf-8-sig",
+    )
+    output_file = tmp_path / "cases.yaml"
+    parse_to_cases(input_path=str(csv_file), output_path=str(output_file))
+
+    import yaml
+
+    data = yaml.safe_load(output_file.read_text(encoding="utf-8"))
+    steps = data["suites"][0]["steps"]
+    assert steps[0]["step_type"] == "assert"
+
+
+def test_parse_to_cases_no_expected_column(tmp_path):
+    from src.at.generator.case_parser import parse_to_cases
+
+    csv_file = tmp_path / "input.csv"
+    csv_file.write_text(
+        "用例标题,所属模块,操作步骤\n"
+        "测试无预期,测试,1.点击按钮\n",
+        encoding="utf-8-sig",
+    )
+    output_file = tmp_path / "cases.yaml"
+    parse_to_cases(input_path=str(csv_file), output_path=str(output_file))
+
+    import yaml
+
+    data = yaml.safe_load(output_file.read_text(encoding="utf-8"))
+    steps = data["suites"][0]["steps"]
+    assert len(steps) == 1
+    assert steps[0]["step_type"] == "action"

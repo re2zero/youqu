@@ -249,6 +249,7 @@ def main():
     p_at_generate.add_argument("--output", required=True, help="Output directory")
     p_at_generate.add_argument("--app", default="", help="Application name (e.g. deepin-terminal)")
     p_at_generate.add_argument("--at-tree", dest="at_tree", default="", help="Path to at-tree.yaml (for app name fallback)")
+    p_at_generate.add_argument("--assert-gate", action="store_true", help="Fail if any generated case has no assertion steps")
 
     p_at_run = at_sub.add_parser("run", help="Run AT-SPI YAML tests")
     p_at_run.add_argument("--testdir", default="tests/at/yaml", help="Test directory")

@@ -158,7 +158,7 @@ Common patterns:
 
 **Solution**: Generate post-validates action names against HANDLERS registry.
 Invalid actions are skipped with a warning. Always use exact names from the
-Action Types table in suite-format.md (31 handlers).
+Action Types table in suite-format.md.
 
 ## 15. Precondition clauses not stripped
 

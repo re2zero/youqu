@@ -10,7 +10,8 @@ produce a compact at-tree listing for AI context.
 
 Pipeline:
 1. Read xlsx/csv -> normalized case list
-2. Build minimal CasesDoc (description-only steps, no semantic mapping)
+2. Build CasesDoc with step_type classification (keyword heuristic for steps
+   column; assert steps from expected column). AI refines in Step 3.
 3. Write raw cases.yaml
 """
 
@@ -19,6 +20,20 @@ from __future__ import annotations
 import csv
 import sys
 from pathlib import Path
+
+_ASSERT_KEYWORDS = frozenset({
+    "检查", "确认", "查看", "验证", "是否", "应该",
+    "符合", "出现", "消失", "正确", "可见",
+})
+
+
+def _guess_step_type(description: str) -> "StepType":
+    from src.at.parser.models import StepType
+
+    if any(kw in description for kw in _ASSERT_KEYWORDS):
+        return StepType.assert_
+    return StepType.action
+
 
 COLUMN_ALIASES = {
     "id": ["用例编号", "ID", "编号", "序号"],
@@ -181,7 +196,16 @@ def parse_to_cases(input_path: str, output_path: str, at_tree_path: str = "") ->
             if not line:
                 continue
             steps.append(CaseStep(
-                step_type=StepType.action,
+                step_type=_guess_step_type(line),
+                description=line,
+            ))
+        expected_texts = case.get("expected", "")
+        for line in expected_texts.split("\n"):
+            line = line.strip()
+            if not line:
+                continue
+            steps.append(CaseStep(
+                step_type=StepType.assert_,
                 description=line,
             ))
         if steps:
@@ -206,7 +230,7 @@ def parse_to_cases(input_path: str, output_path: str, at_tree_path: str = "") ->
         import yaml
 
         content = yaml.dump(
-            doc.model_dump(by_alias=False, exclude_none=True),
+            doc.model_dump(mode="json", by_alias=False, exclude_none=True),
             allow_unicode=True,
             default_flow_style=False,
             sort_keys=False,
@@ -214,7 +238,7 @@ def parse_to_cases(input_path: str, output_path: str, at_tree_path: str = "") ->
     except ImportError:
         import json
         content = json.dumps(
-            doc.model_dump(by_alias=False, exclude_none=True),
+            doc.model_dump(mode="json", by_alias=False, exclude_none=True),
             ensure_ascii=False,
             indent=2,
         )

@@ -266,6 +266,7 @@ def cmd_generate(args):
             output_dir=args.output,
             app_name=getattr(args, "app", ""),
             at_tree_path=getattr(args, "at_tree", ""),
+            assert_gate=getattr(args, "assert_gate", False),
         )
     except ImportError:
         _not_implemented("generate")

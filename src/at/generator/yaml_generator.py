@@ -18,7 +18,6 @@ from src.at.parser.models import (
     ElementMappingsDoc,
     MappingEntry,
     MappingSelector,
-    StepType,
     SuiteActionStep,
     SuiteCase,
     SuiteConfig,
@@ -371,7 +370,7 @@ def _build_suite_cases(suite: CaseSuite) -> list[SuiteCase]:
                 )
             continue
 
-        if step.step_type == StepType.assert_:
+        if action_step.action and action_step.action.startswith("assert_"):
             if current:
                 current.assert_steps.append(action_step)
             else:
@@ -465,6 +464,7 @@ def generate_yaml(
     mappings_path: str = "",
     app_name: str = "",
     at_tree_path: str = "",
+    assert_gate: bool = False,
 ) -> None:
     cases_data = _load_yaml(cases_path)
     if not cases_data:
@@ -501,6 +501,9 @@ def generate_yaml(
             continue
         safe_module = suite.module.replace("/", "_")
         suites_by_module[safe_module].append(suite)
+
+    total_cases = 0
+    total_no_assert = 0
 
     for module, module_suites in suites_by_module.items():
         module_dir = Path(output_dir) / module
@@ -546,3 +549,20 @@ def generate_yaml(
         suite_path = module_dir / "suite.suite.yaml"
         _write_yaml(suite_config.model_dump(mode="json", exclude_none=True, by_alias=True), str(suite_path))
         print(f"Wrote {suite_path} ({len(all_suite_cases)} suite cases)")
+
+        no_assert = [sc for sc in all_suite_cases if not sc.assert_steps]
+        if no_assert:
+            print(f"  ⚠ {len(no_assert)}/{len(all_suite_cases)} cases have no assertions")
+            for sc in no_assert:
+                print(f"    - {sc.id}: {sc.name}")
+            total_no_assert += len(no_assert)
+        total_cases += len(all_suite_cases)
+
+    if total_no_assert > 0:
+        print(f"\n⚠ Assertion Coverage: {total_no_assert}/{total_cases} cases have no assertions")
+        if assert_gate:
+            import sys
+            print("  --assert-gate enabled: treating as error")
+            sys.exit(1)
+    elif total_cases > 0:
+        print(f"\n✓ Assertion Coverage: all {total_cases} cases have assertions")

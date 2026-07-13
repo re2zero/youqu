@@ -622,3 +622,134 @@ def test_step_to_action_assert_window_fallback_no_selector():
 def test_assert_process_not_running_in_handlers():
     from src.at.executor.handlers import HANDLERS
     assert "assert_process_not_running" in HANDLERS
+
+
+def test_assert_prefix_routes_to_assert_steps():
+    from src.at.generator.yaml_generator import _build_suite_cases
+    from src.at.parser.models import CaseSuite, CaseStep, StepType
+
+    suite = CaseSuite(
+        id="prefix_001",
+        name="prefix_test",
+        module="测试",
+        steps=[
+            CaseStep(step_type=StepType.action, description="点击", action="element_action",
+                     element_ref="btn1", selector={"name": "OK", "role": "push button"}),
+            CaseStep(step_type=StepType.action, description="验证元素", action="assert_element",
+                     element_ref="btn2", selector={"name": "Label", "role": "label"}),
+        ],
+    )
+    suite_cases = _build_suite_cases(suite)
+    assert len(suite_cases) == 1
+    assert len(suite_cases[0].steps) == 1
+    assert len(suite_cases[0].assert_steps) == 1
+
+
+def test_assert_window_prefix_routes_to_assert_steps():
+    from src.at.generator.yaml_generator import _build_suite_cases
+    from src.at.parser.models import CaseSuite, CaseStep, StepType
+
+    suite = CaseSuite(
+        id="win_001",
+        name="window_test",
+        module="测试",
+        steps=[
+            CaseStep(step_type=StepType.action, description="操作", action="element_action",
+                     element_ref="btn1", selector={"name": "OK", "role": "push button"}),
+            CaseStep(step_type=StepType.action, description="窗口检查", action="assert_window",
+                     selector={"name_pattern": "终端.*"}),
+        ],
+    )
+    suite_cases = _build_suite_cases(suite)
+    assert len(suite_cases) == 1
+    assert len(suite_cases[0].assert_steps) == 1
+    assert suite_cases[0].assert_steps[0].action == "assert_window"
+
+
+def test_assert_gate_exits_when_no_assertions(tmp_path):
+    from src.at.generator.yaml_generator import generate_yaml
+
+    cases = {
+        "metadata": {"generated_at": "2026-01-01", "source": "test"},
+        "suites": [
+            {
+                "id": "no_assert_001",
+                "name": "no_assertions",
+                "module": "测试",
+                "status": "active",
+                "steps": [
+                    {"step_type": "action", "description": "点击", "action": "element_action",
+                     "element_ref": "btn1", "selector": {"name": "OK", "role": "push button"}},
+                ],
+            },
+        ],
+    }
+    _write_temp(cases, str(tmp_path / "cases.yaml"))
+    with pytest.raises(SystemExit) as exc_info:
+        generate_yaml(
+            cases_path=str(tmp_path / "cases.yaml"),
+            mappings_path="",
+            output_dir=str(tmp_path / "out"),
+            app_name="test-app",
+            assert_gate=True,
+        )
+    assert exc_info.value.code == 1
+
+
+def test_assert_gate_passes_with_assertions(tmp_path):
+    from src.at.generator.yaml_generator import generate_yaml
+
+    cases = {
+        "metadata": {"generated_at": "2026-01-01", "source": "test"},
+        "suites": [
+            {
+                "id": "has_assert_001",
+                "name": "has_assertions",
+                "module": "测试",
+                "status": "active",
+                "steps": [
+                    {"step_type": "action", "description": "点击", "action": "element_action",
+                     "element_ref": "btn1", "selector": {"name": "OK", "role": "push button"}},
+                    {"step_type": "assert", "description": "验证", "action": "assert_element",
+                     "element_ref": "btn2", "selector": {"name": "Label", "role": "label"}},
+                ],
+            },
+        ],
+    }
+    _write_temp(cases, str(tmp_path / "cases.yaml"))
+    generate_yaml(
+        cases_path=str(tmp_path / "cases.yaml"),
+        mappings_path="",
+        output_dir=str(tmp_path / "out"),
+        app_name="test-app",
+        assert_gate=True,
+    )
+    assert os.path.isdir(str(tmp_path / "out"))
+
+
+def test_assert_gate_default_false_no_exit(tmp_path):
+    from src.at.generator.yaml_generator import generate_yaml
+
+    cases = {
+        "metadata": {"generated_at": "2026-01-01", "source": "test"},
+        "suites": [
+            {
+                "id": "no_assert_002",
+                "name": "no_assertions",
+                "module": "测试",
+                "status": "active",
+                "steps": [
+                    {"step_type": "action", "description": "点击", "action": "element_action",
+                     "element_ref": "btn1", "selector": {"name": "OK", "role": "push button"}},
+                ],
+            },
+        ],
+    }
+    _write_temp(cases, str(tmp_path / "cases.yaml"))
+    generate_yaml(
+        cases_path=str(tmp_path / "cases.yaml"),
+        mappings_path="",
+        output_dir=str(tmp_path / "out2"),
+        app_name="test-app",
+    )
+    assert os.path.isdir(str(tmp_path / "out2"))
