@@ -97,6 +97,7 @@ class CaseStep(BaseModel):
     assertion: Optional[str] = None
     needs_accessible_name: bool = False
     accessible_name_suggestion: Optional[str] = None
+    value: Optional[Any] = None
 
 
 class CaseSuite(BaseModel):

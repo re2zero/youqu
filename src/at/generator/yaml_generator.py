@@ -31,10 +31,19 @@ try:
     _VALID_ACTIONS = frozenset(_EXEC_HANDLERS.keys())
 except ImportError:
     _VALID_ACTIONS = frozenset({
-        "dtk_main_menu", "dtk_context_menu", "keyboard_press", "keyboard_type",
-        "element_action", "mouse_scroll", "dbus_call", "screenshot", "wait",
+        "session_start", "session_stop",
+        "keyboard_press", "keyboard_hot_key", "keyboard_type", "keyboard_type_text",
+        "mouse_click", "mouse_right_click", "mouse_double_click",
+        "mouse_scroll", "mouse_drag",
+        "element_action", "element_set_value",
+        "dtk_main_menu", "dtk_context_menu",
+        "dbus_call", "dbus_get_property",
+        "wait", "screenshot",
         "assert_element", "assert_not_exists", "assert_window",
-        "assert_window_count", "session_start", "session_stop",
+        "assert_window_count", "assert_process_running", "assert_process_not_running",
+        "assert_file_exists", "assert_file_not_exists",
+        "assert_image_exists", "assert_image_not_exists",
+        "assert_ocr_exists", "assert_ocr_not_exists",
     })
 
 
@@ -143,7 +152,7 @@ def _step_to_action_fallback(step: CaseStep) -> SuiteActionStep:
         return SuiteActionStep(action="mouse_scroll", value=-3)
 
     if step.element_hint == ElementHint.dbus_call:
-        return SuiteActionStep(action="dbus_call", command=step.description)
+        return SuiteActionStep(action="dbus_call", value=step.value)
 
     if step.element_hint == ElementHint.screenshot:
         return SuiteActionStep(action="screenshot")
@@ -158,9 +167,10 @@ def _step_to_action_fallback(step: CaseStep) -> SuiteActionStep:
         return SuiteActionStep(action="keyboard_type", text=step.description)
 
     if step.element_hint == ElementHint.assert_window:
+        name_pattern = step.selector.get("name_pattern") if step.selector else None
         return SuiteActionStep(
             action="assert_window",
-            name_pattern=step.description,
+            name_pattern=name_pattern,
         )
 
     if step.element_hint == ElementHint.assert_element:
@@ -242,7 +252,7 @@ def _step_to_action(step: CaseStep) -> SuiteActionStep | None:
             return SuiteActionStep(action="mouse_scroll", value=scroll_val)
 
         if step.action == "dbus_call":
-            return SuiteActionStep(action="dbus_call", command=step.description)
+            return SuiteActionStep(action="dbus_call", value=step.value)
 
         if step.action == "screenshot":
             return SuiteActionStep(action="screenshot")
@@ -280,6 +290,58 @@ def _step_to_action(step: CaseStep) -> SuiteActionStep | None:
 
         if step.action == "session_stop":
             return SuiteActionStep(action="session_stop")
+
+        if step.action == "keyboard_type_text":
+            return SuiteActionStep(action="keyboard_type_text", text=step.text)
+
+        if step.action == "mouse_right_click":
+            return SuiteActionStep(
+                action="mouse_right_click",
+                ref=step.element_ref,
+                selector=step.selector,
+            )
+
+        if step.action == "mouse_double_click":
+            return SuiteActionStep(
+                action="mouse_double_click",
+                ref=step.element_ref,
+                selector=step.selector,
+            )
+
+        if step.action == "element_set_value":
+            return SuiteActionStep(
+                action="element_set_value",
+                ref=step.element_ref,
+                selector=step.selector,
+                text=step.text,
+            )
+
+        if step.action == "dbus_get_property":
+            return SuiteActionStep(action="dbus_get_property", value=step.value)
+
+        if step.action == "assert_process_running":
+            return SuiteActionStep(action="assert_process_running", app=step.text)
+
+        if step.action == "assert_process_not_running":
+            return SuiteActionStep(action="assert_process_not_running", app=step.text)
+
+        if step.action == "assert_file_exists":
+            return SuiteActionStep(action="assert_file_exists", path=step.text)
+
+        if step.action == "assert_file_not_exists":
+            return SuiteActionStep(action="assert_file_not_exists", path=step.text)
+
+        if step.action == "assert_image_exists":
+            return SuiteActionStep(action="assert_image_exists", path=step.text)
+
+        if step.action == "assert_image_not_exists":
+            return SuiteActionStep(action="assert_image_not_exists", path=step.text)
+
+        if step.action == "assert_ocr_exists":
+            return SuiteActionStep(action="assert_ocr_exists", value=step.text)
+
+        if step.action == "assert_ocr_not_exists":
+            return SuiteActionStep(action="assert_ocr_not_exists", value=step.text)
 
     return _step_to_action_fallback(step)
 

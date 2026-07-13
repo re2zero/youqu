@@ -163,7 +163,7 @@ class TestCrashMonitor:
 class TestHandlers:
     def test_all_handlers_callable(self):
         from src.at.executor.handlers import HANDLERS
-        assert len(HANDLERS) == 30
+        assert len(HANDLERS) == 31
         for name, handler in HANDLERS.items():
             assert callable(handler), f"{name} not callable"
 

@@ -405,7 +405,10 @@ def handle_assert_window(step: SuiteActionStep, context: dict) -> None:
     from src.assert_common import AssertCommon
 
     app = step.app or context.get("app", "")
-    AssertCommon.assert_element_exist(f"$/{app}//DMainWindow")
+    if step.name_pattern:
+        AssertCommon.assert_element_exist(f"$/{app}//{step.name_pattern}/")
+    else:
+        AssertCommon.assert_element_exist(f"$/{app}//DMainWindow")
 
 
 def handle_assert_window_count(step: SuiteActionStep, context: dict) -> None:
@@ -421,6 +424,13 @@ def handle_assert_process_running(step: SuiteActionStep, context: dict) -> None:
 
     app = step.app or step.value or context.get("app", "")
     AssertCommon.assert_process_status(True, app)
+
+
+def handle_assert_process_not_running(step: SuiteActionStep, context: dict) -> None:
+    from src.assert_common import AssertCommon
+
+    app = step.app or step.value or context.get("app", "")
+    AssertCommon.assert_process_status(False, app)
 
 
 def handle_assert_file_exists(step: SuiteActionStep, context: dict) -> None:
@@ -490,6 +500,7 @@ HANDLERS: dict[str, Callable[[SuiteActionStep, dict], None]] = {
     "assert_window": handle_assert_window,
     "assert_window_count": handle_assert_window_count,
     "assert_process_running": handle_assert_process_running,
+    "assert_process_not_running": handle_assert_process_not_running,
     "assert_file_exists": handle_assert_file_exists,
     "assert_file_not_exists": handle_assert_file_not_exists,
     "assert_image_exists": handle_assert_image_exists,

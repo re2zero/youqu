@@ -23,7 +23,7 @@ env_check: []
 setup:
   - action: session_start
     command: "app-name"
-    wait: 3000
+    wait: 3.0
 suites:                   # MUST be "suites:" NOT "specs:"
   - id: "suite_id_s0"
     name: ""
@@ -53,8 +53,8 @@ teardown:
 | action | string | Action type (must match HANDLERS) |
 | ref | string/null | Element reference (lookup in elements.yaml) |
 | selector | dict/null | Inline selector {name, role, name_pattern} |
-| command | string/null | Command for session_start/dbus_call |
-| wait | float/null | Wait time in ms (session_start default: 3000, others: 0) |
+| command | string/null | Command for session_start |
+| wait | float/null | Wait time in seconds (passed to time.sleep; session_start default: 3.0, others: 0) |
 | do | string/null | Operation: click, hover, drag |
 | x | int/null | X coordinate |
 | y | int/null | Y coordinate |
@@ -116,11 +116,11 @@ Requires TWO pieces:
 1. **Where to right-click**: `ref`/`selector` (AT-SPI element) or `x`/`y`
 2. **Menu path**: `items` list
 
-## Action Types (30 handlers)
+## Action Types (31 handlers)
 
 | Action | Key Fields | Description |
 |--------|-----------|-------------|
-| session_start | command, wait | Launch app (wait default 3000ms) |
+| session_start | command, wait | Launch app (wait default 3.0s) |
 | session_stop | — | Terminate app |
 | dtk_main_menu | items | Navigate DTK main menu by keyboard |
 | dtk_context_menu | items | Navigate DTK context menu by keyboard |
@@ -129,16 +129,17 @@ Requires TWO pieces:
 | keyboard_press | key | Press single key (e.g., "enter") |
 | keyboard_hot_key | key | Press key combo (e.g., "ctrl+c") |
 | keyboard_type | text | Type text string |
+| keyboard_type_text | text | Alias for keyboard_type |
 | mouse_click | ref/selector or x/y | Left click |
 | mouse_right_click | ref/selector or x/y | Right click |
 | mouse_double_click | ref/selector or x/y | Double click |
 | mouse_drag | ref/selector | Drag |
 | mouse_scroll | value | Scroll (negative=down) |
-| dbus_call | command | D-Bus method call |
-| dbus_get_property | value | Read D-Bus property |
+| dbus_call | value | D-Bus method call (value is param dict) |
+| dbus_get_property | value | Read D-Bus property (value is param dict) |
 | screenshot | — | Capture screenshot |
 | assert_element | ref, selector | Assert element exists |
-| assert_window | name_pattern | Assert window exists |
+| assert_window | name_pattern | Assert window exists (name_pattern is regex; defaults to DMainWindow) |
 | assert_not_exists | ref, selector | Assert element NOT exists |
 | assert_window_count | app, expected | Assert window count |
 | assert_process_running | app | Assert process running |
@@ -147,8 +148,8 @@ Requires TWO pieces:
 | assert_file_not_exists | path | Assert file NOT exists |
 | assert_image_exists | path | Assert image matches |
 | assert_image_not_exists | path | Assert image NOT matches |
-| assert_ocr_exists | text | Assert OCR text exists |
-| assert_ocr_not_exists | text | Assert OCR text NOT exists |
+| assert_ocr_exists | value | Assert OCR text exists |
+| assert_ocr_not_exists | value | Assert OCR text NOT exists |
 | wait | wait | Wait |
 
 ## elements.yaml
@@ -193,5 +194,5 @@ Collects all steps with `needs_accessible_name: true`:
 | Menu actions | main_menu_comb, context_menu_comb | dtk_main_menu, dtk_context_menu |
 | Assertions | Inline per step (step.assert) | Case-level assert_steps[] |
 | Element registry | elements.yaml (app, vars, elements) | elements.yaml (elements only) |
-| Setup wait | wait: 1.0 (seconds) | wait: 3000 (milliseconds) |
+| Setup wait | wait: 1.0 (seconds) | wait: 3.0 (seconds) |
 | Suite filename | various | suite.suite.yaml (fixed) |

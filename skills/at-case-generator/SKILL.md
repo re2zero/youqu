@@ -12,7 +12,8 @@ description: >
 
 Convert xlsx/csv test case documents into executable AT-SPI suite YAML.
 The AI does semantic mapping through understanding — not a CLI LLM call,
-not a regex script. Framework provides data tools; AI provides understanding.
+not a regex script, not an external API request. **You (the agent reading
+this) are the AI.** Framework provides data tools; you provide understanding.
 
 ## When to Use
 
@@ -42,7 +43,7 @@ Step 4: Generate + validate
     youqu at run --testdir <dir>  [NOT python -m src.yaml_test.suite]
 ```
 
-`youqu at map` is **deprecated**. Mapping is done by the AI in Step 3.
+`youqu at map` is **deprecated**. Mapping is done by you (the agent) in Step 3.
 
 ## Step 1: Pre-flight Checks
 
@@ -80,8 +81,9 @@ Requires desktop environment with target app running.
 
 ## Step 3: AI Semantic Mapping (KEY STEP)
 
-The AI reads the compact tree and raw cases.yaml, then fills semantic fields
-for each step through **direct understanding** — not script-based pattern matching.
+**You (the agent executing this skill) do the mapping.** No external API
+calls, no scripts, no intermediate files. Read each case description,
+understand the intent, fill semantic fields directly.
 
 ### CRITICAL: No Script-Based Mapping
 
@@ -131,6 +133,15 @@ Write `selector: {name, role}` from the description for runtime AT-SPI lookup.
 Do NOT rely on static at-tree node IDs (only ~3.6% coverage). The executor
 discovers elements dynamically at runtime by searching the live AT-SPI tree.
 
+**Element Target Priority** (executor checks in this order):
+1. **`selector`** — runtime AT-SPI lookup by name/role/name_pattern. Preferred.
+2. **`ref`** — at-tree node ID lookup in elements.yaml. Fallback when selector
+   is unavailable (e.g., element has no accessible name).
+3. **`x`/`y`** — coordinate-based click. Last resort when no AT-SPI metadata.
+
+Both `selector` and `ref` may appear in the same step; the executor uses
+`selector` first, falling back to `ref` if `selector` is null.
+
 **Every `assert_element` MUST have a concrete `selector`** — an assertion
 without a target is a vacuous no-op.
 
@@ -138,8 +149,8 @@ without a target is a vacuous no-op.
 fragments. If text is "任意长度字符" → use placeholder "test_input_123".
 If text contains "后" → it's a precondition, skip.
 
-See `references/pitfalls.md` for 27 documented edge cases and their correct
-handling. The AI should review pitfalls before starting Step 3 and verify
+See `references/pitfalls.md` for 18 documented edge cases and their correct
+handling. Review pitfalls before starting Step 3 and verify
 output against them after mapping.
 
 ### Writing the Mapped cases.yaml
@@ -215,7 +226,6 @@ The AT pipeline uses `AtSuiteExecutor` in `src/at/executor/`.
 
 | File | Purpose |
 |------|---------|
-| `references/pipeline-reference.md` | CLI commands, input/output formats, cases.yaml schema, 30 action types |
-| `references/suite-format.md` | Generated suite YAML structure, action fields, elements.yaml |
-| `references/pitfalls.md` | 27 documented edge cases — review before Step 3, verify after |
-| `references/root-cause-2025-07.md` | Root cause analysis of script-based mapping failure |
+| `references/pipeline-reference.md` | CLI commands, input/output formats, cases.yaml schema |
+| `references/suite-format.md` | Generated suite YAML structure, action fields, elements.yaml, 30 action types |
+| `references/pitfalls.md` | 18 documented edge cases — review before Step 3, verify after |

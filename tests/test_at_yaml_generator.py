@@ -448,3 +448,177 @@ def test_extract_elements_from_at_tree_empty():
     from src.at.generator.yaml_generator import _extract_elements_from_at_tree
 
     assert _extract_elements_from_at_tree("/nonexistent/path") == {}
+
+
+def test_step_to_action_keyboard_type_text():
+    from src.at.generator.yaml_generator import _step_to_action
+    from src.at.parser.models import CaseStep, StepType
+
+    step = CaseStep(step_type=StepType.action, description="输入文字", action="keyboard_type_text", text="hello")
+    action = _step_to_action(step)
+    assert action.action == "keyboard_type_text"
+    assert action.text == "hello"
+
+
+def test_step_to_action_mouse_right_click():
+    from src.at.generator.yaml_generator import _step_to_action
+    from src.at.parser.models import CaseStep, StepType
+
+    step = CaseStep(step_type=StepType.action, description="右键", action="mouse_right_click",
+                    element_ref="btn1", selector={"name": "OK", "role": "push button"})
+    action = _step_to_action(step)
+    assert action.action == "mouse_right_click"
+    assert action.ref == "btn1"
+    assert action.selector == {"name": "OK", "role": "push button"}
+
+
+def test_step_to_action_mouse_double_click():
+    from src.at.generator.yaml_generator import _step_to_action
+    from src.at.parser.models import CaseStep, StepType
+
+    step = CaseStep(step_type=StepType.action, description="双击", action="mouse_double_click",
+                    element_ref="btn1", selector={"name": "OK", "role": "push button"})
+    action = _step_to_action(step)
+    assert action.action == "mouse_double_click"
+    assert action.ref == "btn1"
+
+
+def test_step_to_action_element_set_value():
+    from src.at.generator.yaml_generator import _step_to_action
+    from src.at.parser.models import CaseStep, StepType
+
+    step = CaseStep(step_type=StepType.action, description="设值", action="element_set_value",
+                    element_ref="inp1", selector={"name": "输入框", "role": "text"}, text="hello")
+    action = _step_to_action(step)
+    assert action.action == "element_set_value"
+    assert action.ref == "inp1"
+    assert action.text == "hello"
+
+
+def test_step_to_action_dbus_call_uses_value():
+    from src.at.generator.yaml_generator import _step_to_action
+    from src.at.parser.models import CaseStep, StepType
+
+    params = {"dbus_name": "com.test.S", "object_path": "/t", "interface": "t.i"}
+    step = CaseStep(step_type=StepType.action, description="DBus", action="dbus_call", value=params)
+    action = _step_to_action(step)
+    assert action.action == "dbus_call"
+    assert action.value == params
+
+
+def test_step_to_action_dbus_get_property():
+    from src.at.generator.yaml_generator import _step_to_action
+    from src.at.parser.models import CaseStep, StepType
+
+    params = {"dbus_name": "com.test.S", "object_path": "/t", "interface": "t.i"}
+    step = CaseStep(step_type=StepType.action, description="读属性", action="dbus_get_property", value=params)
+    action = _step_to_action(step)
+    assert action.action == "dbus_get_property"
+    assert action.value == params
+
+
+def test_step_to_action_assert_process_running():
+    from src.at.generator.yaml_generator import _step_to_action
+    from src.at.parser.models import CaseStep, StepType
+
+    step = CaseStep(step_type=StepType.assert_, description="进程存在", action="assert_process_running", text="deepin-terminal")
+    action = _step_to_action(step)
+    assert action.action == "assert_process_running"
+    assert action.app == "deepin-terminal"
+
+
+def test_step_to_action_assert_process_not_running():
+    from src.at.generator.yaml_generator import _step_to_action
+    from src.at.parser.models import CaseStep, StepType
+
+    step = CaseStep(step_type=StepType.assert_, description="进程不存在",
+                    action="assert_process_not_running", text="deepin-terminal")
+    action = _step_to_action(step)
+    assert action.action == "assert_process_not_running"
+    assert action.app == "deepin-terminal"
+
+
+def test_step_to_action_assert_file_exists():
+    from src.at.generator.yaml_generator import _step_to_action
+    from src.at.parser.models import CaseStep, StepType
+
+    step = CaseStep(step_type=StepType.assert_, description="文件存在", action="assert_file_exists", text="/tmp/test.txt")
+    action = _step_to_action(step)
+    assert action.action == "assert_file_exists"
+    assert action.path == "/tmp/test.txt"
+
+
+def test_step_to_action_assert_file_not_exists():
+    from src.at.generator.yaml_generator import _step_to_action
+    from src.at.parser.models import CaseStep, StepType
+
+    step = CaseStep(step_type=StepType.assert_, description="文件不存在", action="assert_file_not_exists", text="/tmp/nope")
+    action = _step_to_action(step)
+    assert action.action == "assert_file_not_exists"
+    assert action.path == "/tmp/nope"
+
+
+def test_step_to_action_assert_image_exists():
+    from src.at.generator.yaml_generator import _step_to_action
+    from src.at.parser.models import CaseStep, StepType
+
+    step = CaseStep(step_type=StepType.assert_, description="图片存在", action="assert_image_exists", text="/tmp/shot.png")
+    action = _step_to_action(step)
+    assert action.action == "assert_image_exists"
+    assert action.path == "/tmp/shot.png"
+
+
+def test_step_to_action_assert_image_not_exists():
+    from src.at.generator.yaml_generator import _step_to_action
+    from src.at.parser.models import CaseStep, StepType
+
+    step = CaseStep(step_type=StepType.assert_, description="图片不存在", action="assert_image_not_exists", text="/tmp/bad.png")
+    action = _step_to_action(step)
+    assert action.action == "assert_image_not_exists"
+    assert action.path == "/tmp/bad.png"
+
+
+def test_step_to_action_assert_ocr_exists():
+    from src.at.generator.yaml_generator import _step_to_action
+    from src.at.parser.models import CaseStep, StepType
+
+    step = CaseStep(step_type=StepType.assert_, description="文字存在", action="assert_ocr_exists", text="确认")
+    action = _step_to_action(step)
+    assert action.action == "assert_ocr_exists"
+    assert action.value == "确认"
+
+
+def test_step_to_action_assert_ocr_not_exists():
+    from src.at.generator.yaml_generator import _step_to_action
+    from src.at.parser.models import CaseStep, StepType
+
+    step = CaseStep(step_type=StepType.assert_, description="文字不存在", action="assert_ocr_not_exists", text="错误")
+    action = _step_to_action(step)
+    assert action.action == "assert_ocr_not_exists"
+    assert action.value == "错误"
+
+
+def test_step_to_action_assert_window_fallback_uses_selector():
+    from src.at.generator.yaml_generator import _step_to_action
+    from src.at.parser.models import CaseStep, ElementHint, StepType
+
+    step = CaseStep(step_type=StepType.assert_, description="验证窗口", element_hint=ElementHint.assert_window,
+                    selector={"name_pattern": "终端.*"})
+    action = _step_to_action(step)
+    assert action.action == "assert_window"
+    assert action.name_pattern == "终端.*"
+
+
+def test_step_to_action_assert_window_fallback_no_selector():
+    from src.at.generator.yaml_generator import _step_to_action
+    from src.at.parser.models import CaseStep, ElementHint, StepType
+
+    step = CaseStep(step_type=StepType.assert_, description="验证窗口", element_hint=ElementHint.assert_window)
+    action = _step_to_action(step)
+    assert action.action == "assert_window"
+    assert action.name_pattern is None
+
+
+def test_assert_process_not_running_in_handlers():
+    from src.at.executor.handlers import HANDLERS
+    assert "assert_process_not_running" in HANDLERS

@@ -1,22 +1,22 @@
 # AT Case Generator Pipeline Reference
 
 CLI commands, input/output formats, and cases.yaml schema for the `youqu at`
-pipeline. The pipeline is AI-driven: the AI in the session does semantic
-mapping, not a CLI LLM call.
+pipeline. The pipeline is agent-driven: you (the agent executing this skill)
+do semantic mapping in the session, not a CLI LLM call.
 
 ## Pipeline Overview
 
 ```
-xlsx/csv ──[parse]──→ cases.yaml (raw) ──[AI mapping]──→ cases.yaml (mapped)
-                                                                     │
-at-tree.yaml ──[tree-info]──→ compact_tree.txt ────────────────────────┘
-                                                                         │
+xlsx/csv ──[parse]──→ cases.yaml (raw) ──[you map]──→ cases.yaml (mapped)
+                                                                   │
+at-tree.yaml ──[tree-info]──→ compact_tree.txt ──────────────────────┘
+                                                                   │
                              cases.yaml (mapped) ──[generate]──→ suite YAML
 ```
 
 1. `youqu at parse` — format-only conversion (no LLM, no semantic mapping)
 2. `youqu at tree-info` — compact tree for AI reading
-3. AI in session — semantic mapping (fills action, element_ref, selector, etc.)
+3. You (the agent) — semantic mapping (fills action, element_ref, selector, etc.)
 4. `youqu at generate` — pure rules-based generation with post-validation
 
 ## CLI Commands
@@ -108,12 +108,13 @@ suites:
         menu_path: ["Item1", "Item2"]
         action: "dtk_main_menu"          # filled by AI
         key: null                         # keyboard combo
-        text: null                        # input text
+        text: null                        # input text / path / app name
         element_ref: null                 # at-tree node ID
-        selector: null                    # {"name": ..., "role": ...}
+        selector: null                    # {"name": ..., "role": ..., "name_pattern": ...}
         assertion: null                   # assert type
         needs_accessible_name: false
         accessible_name_suggestion: null
+        value: null                       # dbus params dict, scroll amount, OCR text
 ```
 
 ### CaseStep Fields
@@ -126,46 +127,13 @@ suites:
 | menu_path | list[string]/null | Menu navigation path |
 | action | string/null | Action type (AI fills — see valid values below) |
 | key | string/null | Keyboard combo (e.g., "ctrl+shift+a", "enter") |
-| text | string/null | Text to type for keyboard_type |
+| text | string/null | Text to type for keyboard_type; also used as path/app/value for assert actions |
 | element_ref | string/null | AT-SPI element reference (at-tree node ID) |
-| selector | dict/null | {"name": str, "role": str, "name_pattern": str} |
+| selector | dict/null | {"name": str, "role": str, "name_pattern": str(regex)} |
 | assertion | string/null | Assert type for assert steps |
 | needs_accessible_name | bool | True if element lacks accessible name |
 | accessible_name_suggestion | string/null | Suggested name for app fix |
+| value | any/null | Dict for dbus_call/dbus_get_property params; int for mouse_scroll |
 
-### Valid action Values
-
-Action values must match executor HANDLERS exactly (30 handlers):
-
-| action | Key Fields | Description |
-|--------|-----------|-------------|
-| session_start | command, wait | Launch app |
-| session_stop | — | Terminate app |
-| dtk_main_menu | items | Navigate DTK main menu by keyboard |
-| dtk_context_menu | items | Navigate DTK context menu by keyboard |
-| element_action | ref, selector, do | AT-SPI element operation |
-| element_set_value | ref, selector, text | Set text value on element |
-| keyboard_press | key | Press single key (e.g., "enter") |
-| keyboard_hot_key | key | Press key combo (e.g., "ctrl+c") |
-| keyboard_type | text | Type text string |
-| mouse_click | ref/selector or x/y | Left click |
-| mouse_right_click | ref/selector or x/y | Right click |
-| mouse_double_click | ref/selector or x/y | Double click |
-| mouse_drag | ref/selector | Drag |
-| mouse_scroll | value | Scroll (negative=down, positive=up) |
-| dbus_call | command | D-Bus method call |
-| dbus_get_property | value | Read D-Bus property |
-| screenshot | — | Capture screenshot |
-| assert_element | ref, selector | Assert element exists |
-| assert_window | name_pattern | Assert window exists |
-| assert_not_exists | ref, selector | Assert element NOT exists |
-| assert_window_count | app, expected | Assert window count |
-| assert_process_running | app | Assert process running |
-| assert_process_not_running | app | Assert process NOT running |
-| assert_file_exists | path | Assert file exists |
-| assert_file_not_exists | path | Assert file NOT exists |
-| assert_image_exists | path | Assert image matches |
-| assert_image_not_exists | path | Assert image NOT matches |
-| assert_ocr_exists | text | Assert OCR text exists |
-| assert_ocr_not_exists | text | Assert OCR text NOT exists |
-| wait | wait | Wait |
+See `suite-format.md` for the complete list of 31 action types and their
+key fields. Action values must match executor HANDLERS exactly.
