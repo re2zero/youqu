@@ -203,10 +203,23 @@ class AtMenuNavigator:
             GLib.timeout_add(100, step)
             return False
 
-        GLib.timeout_add(50, step)
-        loop.run()
-        Atspi.EventListener.deregister(listener, "object:state-changed:focused")
+        watchdog_fired = [False]
 
+        def _watchdog():
+            watchdog_fired[0] = True
+            loop.quit()
+            return False
+
+        watchdog_ms = max(self.MAX_LOOP * 150, 5000)
+        GLib.timeout_add(watchdog_ms, _watchdog)
+        GLib.timeout_add(50, step)
+        try:
+            loop.run()
+        finally:
+            Atspi.EventListener.deregister(listener, "object:state-changed:focused")
+
+        if watchdog_fired[0]:
+            return False, f"menu navigation timed out after {watchdog_ms}ms"
         if found[0]:
             return True, focused_name[0]
         return False, f"menu item '{target}' not found"

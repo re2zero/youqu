@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import signal
 import subprocess
 import time
 from pathlib import Path
@@ -126,12 +127,63 @@ def _smart_wait(target: dict, timeout_s: float, context: dict[str, Any]) -> bool
     return False
 
 
+class StepTimeoutError(Exception):
+    pass
+
+
+_STEP_TIMEOUT = 15
+
+
+def _step_timeout_handler(signum: int, _frame: Any) -> None:
+    raise StepTimeoutError(f"step timed out after {_STEP_TIMEOUT}s")
+
+
+def _run_handler_with_timeout(
+    handler: Any,
+    step: SuiteActionStep,
+    context: dict[str, Any],
+    timeout: float = _STEP_TIMEOUT,
+) -> str | None:
+    """Run handler(step, context) with signal-based timeout and BaseException catch."""
+    old_handler: Any = None
+    old_alarm = 0
+    try:
+        old_handler = signal.signal(signal.SIGALRM, _step_timeout_handler)
+        old_alarm = signal.alarm(int(timeout))
+    except (ValueError, RuntimeError):
+        pass
+
+    try:
+        handler(step, context)
+    except StepTimeoutError:
+        return f"action '{step.action}' timed out (>{timeout}s)"
+    except BaseException as exc:
+        if isinstance(exc, (KeyboardInterrupt, SystemExit)):
+            raise
+        return f"action '{step.action}' failed: {exc}"
+    finally:
+        try:
+            signal.alarm(old_alarm)
+            if old_handler is not None:
+                signal.signal(signal.SIGALRM, old_handler)
+        except (ValueError, RuntimeError):
+            pass
+    return None
+
+
+_SPEC_TIMEOUT = 60
+
+
 def execute_steps(
     steps: list[SuiteActionStep],
     context: dict[str, Any],
+    deadline: float | None = None,
 ) -> str | None:
     elements = context.get("elements") or {}
     for idx, step in enumerate(steps):
+        if deadline is not None and time.monotonic() > deadline:
+            return f"spec timed out (>{_SPEC_TIMEOUT}s)"
+
         if step.wait_for:
             found = _wait_for_selector(step.wait_for, context)
             if not found:
@@ -140,10 +192,10 @@ def execute_steps(
         handler = HANDLERS.get(step.action)
         if handler is None:
             return f"unknown action '{step.action}'"
-        try:
-            handler(step, context)
-        except Exception as exc:
-            return f"action '{step.action}' failed: {exc}"
+
+        err = _run_handler_with_timeout(handler, step, context)
+        if err:
+            return err
 
         if step.wait:
             target = _peek_next_selector(idx, steps, elements)
@@ -162,16 +214,15 @@ def execute_teardown_steps(
     context: dict[str, Any],
 ) -> None:
     for step in steps:
-        try:
-            handler = HANDLERS.get(step.action)
-            if handler:
-                handler(step, context)
-            if step.wait:
-                time.sleep(step.wait)
-            if step.wait_after:
-                time.sleep(step.wait_after / 1000.0)
-        except Exception as exc:
-            _log.warning("teardown step '%s' failed: %s", step.action, exc)
+        handler = HANDLERS.get(step.action)
+        if handler:
+            err = _run_handler_with_timeout(handler, step, context)
+            if err:
+                _log.warning("teardown step '%s' failed: %s", step.action, err)
+        if step.wait:
+            time.sleep(step.wait)
+        if step.wait_after:
+            time.sleep(step.wait_after / 1000.0)
 
 
 def steps_from_dicts(step_dicts: list[dict[str, Any]]) -> list[SuiteActionStep]:
@@ -277,6 +328,7 @@ class AtSuiteExecutor:
         crash_mon: CrashMonitor,
     ) -> AtSpecResult:
         spec_start = time.monotonic()
+        spec_deadline = spec_start + _SPEC_TIMEOUT
         spec_result = AtSpecResult(id=spec.id, name=spec.name)
 
         if spec.id in env_skip_ids:
@@ -296,7 +348,7 @@ class AtSuiteExecutor:
             spec_result.duration = time.monotonic() - spec_start
             return spec_result
 
-        err = execute_steps(spec.steps, self.context)
+        err = execute_steps(spec.steps, self.context, spec_deadline)
         if err:
             spec_result.status = SpecStatus.FAILED
             spec_result.error = err
@@ -305,7 +357,7 @@ class AtSuiteExecutor:
             spec_result.error = crash_mon.crash_reason
         else:
             if spec.assert_steps:
-                err = execute_steps(spec.assert_steps, self.context)
+                err = execute_steps(spec.assert_steps, self.context, spec_deadline)
                 if err:
                     spec_result.status = SpecStatus.FAILED
                     spec_result.error = err

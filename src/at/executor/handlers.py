@@ -72,6 +72,45 @@ def resolve_step_attrs(step: SuiteActionStep, elements: dict) -> dict:
     return attrs
 
 
+def _get_app_window_bounds(app_name: str) -> tuple[int, int, int, int] | None:
+    """Get the bounds (x, y, width, height) of the first matching app window.
+
+    Directly iterates the AT-SPI desktop tree to find the application and its
+    top-level frame/window/dialog, then reads its screen coordinates.
+    More robust than dogtail-based lookups because it always queries fresh
+    AT-SPI state instead of relying on a potentially stale node reference.
+
+    Reference: menu_utils._get_app_window_bounds()
+    """
+    try:
+        import gi
+
+        gi.require_version("Atspi", "2.0")
+        from gi.repository import Atspi
+
+        root = Atspi.get_desktop(0)
+        for i in range(root.get_child_count()):
+            try:
+                app = root.get_child_at_index(i)
+                if (app.get_name() or "") != app_name:
+                    continue
+                for j in range(app.get_child_count()):
+                    try:
+                        w = app.get_child_at_index(j)
+                        role = w.get_role_name() or ""
+                        if role in ("frame", "window", "dialog"):
+                            ext = w.get_extents(Atspi.CoordType.SCREEN)
+                            if ext.width > 0 and ext.height > 0:
+                                return (ext.x, ext.y, ext.width, ext.height)
+                    except Exception:
+                        continue
+            except Exception:
+                continue
+    except Exception:
+        pass
+    return None
+
+
 def resolve_coordinates(attrs: dict, context: dict) -> tuple[int, int]:
     name = attrs.get("name")
     role = attrs.get("role")
@@ -119,15 +158,33 @@ def resolve_coordinates(attrs: dict, context: dict) -> tuple[int, int]:
     if attrs.get("x") is not None and attrs.get("y") is not None:
         return attrs.get("x"), attrs.get("y")
 
-    try:
-        dog = get_dog(context, context.get("app") or "")
-        node = dog.obj[0] if isinstance(dog.obj, list) else dog.obj
-        x, y, width, height = node.extents
-        center = (x + width / 2, y + height / 2)
-        if center and center[0] >= 0 and center[1] >= 0:
-            return center
-    except BaseException:
-        pass
+    # Fallback 1: direct AT-SPI window bounds lookup (fresh coordinates,
+       # immune to stale dogtail node references after context menu popups).
+    app_name = context.get("app", "")
+    if app_name:
+        bounds = _get_app_window_bounds(app_name)
+        if bounds:
+            x, y, w, h = bounds
+            return (x + w // 2, y + h // 2)
+
+    # Fallback 2: dogtail application node extents.
+    # Slower and may be stale, but uses dogtail's own app-resolution logic
+    # which may succeed when direct AT-SPI tree iteration fails (e.g., app
+    # name mismatch between context["app"] and AT-SPI registered name).
+    if app_name:
+        try:
+            dog = get_dog(context, app_name)
+            if dog.obj:
+                ext = dog.obj[0].extents
+                if ext:
+                    try:
+                        ex, ey, ew, eh = ext.x, ext.y, ext.width, ext.height
+                    except (AttributeError, TypeError):
+                        ex, ey, ew, eh = ext
+                    if ew > 0 and eh > 0:
+                        return (ex + ew // 2, ey + eh // 2)
+        except Exception:
+            pass
 
     return attrs.get("x") or 0, attrs.get("y") or 0
 
@@ -221,6 +278,7 @@ def handle_keyboard_hot_key(step: SuiteActionStep, context: dict) -> None:
 
 
 def handle_keyboard_type(step: SuiteActionStep, context: dict) -> None:
+    ensure_window_focus(context)
     mk = get_mk(context)
     mk.input_message(step.text or "")
 

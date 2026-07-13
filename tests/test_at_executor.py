@@ -531,10 +531,9 @@ class TestWaitForAndSmartWait:
         step = SuiteActionStep(action="keyboard_press", key="Return", wait_after=50)
         fake_handler = unittest.mock.MagicMock()
         with unittest.mock.patch.dict(exec_mod.HANDLERS, {"keyboard_press": fake_handler}), \
-             unittest.mock.patch("src.at.executor.executor.time") as mock_time:
-            mock_time.sleep = unittest.mock.MagicMock()
+             unittest.mock.patch.object(exec_mod.time, "sleep") as mock_sleep:
             exec_mod.execute_steps([step], {"app": "test-app"})
-        sleep_calls = [c for c in mock_time.sleep.call_args_list]
+        sleep_calls = [c for c in mock_sleep.call_args_list]
         assert len(sleep_calls) >= 1
         assert sleep_calls[-1] == unittest.mock.call(0.05)
 
@@ -636,6 +635,38 @@ class TestResolveCoordinatesFallback:
             x, y = resolve_coordinates(attrs, {"app": "test-app"})
         assert (x, y) == (50, 60)
         mock_get_dog.assert_not_called()
+
+
+class TestTimeoutValues:
+    def test_step_timeout_is_15s(self):
+        from src.at.executor import executor as exec_mod
+        assert exec_mod._STEP_TIMEOUT == 15
+
+    def test_spec_timeout_is_60s(self):
+        from src.at.executor import executor as exec_mod
+        assert exec_mod._SPEC_TIMEOUT == 60
+
+    def test_execute_steps_respects_expired_deadline(self):
+        import time as _time
+        from src.at.executor import executor as exec_mod
+        from src.at.parser.models import SuiteActionStep
+
+        step = SuiteActionStep(action="keyboard_press", key="Return")
+        past_deadline = _time.monotonic() - 1
+        err = exec_mod.execute_steps([step], {"app": "test-app"}, deadline=past_deadline)
+        assert err is not None
+        assert "timed out" in err
+
+    def test_execute_steps_no_deadline_by_default(self):
+        from src.at.executor import executor as exec_mod
+        from src.at.parser.models import SuiteActionStep
+
+        step = SuiteActionStep(action="keyboard_press", key="Return")
+        fake_handler = unittest.mock.MagicMock()
+        with unittest.mock.patch.dict(exec_mod.HANDLERS, {"keyboard_press": fake_handler}):
+            err = exec_mod.execute_steps([step], {"app": "test-app"})
+        assert err is None
+        fake_handler.assert_called_once()
 
 
 class TestNoYamlTestImport:
