@@ -31,11 +31,25 @@ def get_dog(context: dict, app: str | None = None):
     if context.get("dog") is None:
         from src.dogtail_utils import DogtailUtils
         if app and "/" in app:
-            atspi_name = app.split()[0] if app.split()[0] else app
+            atspi_name = os.path.basename(app.split()[0])
         else:
             atspi_name = app
         context["dog"] = DogtailUtils(atspi_name) if atspi_name else DogtailUtils()
     return context["dog"]
+
+
+def ensure_window_focus(context: dict) -> None:
+    """Focus the application window before AT-SPI element lookup."""
+    app_name = context.get("app")
+    if not app_name:
+        return
+    try:
+        from src.button_center import ButtonCenter
+
+        bc = ButtonCenter(app_name, None)
+        bc.focus_windows(app_name)
+    except Exception:
+        pass
 
 
 def resolve_step_attrs(step: SuiteActionStep, elements: dict) -> dict:
@@ -66,6 +80,7 @@ def resolve_coordinates(attrs: dict, context: dict) -> tuple[int, int]:
     if name or role or accessible_id:
         try:
             dog = get_dog(context, context.get("app") or "")
+            ensure_window_focus(context)
             if name:
                 found = dog.find_elements_by_attr(f"$//{name}/")
             elif role:
@@ -103,6 +118,16 @@ def resolve_coordinates(attrs: dict, context: dict) -> tuple[int, int]:
 
     if attrs.get("x") is not None and attrs.get("y") is not None:
         return attrs.get("x"), attrs.get("y")
+
+    try:
+        dog = get_dog(context, context.get("app") or "")
+        node = dog.obj[0] if isinstance(dog.obj, list) else dog.obj
+        x, y, width, height = node.extents
+        center = (x + width / 2, y + height / 2)
+        if center and center[0] >= 0 and center[1] >= 0:
+            return center
+    except BaseException:
+        pass
 
     return attrs.get("x") or 0, attrs.get("y") or 0
 
@@ -182,6 +207,7 @@ def handle_keyboard_press(step: SuiteActionStep, context: dict) -> None:
 
 
 def handle_keyboard_hot_key(step: SuiteActionStep, context: dict) -> None:
+    ensure_window_focus(context)
     mk = get_mk(context)
     keys = step.key
     if isinstance(keys, str):

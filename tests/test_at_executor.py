@@ -397,6 +397,247 @@ class TestExecutorFlow:
         assert result.skipped == 1
 
 
+class TestGetDogBasename:
+    def test_get_dog_uses_basename(self):
+        from src.at.executor.handlers import get_dog
+
+        captured_app = []
+        with unittest.mock.patch(
+            "src.dogtail_utils.DogtailUtils",
+            side_effect=lambda app="": captured_app.append(app) or unittest.mock.MagicMock(),
+        ):
+            context = {"app": "test-app"}
+            get_dog(context, "/usr/bin/deepin-terminal")
+        assert captured_app, "DogtailUtils was never instantiated"
+        assert captured_app[0] == "deepin-terminal", (
+            f"Expected basename 'deepin-terminal', got '{captured_app[0]}'"
+        )
+
+    def test_get_dog_basename_with_args(self):
+        from src.at.executor.handlers import get_dog
+
+        captured_app = []
+        with unittest.mock.patch(
+            "src.dogtail_utils.DogtailUtils",
+            side_effect=lambda app="": captured_app.append(app) or unittest.mock.MagicMock(),
+        ):
+            context = {"app": "test-app"}
+            get_dog(context, "/usr/bin/deepin-terminal --foo bar")
+        assert captured_app[0] == "deepin-terminal"
+
+    def test_get_dog_no_path_uses_app_directly(self):
+        from src.at.executor.handlers import get_dog
+
+        captured_app = []
+        with unittest.mock.patch(
+            "src.dogtail_utils.DogtailUtils",
+            side_effect=lambda app="": captured_app.append(app) or unittest.mock.MagicMock(),
+        ):
+            context = {"app": "test-app"}
+            get_dog(context, "deepin-terminal")
+        assert captured_app[0] == "deepin-terminal"
+
+
+class TestWaitForAndSmartWait:
+    def test_wait_condition_model_defaults(self):
+        from src.at.parser.models import WaitCondition
+
+        wc = WaitCondition(selector={"name": "OK"})
+        assert wc.timeout == 3000
+        assert wc.interval == 200
+
+    def test_suite_action_step_wait_for_field(self):
+        from src.at.parser.models import SuiteActionStep, WaitCondition
+
+        step = SuiteActionStep(
+            action="element_click",
+            wait_for=WaitCondition(selector={"name": "OK"}, timeout=5000),
+        )
+        assert step.wait_for is not None
+        assert step.wait_for.timeout == 5000
+        assert step.wait_for.selector == {"name": "OK"}
+
+    def test_suite_action_step_wait_after_field(self):
+        from src.at.parser.models import SuiteActionStep
+
+        step = SuiteActionStep(action="keyboard_press", key="Return", wait_after=500)
+        assert step.wait_after == 500
+
+    def test_execute_steps_wait_for_times_out(self):
+        from src.at.executor import executor as exec_mod
+        from src.at.parser.models import SuiteActionStep, WaitCondition
+
+        step = SuiteActionStep(
+            action="keyboard_press", key="Return",
+            wait_for=WaitCondition(selector={"name": "nonexistent"}, timeout=100, interval=50),
+        )
+        with unittest.mock.patch(
+            "src.at.executor.executor.get_dog",
+            return_value=unittest.mock.MagicMock(find_elements_by_attr=lambda e: []),
+        ):
+            err = exec_mod.execute_steps([step], {"app": "test-app"})
+        assert err is not None
+        assert "wait_for" in err
+        assert "100" in err
+
+    def test_execute_steps_wait_for_found_proceeds(self):
+        from src.at.executor import executor as exec_mod
+        from src.at.parser.models import SuiteActionStep, WaitCondition
+
+        step = SuiteActionStep(
+            action="keyboard_press", key="Return",
+            wait_for=WaitCondition(selector={"name": "OK"}, timeout=5000, interval=50),
+        )
+        fake_dog = unittest.mock.MagicMock(find_elements_by_attr=lambda e: ["found"])
+        fake_handler = unittest.mock.MagicMock()
+        with unittest.mock.patch("src.at.executor.executor.get_dog", return_value=fake_dog), \
+             unittest.mock.patch.dict(exec_mod.HANDLERS, {"keyboard_press": fake_handler}):
+            err = exec_mod.execute_steps([step], {"app": "test-app"})
+        assert err is None
+        fake_handler.assert_called_once()
+
+    def test_smart_wait_peeks_next_selector(self):
+        from src.at.executor import executor as exec_mod
+        from src.at.parser.models import SuiteActionStep
+
+        step1 = SuiteActionStep(action="keyboard_press", key="Return", wait=2.0)
+        step2 = SuiteActionStep(action="element_click", selector={"name": "Save"})
+        fake_dog = unittest.mock.MagicMock()
+        fake_dog.find_elements_by_attr.return_value = ["found"]
+        fake_handler = unittest.mock.MagicMock()
+        with unittest.mock.patch("src.at.executor.executor.get_dog", return_value=fake_dog), \
+             unittest.mock.patch.dict(exec_mod.HANDLERS, {"keyboard_press": fake_handler, "element_click": unittest.mock.MagicMock()}):
+            err = exec_mod.execute_steps([step1, step2], {"app": "test-app"})
+        assert err is None
+        assert fake_dog.find_elements_by_attr.call_count > 0
+
+    def test_smart_wait_falls_back_to_sleep_no_selector(self):
+        from src.at.executor import executor as exec_mod
+        from src.at.parser.models import SuiteActionStep
+
+        step1 = SuiteActionStep(action="keyboard_press", key="Return", wait=0.01)
+        step2 = SuiteActionStep(action="keyboard_press", key="Escape")
+        fake_handler = unittest.mock.MagicMock()
+        with unittest.mock.patch("src.at.executor.executor.get_dog") as mock_get_dog, \
+             unittest.mock.patch.dict(exec_mod.HANDLERS, {"keyboard_press": fake_handler}):
+            err = exec_mod.execute_steps([step1, step2], {"app": "test-app"})
+        assert err is None
+        mock_get_dog.assert_not_called()
+
+    def test_wait_after_sleeps_ms(self):
+        from src.at.executor import executor as exec_mod
+        from src.at.parser.models import SuiteActionStep
+
+        step = SuiteActionStep(action="keyboard_press", key="Return", wait_after=50)
+        fake_handler = unittest.mock.MagicMock()
+        with unittest.mock.patch.dict(exec_mod.HANDLERS, {"keyboard_press": fake_handler}), \
+             unittest.mock.patch("src.at.executor.executor.time") as mock_time:
+            mock_time.sleep = unittest.mock.MagicMock()
+            exec_mod.execute_steps([step], {"app": "test-app"})
+        sleep_calls = [c for c in mock_time.sleep.call_args_list]
+        assert len(sleep_calls) >= 1
+        assert sleep_calls[-1] == unittest.mock.call(0.05)
+
+
+class TestExecuteTeardownResilience:
+    def test_teardown_continues_after_step_failure(self):
+        from src.at.executor import executor as exec_mod
+        from src.at.parser.models import SuiteActionStep
+
+        step1 = SuiteActionStep(action="session_stop")
+        step2 = SuiteActionStep(action="keyboard_press", key="Escape")
+        handler1 = unittest.mock.MagicMock(side_effect=RuntimeError("boom"))
+        handler2 = unittest.mock.MagicMock()
+        with unittest.mock.patch.dict(exec_mod.HANDLERS, {"session_stop": handler1, "keyboard_press": handler2}):
+            exec_mod.execute_teardown_steps([step1, step2], {"app": "test-app"})
+        handler1.assert_called_once()
+        handler2.assert_called_once()
+
+    def test_teardown_handles_all_steps_failing(self):
+        from src.at.executor import executor as exec_mod
+        from src.at.parser.models import SuiteActionStep
+
+        steps = [
+            SuiteActionStep(action="session_stop"),
+            SuiteActionStep(action="keyboard_press", key="Escape"),
+            SuiteActionStep(action="mouse_click", x=100, y=200),
+        ]
+        handlers = [unittest.mock.MagicMock(side_effect=RuntimeError(f"fail-{i}")) for i in range(3)]
+        with unittest.mock.patch.dict(
+            exec_mod.HANDLERS,
+            {"session_stop": handlers[0], "keyboard_press": handlers[1], "mouse_click": handlers[2]},
+        ):
+            exec_mod.execute_teardown_steps(steps, {"app": "test-app"})
+        for h in handlers:
+            h.assert_called_once()
+
+    def test_teardown_respects_wait_and_wait_after(self):
+        from src.at.executor import executor as exec_mod
+        from src.at.parser.models import SuiteActionStep
+
+        step = SuiteActionStep(action="session_stop", wait=0.01, wait_after=20)
+        fake_handler = unittest.mock.MagicMock()
+        with unittest.mock.patch.dict(exec_mod.HANDLERS, {"session_stop": fake_handler}), \
+             unittest.mock.patch("src.at.executor.executor.time") as mock_time:
+            mock_time.sleep = unittest.mock.MagicMock()
+            exec_mod.execute_teardown_steps([step], {"app": "test-app"})
+        mock_time.sleep.assert_any_call(0.01)
+        mock_time.sleep.assert_any_call(0.02)
+
+
+class TestEnsureWindowFocus:
+    def test_ensure_window_focus_exists(self):
+        from src.at.executor import handlers
+        assert hasattr(handlers, "ensure_window_focus")
+
+    def test_ensure_window_focus_called_in_resolve_coordinates(self):
+        import inspect
+        from src.at.executor.handlers import resolve_coordinates
+        source = inspect.getsource(resolve_coordinates)
+        assert "ensure_window_focus" in source
+
+    def test_ensure_window_focus_called_in_keyboard_hot_key(self):
+        import inspect
+        from src.at.executor.handlers import handle_keyboard_hot_key
+        source = inspect.getsource(handle_keyboard_hot_key)
+        assert "ensure_window_focus" in source
+
+
+class TestResolveCoordinatesFallback:
+    def test_resolve_coordinates_falls_back_to_window_center(self):
+        from src.at.executor.handlers import resolve_coordinates
+
+        fake_node = unittest.mock.MagicMock()
+        fake_node.extents = (100, 200, 300, 400)
+        fake_dog = unittest.mock.MagicMock()
+        fake_dog.obj = [fake_node]
+        with unittest.mock.patch("src.at.executor.handlers.get_dog", return_value=fake_dog), \
+             unittest.mock.patch("src.at.executor.handlers.ensure_window_focus"):
+            x, y = resolve_coordinates({}, {"app": "test-app"})
+        assert x == 250
+        assert y == 400
+
+    def test_resolve_coordinates_prefers_element_center(self):
+        from src.at.executor.handlers import resolve_coordinates
+
+        attrs = {"x": 10, "y": 20}
+        with unittest.mock.patch("src.at.executor.handlers.get_dog") as mock_get_dog, \
+             unittest.mock.patch("src.at.executor.handlers.ensure_window_focus"):
+            x, y = resolve_coordinates(attrs, {"app": "test-app"})
+        assert (x, y) == (10, 20)
+        mock_get_dog.assert_not_called()
+
+    def test_resolve_coordinates_uses_xy_when_no_element(self):
+        from src.at.executor.handlers import resolve_coordinates
+
+        attrs = {"x": 50, "y": 60}
+        with unittest.mock.patch("src.at.executor.handlers.get_dog") as mock_get_dog, \
+             unittest.mock.patch("src.at.executor.handlers.ensure_window_focus"):
+            x, y = resolve_coordinates(attrs, {"app": "test-app"})
+        assert (x, y) == (50, 60)
+        mock_get_dog.assert_not_called()
+
+
 class TestNoYamlTestImport:
     def test_executor_modules_no_yaml_test_import(self):
         import ast

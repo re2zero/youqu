@@ -7,11 +7,13 @@ from pathlib import Path
 from typing import Any
 
 from src.at.executor.crash_monitor import CrashMonitor
-from src.at.executor.handlers import HANDLERS
+from src.at.executor.handlers import HANDLERS, get_dog
 from src.at.executor.models import AtSpecResult, AtSpecResult as SpecResult, AtSuiteResult, SpecStatus
 from src.at.parser.models import EnvCheckItem, SuiteActionStep, SuiteCase, SuiteConfig
 
 _log = logging.getLogger(__name__)
+
+_LIFECYCLE_ACTIONS = frozenset({"session_start", "session_stop"})
 
 
 def check_env_process(item: EnvCheckItem) -> bool:
@@ -51,11 +53,90 @@ def check_env(item: EnvCheckItem) -> bool:
         return False
 
 
+def _wait_for_selector(wait_cond, context: dict[str, Any]) -> bool:
+    sel = wait_cond.selector
+    if not sel:
+        return False
+    name = sel.get("name")
+    if not name:
+        return False
+    expr = f"$//{name}/"
+    dog = get_dog(context, context.get("app") or "")
+    deadline = time.time() + wait_cond.timeout / 1000.0
+    interval = wait_cond.interval / 1000.0
+    while time.time() < deadline:
+        try:
+            if dog.find_elements_by_attr(expr):
+                return True
+        except Exception:
+            pass
+        time.sleep(interval)
+    return False
+
+
+def _extract_selector_from_step(
+    step: SuiteActionStep, elements: dict,
+) -> dict | None:
+    if step.ref and step.ref in elements:
+        attrs = elements[step.ref]
+        name = attrs.get("name")
+        role = attrs.get("role")
+        if name or role:
+            return {"name": name, "role": role}
+    if step.selector:
+        d = {k: v for k, v in step.selector.items() if v is not None}
+        if d.get("name") or d.get("role"):
+            return d
+    return None
+
+
+def _peek_next_selector(
+    idx: int, all_steps: list[SuiteActionStep], elements: dict,
+) -> dict | None:
+    if idx + 1 >= len(all_steps):
+        return None
+    next_step = all_steps[idx + 1]
+    if next_step.action in _LIFECYCLE_ACTIONS:
+        return None
+    if next_step.wait_for:
+        return None
+    return _extract_selector_from_step(next_step, elements)
+
+
+def _smart_wait(target: dict, timeout_s: float, context: dict[str, Any]) -> bool:
+    name = target.get("name")
+    role = target.get("role")
+    if not name and not role:
+        time.sleep(timeout_s)
+        return False
+    expr = f"$//{name}/" if name else "$/"
+    if expr == "$/":
+        time.sleep(timeout_s)
+        return False
+    dog = get_dog(context, context.get("app") or "")
+    deadline = time.time() + timeout_s
+    interval = 0.2
+    while time.time() < deadline:
+        try:
+            if dog.find_elements_by_attr(expr):
+                return True
+        except Exception:
+            pass
+        time.sleep(interval)
+    return False
+
+
 def execute_steps(
     steps: list[SuiteActionStep],
     context: dict[str, Any],
 ) -> str | None:
-    for step in steps:
+    elements = context.get("elements") or {}
+    for idx, step in enumerate(steps):
+        if step.wait_for:
+            found = _wait_for_selector(step.wait_for, context)
+            if not found:
+                return f"wait_for timed out ({step.wait_for.timeout}ms)"
+
         handler = HANDLERS.get(step.action)
         if handler is None:
             return f"unknown action '{step.action}'"
@@ -63,9 +144,34 @@ def execute_steps(
             handler(step, context)
         except Exception as exc:
             return f"action '{step.action}' failed: {exc}"
+
         if step.wait:
-            time.sleep(step.wait)
+            target = _peek_next_selector(idx, steps, elements)
+            if target:
+                _smart_wait(target, step.wait, context)
+            else:
+                time.sleep(step.wait)
+
+        if step.wait_after:
+            time.sleep(step.wait_after / 1000.0)
     return None
+
+
+def execute_teardown_steps(
+    steps: list[SuiteActionStep],
+    context: dict[str, Any],
+) -> None:
+    for step in steps:
+        try:
+            handler = HANDLERS.get(step.action)
+            if handler:
+                handler(step, context)
+            if step.wait:
+                time.sleep(step.wait)
+            if step.wait_after:
+                time.sleep(step.wait_after / 1000.0)
+        except Exception as exc:
+            _log.warning("teardown step '%s' failed: %s", step.action, exc)
 
 
 def steps_from_dicts(step_dicts: list[dict[str, Any]]) -> list[SuiteActionStep]:
@@ -144,10 +250,7 @@ class AtSuiteExecutor:
         crash_mon.stop()
 
         if self.suite.teardown:
-            try:
-                execute_steps(self.suite.teardown, self.context)
-            except Exception as exc:
-                _log.warning("teardown failed: %s", exc)
+            execute_teardown_steps(self.suite.teardown, self.context)
 
         result.duration = time.monotonic() - start
         return result

@@ -170,12 +170,20 @@ class EnvCheckItem(BaseModel):
     spec_ids: Optional[list[str]] = None
 
 
+class WaitCondition(BaseModel):
+    selector: dict[str, Any]
+    timeout: int = 3000
+    interval: int = 200
+
+
 class SuiteActionStep(BaseModel):
     action: str
     ref: Optional[str] = None
     selector: Optional[dict[str, Any]] = None
     command: Optional[str] = None
     wait: Optional[float] = None
+    wait_for: Optional[WaitCondition] = None
+    wait_after: Optional[int] = None
     do: Optional[str] = None
     x: Optional[int] = None
     y: Optional[int] = None
