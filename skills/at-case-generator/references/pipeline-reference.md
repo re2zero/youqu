@@ -97,7 +97,7 @@ Supported column name aliases:
 metadata:
   generated_at: "ISO8601"
   source: "input-file-name"
-suites:
+cases:
   - id: "suite-id"
     name: "Suite name"
     module: "module-name"

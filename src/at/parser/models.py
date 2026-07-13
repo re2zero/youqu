@@ -58,6 +58,7 @@ class MappingStatus(str, Enum):
 
 # ---- Phase 1: AT-SPI Tree ----
 
+
 class AtTreeNode(BaseModel):
     id: str
     role: str = ""
@@ -82,6 +83,7 @@ class AtTree(BaseModel):
 
 
 # ---- Phase 2: Cases ----
+
 
 class CaseStep(BaseModel):
     step_type: StepType
@@ -117,10 +119,11 @@ class CasesMetadata(BaseModel):
 
 class CasesDoc(BaseModel):
     metadata: CasesMetadata = Field(default_factory=CasesMetadata)
-    suites: list[CaseSuite] = Field(default_factory=list)
+    cases: list[CaseSuite] = Field(default_factory=list)
 
 
 # ---- Phase 3: Element Mappings ----
+
 
 class MappingSelector(BaseModel):
     name: Optional[str] = None
@@ -164,6 +167,7 @@ class EnvCheckItem(BaseModel):
       - process      — pgrep by process name
       - file_exists  — file path existence
     """
+
     type: str
     name: str
     expect: str = "not_running"
@@ -221,11 +225,7 @@ class SuiteConfig(BaseModel):
     fast_fail: bool = False
     env_check: list[EnvCheckItem] = Field(default_factory=list)
     setup: list[SuiteActionStep] = Field(default_factory=list)
-    specs: list[SuiteCase] = Field(default_factory=list, alias="suites")
+    suites: list[SuiteCase] = Field(default_factory=list)
     teardown: list[SuiteActionStep] = Field(default_factory=list)
 
     model_config = ConfigDict(populate_by_name=True)
-
-    @property
-    def suites(self):
-        return self.specs

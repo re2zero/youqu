@@ -96,8 +96,10 @@ these into `app-optimization.md` for future app source code fixes.
 
 **Impact**: `youqu at run` fails to load the suite file.
 
-**Solution**: Always use `suites:` (the YAML alias). The pydantic model field
-is `specs` with `alias="suites"` — YAML must use the alias.
+**Solution**: Always use `suites:` in suite config YAML. The pydantic model
+field is `suites` (no alias) — YAML must use `suites:`. Note: the input
+`cases.yaml` uses `cases:` (that's a different model — `CasesDoc`), but the
+output suite config uses `suites:`.
 
 ## 9. at-tree.yaml is stale
 

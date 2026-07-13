@@ -21,13 +21,24 @@ import csv
 import sys
 from pathlib import Path
 
-_ASSERT_KEYWORDS = frozenset({
-    "检查", "确认", "查看", "验证", "是否", "应该",
-    "符合", "出现", "消失", "正确", "可见",
-})
+_ASSERT_KEYWORDS = frozenset(
+    {
+        "检查",
+        "确认",
+        "查看",
+        "验证",
+        "是否",
+        "应该",
+        "符合",
+        "出现",
+        "消失",
+        "正确",
+        "可见",
+    }
+)
 
 
-def _guess_step_type(description: str) -> "StepType":
+def _guess_step_type(description: str) -> "StepType":  # noqa: F821
     from src.at.parser.models import StepType
 
     if any(kw in description for kw in _ASSERT_KEYWORDS):
@@ -95,17 +106,19 @@ def read_csv_file(filepath: str) -> list[dict]:
 def normalize_cases(raw_data: list[dict]) -> list[dict]:
     cases = []
     for idx, record in enumerate(raw_data):
-        cases.append({
-            "id": find_column(record, COLUMN_ALIASES["id"]) or str(idx).zfill(3),
-            "title": find_column(record, COLUMN_ALIASES["title"]),
-            "module": find_column(record, COLUMN_ALIASES["module"]),
-            "priority": find_column(record, COLUMN_ALIASES["priority"]),
-            "precondition": find_column(record, COLUMN_ALIASES["precondition"]),
-            "steps": find_column(record, COLUMN_ALIASES["steps"]),
-            "expected": find_column(record, COLUMN_ALIASES["expected"]),
-            "case_type": find_column(record, COLUMN_ALIASES["case_type"]),
-            "source_row": record.get("source_row", 0),
-        })
+        cases.append(
+            {
+                "id": find_column(record, COLUMN_ALIASES["id"]) or str(idx).zfill(3),
+                "title": find_column(record, COLUMN_ALIASES["title"]),
+                "module": find_column(record, COLUMN_ALIASES["module"]),
+                "priority": find_column(record, COLUMN_ALIASES["priority"]),
+                "precondition": find_column(record, COLUMN_ALIASES["precondition"]),
+                "steps": find_column(record, COLUMN_ALIASES["steps"]),
+                "expected": find_column(record, COLUMN_ALIASES["expected"]),
+                "case_type": find_column(record, COLUMN_ALIASES["case_type"]),
+                "source_row": record.get("source_row", 0),
+            }
+        )
     return cases
 
 
@@ -151,8 +164,11 @@ def compact_at_tree_to_file(at_tree_path: str, output_path: str) -> None:
     raw = Path(at_tree_path).read_text(encoding="utf-8")
     compacted = _compact_at_tree(raw)
     Path(output_path).write_text(compacted, encoding="utf-8")
-    print("Wrote {} ({} bytes, {} nodes)".format(
-        output_path, len(compacted), len(compacted.splitlines())))
+    print(
+        "Wrote {} ({} bytes, {} nodes)".format(
+            output_path, len(compacted), len(compacted.splitlines())
+        )
+    )
 
 
 def parse_to_cases(input_path: str, output_path: str, at_tree_path: str = "") -> None:
@@ -183,7 +199,9 @@ def parse_to_cases(input_path: str, output_path: str, at_tree_path: str = "") ->
     print("Read {} cases from {}".format(len(cases), input_path))
 
     if at_tree_path:
-        print("Warning: --at-tree is deprecated for parse. Semantic mapping is now done by AI. Use 'youqu at tree-info' instead.")
+        print(
+            "Warning: --at-tree is deprecated for parse. Semantic mapping is now done by AI. Use 'youqu at tree-info' instead."
+        )
 
     from src.at.parser.models import CaseStep, CaseSuite, CasesDoc, CasesMetadata, StepType
 
@@ -195,32 +213,38 @@ def parse_to_cases(input_path: str, output_path: str, at_tree_path: str = "") ->
             line = line.strip()
             if not line:
                 continue
-            steps.append(CaseStep(
-                step_type=_guess_step_type(line),
-                description=line,
-            ))
+            steps.append(
+                CaseStep(
+                    step_type=_guess_step_type(line),
+                    description=line,
+                )
+            )
         expected_texts = case.get("expected", "")
         for line in expected_texts.split("\n"):
             line = line.strip()
             if not line:
                 continue
-            steps.append(CaseStep(
-                step_type=StepType.assert_,
-                description=line,
-            ))
+            steps.append(
+                CaseStep(
+                    step_type=StepType.assert_,
+                    description=line,
+                )
+            )
         if steps:
-            suites.append(CaseSuite(
-                id="case_{}".format(case["id"]),
-                name=case.get("title", ""),
-                module=case.get("module", ""),
-                description=case.get("title", ""),
-                status="active",
-                steps=steps,
-            ))
+            suites.append(
+                CaseSuite(
+                    id="case_{}".format(case["id"]),
+                    name=case.get("title", ""),
+                    module=case.get("module", ""),
+                    description=case.get("title", ""),
+                    status="active",
+                    steps=steps,
+                )
+            )
 
     doc = CasesDoc(
         metadata=CasesMetadata(source=path.name),
-        suites=suites,
+        cases=suites,
     )
 
     out = Path(output_path)
@@ -237,6 +261,7 @@ def parse_to_cases(input_path: str, output_path: str, at_tree_path: str = "") ->
         )
     except ImportError:
         import json
+
         content = json.dumps(
             doc.model_dump(mode="json", by_alias=False, exclude_none=True),
             ensure_ascii=False,
@@ -244,6 +269,5 @@ def parse_to_cases(input_path: str, output_path: str, at_tree_path: str = "") ->
         )
 
     out.write_text(content, encoding="utf-8")
-    total_steps = sum(len(s.steps) for s in doc.suites)
-    print("Wrote {} ({} suites, {} raw steps)".format(
-        output_path, len(doc.suites), total_steps))
+    total_steps = sum(len(s.steps) for s in doc.cases)
+    print("Wrote {} ({} suites, {} raw steps)".format(output_path, len(doc.cases), total_steps))

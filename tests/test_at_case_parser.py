@@ -147,7 +147,9 @@ def test_compact_at_tree_to_file(tmp_path):
     from src.at.generator.case_parser import compact_at_tree_to_file
 
     tree_file = tmp_path / "at-tree.yaml"
-    tree_file.write_text("tree:\n  - id: n1\n    role: push button\n    name: OK\n", encoding="utf-8")
+    tree_file.write_text(
+        "tree:\n  - id: n1\n    role: push button\n    name: OK\n", encoding="utf-8"
+    )
     out_file = tmp_path / "tree-info.txt"
     compact_at_tree_to_file(str(tree_file), str(out_file))
     content = out_file.read_text(encoding="utf-8")
@@ -160,8 +162,7 @@ def test_parse_to_cases_format_only(tmp_path):
 
     csv_file = tmp_path / "input.csv"
     csv_file.write_text(
-        "用例标题,所属模块,操作步骤,预期结果\n"
-        "播放音乐,播放,1.点击播放按钮,音乐开始播放\n",
+        "用例标题,所属模块,操作步骤,预期结果\n播放音乐,播放,1.点击播放按钮,音乐开始播放\n",
         encoding="utf-8-sig",
     )
 
@@ -221,8 +222,7 @@ def test_parse_to_cases_expected_column_becomes_assert(tmp_path):
 
     csv_file = tmp_path / "input.csv"
     csv_file.write_text(
-        "用例标题,所属模块,操作步骤,预期结果\n"
-        "播放音乐,播放,1.点击播放按钮,音乐开始播放\n",
+        "用例标题,所属模块,操作步骤,预期结果\n播放音乐,播放,1.点击播放按钮,音乐开始播放\n",
         encoding="utf-8-sig",
     )
     output_file = tmp_path / "cases.yaml"
@@ -231,7 +231,7 @@ def test_parse_to_cases_expected_column_becomes_assert(tmp_path):
     import yaml
 
     data = yaml.safe_load(output_file.read_text(encoding="utf-8"))
-    suite = data["suites"][0]
+    suite = data["cases"][0]
     steps = suite["steps"]
     assert steps[0]["step_type"] == "action"
     assert "点击播放按钮" in steps[0]["description"]
@@ -244,8 +244,7 @@ def test_parse_to_cases_keyword_classification_in_steps(tmp_path):
 
     csv_file = tmp_path / "input.csv"
     csv_file.write_text(
-        "用例标题,所属模块,操作步骤\n"
-        "检查状态,测试,1.检查按钮是否可见\n",
+        "用例标题,所属模块,操作步骤\n检查状态,测试,1.检查按钮是否可见\n",
         encoding="utf-8-sig",
     )
     output_file = tmp_path / "cases.yaml"
@@ -254,7 +253,7 @@ def test_parse_to_cases_keyword_classification_in_steps(tmp_path):
     import yaml
 
     data = yaml.safe_load(output_file.read_text(encoding="utf-8"))
-    steps = data["suites"][0]["steps"]
+    steps = data["cases"][0]["steps"]
     assert steps[0]["step_type"] == "assert"
 
 
@@ -263,8 +262,7 @@ def test_parse_to_cases_no_expected_column(tmp_path):
 
     csv_file = tmp_path / "input.csv"
     csv_file.write_text(
-        "用例标题,所属模块,操作步骤\n"
-        "测试无预期,测试,1.点击按钮\n",
+        "用例标题,所属模块,操作步骤\n测试无预期,测试,1.点击按钮\n",
         encoding="utf-8-sig",
     )
     output_file = tmp_path / "cases.yaml"
@@ -273,6 +271,6 @@ def test_parse_to_cases_no_expected_column(tmp_path):
     import yaml
 
     data = yaml.safe_load(output_file.read_text(encoding="utf-8"))
-    steps = data["suites"][0]["steps"]
+    steps = data["cases"][0]["steps"]
     assert len(steps) == 1
     assert steps[0]["step_type"] == "action"

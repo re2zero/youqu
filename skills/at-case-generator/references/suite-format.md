@@ -7,7 +7,7 @@
 ├── elements.yaml                         # shared element registry
 ├── app-optimization.md                   # (optional) elements needing setAccessibleName()
 └── <module>/
-    └── suite.suite.yaml                  # suite config with setup/teardown/suites
+    └── {module}.suite.yaml             # suite config with setup/teardown/specs
 ```
 
 ## Suite Config File
@@ -190,9 +190,9 @@ Collects all steps with `needs_accessible_name: true`:
 
 | Aspect | Standard YAML (youqu-case-generator) | AT Suite (at-case-generator) |
 |--------|--------------------------------------|------------------------------|
-| Suite cases field | specs: | suites: |
+| Suite cases field | suites: | suites: |
 | Menu actions | main_menu_comb, context_menu_comb | dtk_main_menu, dtk_context_menu |
 | Assertions | Inline per step (step.assert) | Case-level assert_steps[] |
 | Element registry | elements.yaml (app, vars, elements) | elements.yaml (elements only) |
 | Setup wait | wait: 1.0 (seconds) | wait: 3.0 (seconds) |
-| Suite filename | various | suite.suite.yaml (fixed) |
+| Suite filename | various | {module}.suite.yaml |

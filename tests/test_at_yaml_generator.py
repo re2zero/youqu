@@ -23,14 +23,19 @@ import yaml
 
 CASES_YAML = {
     "metadata": {"generated_at": "2026-01-01", "source": "test"},
-    "suites": [
+    "cases": [
         {
             "id": "menu_001",
             "name": "menu_new_window",
             "module": "菜单",
             "status": "active",
             "steps": [
-                {"step_type": "navigate", "description": "打开文件菜单", "element_hint": "dtk_main_menu", "items": ["文件", "新建窗口"]},
+                {
+                    "step_type": "navigate",
+                    "description": "打开文件菜单",
+                    "element_hint": "dtk_main_menu",
+                    "items": ["文件", "新建窗口"],
+                },
                 {"step_type": "action", "description": "点击播放", "element_hint": "click"},
             ],
         },
@@ -123,8 +128,22 @@ def test_extract_elements_skips_unmapped():
 
     doc = ElementMappingsDoc(
         mappings=[
-            MappingEntry(case_id="x", step_index=0, description="d", step_type="action", element_ref="r1", selector={"name": "N", "role": "push button"}),
-            MappingEntry(case_id="x", step_index=1, description="d", step_type="action", status=MappingStatus.unmapped, reason="not found"),
+            MappingEntry(
+                case_id="x",
+                step_index=0,
+                description="d",
+                step_type="action",
+                element_ref="r1",
+                selector={"name": "N", "role": "push button"},
+            ),
+            MappingEntry(
+                case_id="x",
+                step_index=1,
+                description="d",
+                step_type="action",
+                status=MappingStatus.unmapped,
+                reason="not found",
+            ),
         ]
     )
     elements = _extract_elements(doc)
@@ -136,7 +155,12 @@ def test_step_to_action_menu_comb():
     from src.at.generator.yaml_generator import _step_to_action
     from src.at.parser.models import CaseStep, ElementHint, StepType
 
-    step = CaseStep(step_type=StepType.navigate, description="打开文件", element_hint=ElementHint.dtk_main_menu, items=["文件", "新建窗口"])
+    step = CaseStep(
+        step_type=StepType.navigate,
+        description="打开文件",
+        element_hint=ElementHint.dtk_main_menu,
+        items=["文件", "新建窗口"],
+    )
     action = _step_to_action(step)
     assert action.action == "dtk_main_menu"
     assert action.items == ["文件", "新建窗口"]
@@ -146,7 +170,13 @@ def test_step_to_action_element_click():
     from src.at.generator.yaml_generator import _step_to_action
     from src.at.parser.models import CaseStep, ElementHint, StepType
 
-    step = CaseStep(step_type=StepType.action, description="点击播放", action="element_action", element_ref="play_btn", selector={"name": "播放", "role": "push button"})
+    step = CaseStep(
+        step_type=StepType.action,
+        description="点击播放",
+        action="element_action",
+        element_ref="play_btn",
+        selector={"name": "播放", "role": "push button"},
+    )
     action = _step_to_action(step)
     assert action.action == "element_action"
     assert action.ref == "play_btn"
@@ -157,7 +187,9 @@ def test_step_to_action_keyboard():
     from src.at.generator.yaml_generator import _step_to_action
     from src.at.parser.models import CaseStep, ElementHint, StepType
 
-    step = CaseStep(step_type=StepType.action, description="Ctrl+S", element_hint=ElementHint.keyboard_shortcut)
+    step = CaseStep(
+        step_type=StepType.action, description="Ctrl+S", element_hint=ElementHint.keyboard_shortcut
+    )
     action = _step_to_action(step)
     assert action.action == "keyboard_press"
     assert action.key == "Ctrl+S"
@@ -167,7 +199,13 @@ def test_step_to_action_assert_element():
     from src.at.generator.yaml_generator import _step_to_action
     from src.at.parser.models import CaseStep, ElementHint, StepType
 
-    step = CaseStep(step_type=StepType.assert_, description="按钮存在", action="assert_element", element_ref="btn1", selector={"name": "OK", "role": "push button"})
+    step = CaseStep(
+        step_type=StepType.assert_,
+        description="按钮存在",
+        action="assert_element",
+        element_ref="btn1",
+        selector={"name": "OK", "role": "push button"},
+    )
     action = _step_to_action(step)
     assert action.action == "assert_element"
     assert action.ref == "btn1"
@@ -177,7 +215,9 @@ def test_step_to_action_titlebar():
     from src.at.generator.yaml_generator import _step_to_action
     from src.at.parser.models import CaseStep, ElementHint, StepType
 
-    step = CaseStep(step_type=StepType.action, description="最大化", element_hint=ElementHint.titlebar)
+    step = CaseStep(
+        step_type=StepType.action, description="最大化", element_hint=ElementHint.titlebar
+    )
     action = _step_to_action(step)
     assert action.action == "element_action"
     assert action.do == "click"
@@ -192,7 +232,11 @@ def test_build_suite_cases_skips_visual():
         name="visual_test",
         module="视觉",
         steps=[
-            CaseStep(step_type=StepType.action, description="看看界面", element_hint=ElementHint.visual_check),
+            CaseStep(
+                step_type=StepType.action,
+                description="看看界面",
+                element_hint=ElementHint.visual_check,
+            ),
         ],
     )
     suite_cases = _build_suite_cases(suite)
@@ -208,8 +252,14 @@ def test_build_suite_cases_assert_appended():
         name="assert_test",
         module="测试",
         steps=[
-            CaseStep(step_type=StepType.action, description="点击按钮", element_hint=ElementHint.click),
-            CaseStep(step_type=StepType.assert_, description="窗口存在", element_hint=ElementHint.assert_window),
+            CaseStep(
+                step_type=StepType.action, description="点击按钮", element_hint=ElementHint.click
+            ),
+            CaseStep(
+                step_type=StepType.assert_,
+                description="窗口存在",
+                element_hint=ElementHint.assert_window,
+            ),
         ],
     )
     suite_cases = _build_suite_cases(suite)
@@ -224,7 +274,13 @@ def test_generate_yaml_end_to_end():
     _write_temp(CASES_YAML, "/tmp/test_at_gen_cases.yaml")
     _write_temp(MAPPINGS_YAML, "/tmp/test_at_gen_mappings.yaml")
 
-    generate_yaml(cases_path="/tmp/test_at_gen_cases.yaml", mappings_path="/tmp/test_at_gen_mappings.yaml", output_dir=out, app_name="test-app")
+    generate_yaml(
+        cases_path="/tmp/test_at_gen_cases.yaml",
+        mappings_path="/tmp/test_at_gen_mappings.yaml",
+        output_dir=out,
+        app_name="test-app",
+        assert_gate=False,
+    )
 
     elems = yaml.safe_load(open(f"{out}/elements.yaml", encoding="utf-8"))
     assert "play_btn" in elems["elements"]
@@ -236,7 +292,7 @@ def test_generate_yaml_end_to_end():
     assert os.path.isdir(f"{out}/主题")
     assert not os.path.exists(f"{out}/视觉")
 
-    suite_path = f"{out}/菜单/suite.suite.yaml"
+    suite_path = f"{out}/菜单/菜单.suite.yaml"
     assert os.path.isfile(suite_path)
     suite = yaml.safe_load(open(suite_path, encoding="utf-8"))
     assert suite["setup"][0]["action"] == "session_start"
@@ -250,15 +306,27 @@ def test_generate_yaml_empty_cases():
 
     _write_temp({}, "/tmp/test_at_gen_empty.yaml")
     _write_temp(MAPPINGS_YAML, "/tmp/test_at_gen_mappings2.yaml")
-    generate_yaml(cases_path="/tmp/test_at_gen_empty.yaml", mappings_path="/tmp/test_at_gen_mappings2.yaml", output_dir="/tmp/test_at_gen_empty_out", app_name="test-app")
-    assert not Path("/tmp/test_at_gen_empty_out").exists() or not list(Path("/tmp/test_at_gen_empty_out").iterdir())
+    generate_yaml(
+        cases_path="/tmp/test_at_gen_empty.yaml",
+        mappings_path="/tmp/test_at_gen_mappings2.yaml",
+        output_dir="/tmp/test_at_gen_empty_out",
+        app_name="test-app",
+    )
+    assert not Path("/tmp/test_at_gen_empty_out").exists() or not list(
+        Path("/tmp/test_at_gen_empty_out").iterdir()
+    )
 
 
 def test_step_to_action_keyboard_type():
     from src.at.generator.yaml_generator import _step_to_action
     from src.at.parser.models import CaseStep, ElementHint, StepType
 
-    step = CaseStep(step_type=StepType.action, description="输入文字", action="keyboard_type", text="hello world")
+    step = CaseStep(
+        step_type=StepType.action,
+        description="输入文字",
+        action="keyboard_type",
+        text="hello world",
+    )
     action = _step_to_action(step)
     assert action.action == "keyboard_type"
     assert action.text == "hello world"
@@ -268,7 +336,9 @@ def test_step_to_action_scroll():
     from src.at.generator.yaml_generator import _step_to_action
     from src.at.parser.models import CaseStep, ElementHint, StepType
 
-    step = CaseStep(step_type=StepType.action, description="向下滚动", action="mouse_scroll", value=-3)
+    step = CaseStep(
+        step_type=StepType.action, description="向下滚动", action="mouse_scroll", value=-3
+    )
     action = _step_to_action(step)
     assert action.action == "mouse_scroll"
     assert action.value == -3
@@ -278,7 +348,12 @@ def test_step_to_action_assert_window():
     from src.at.generator.yaml_generator import _step_to_action
     from src.at.parser.models import CaseStep, ElementHint, StepType
 
-    step = CaseStep(step_type=StepType.assert_, description="窗口存在", action="assert_window", selector={"name_pattern": "终端.*"})
+    step = CaseStep(
+        step_type=StepType.assert_,
+        description="窗口存在",
+        action="assert_window",
+        selector={"name_pattern": "终端.*"},
+    )
     action = _step_to_action(step)
     assert action.action == "assert_window"
     assert action.name_pattern == "终端.*"
@@ -288,7 +363,12 @@ def test_step_to_action_dtk_context_menu():
     from src.at.generator.yaml_generator import _step_to_action
     from src.at.parser.models import CaseStep, ElementHint, StepType
 
-    step = CaseStep(step_type=StepType.navigate, description="右键菜单", action="dtk_context_menu", items=["复制", "粘贴"])
+    step = CaseStep(
+        step_type=StepType.navigate,
+        description="右键菜单",
+        action="dtk_context_menu",
+        items=["复制", "粘贴"],
+    )
     action = _step_to_action(step)
     assert action.action == "dtk_context_menu"
     assert action.items == ["复制", "粘贴"]
@@ -298,7 +378,14 @@ def test_step_to_action_dialog_note():
     from src.at.generator.yaml_generator import _step_to_action
     from src.at.parser.models import CaseStep, ElementHint, StepType
 
-    step = CaseStep(step_type=StepType.action, description="在对话框中勾选背景模糊", element_hint=ElementHint.dialog, action="element_action", element_ref="blur_checkbox", selector={"name": "背景模糊", "role": "check box"})
+    step = CaseStep(
+        step_type=StepType.action,
+        description="在对话框中勾选背景模糊",
+        element_hint=ElementHint.dialog,
+        action="element_action",
+        element_ref="blur_checkbox",
+        selector={"name": "背景模糊", "role": "check box"},
+    )
     action = _step_to_action(step)
     assert action.action == "element_action"
     assert action.ref == "blur_checkbox"
@@ -327,8 +414,14 @@ def test_generate_yaml_app_name_in_command():
 
     out = "/tmp/test_at_gen_appname"
     _write_temp(CASES_YAML, "/tmp/test_at_appname_cases.yaml")
-    generate_yaml(cases_path="/tmp/test_at_appname_cases.yaml", mappings_path="", output_dir=out, app_name="deepin-terminal")
-    suite_path = f"{out}/菜单/suite.suite.yaml"
+    generate_yaml(
+        cases_path="/tmp/test_at_appname_cases.yaml",
+        mappings_path="",
+        output_dir=out,
+        app_name="deepin-terminal",
+        assert_gate=False,
+    )
+    suite_path = f"{out}/菜单/菜单.suite.yaml"
     assert os.path.isfile(suite_path)
     suite = yaml.safe_load(open(suite_path, encoding="utf-8"))
     assert suite["setup"][0]["command"] == "deepin-terminal"
@@ -339,7 +432,7 @@ def test_generate_yaml_module_name_safe():
 
     cases_with_slash = {
         "metadata": {"generated_at": "2026-01-01", "source": "test"},
-        "suites": [
+        "cases": [
             {
                 "id": "slash_001",
                 "name": "test_slash",
@@ -353,7 +446,13 @@ def test_generate_yaml_module_name_safe():
     }
     _write_temp(cases_with_slash, "/tmp/test_at_slash_cases.yaml")
     out = "/tmp/test_at_gen_slash"
-    generate_yaml(cases_path="/tmp/test_at_slash_cases.yaml", mappings_path="", output_dir=out, app_name="test-app")
+    generate_yaml(
+        cases_path="/tmp/test_at_slash_cases.yaml",
+        mappings_path="",
+        output_dir=out,
+        app_name="test-app",
+        assert_gate=False,
+    )
     assert os.path.isdir(f"{out}/文件_编辑")
 
 
@@ -385,10 +484,32 @@ def test_build_suite_cases_session_start_breaks_context():
         name="context_test",
         module="测试",
         steps=[
-            CaseStep(step_type=StepType.action, description="打开应用", action="session_start", text="test-app"),
-            CaseStep(step_type=StepType.action, description="点击按钮", action="element_action", element_ref="btn1", selector={"name": "OK", "role": "push button"}),
-            CaseStep(step_type=StepType.action, description="重启", action="session_start", text="test-app"),
-            CaseStep(step_type=StepType.action, description="再次点击", action="element_action", element_ref="btn2", selector={"name": "Cancel", "role": "push button"}),
+            CaseStep(
+                step_type=StepType.action,
+                description="打开应用",
+                action="session_start",
+                text="test-app",
+            ),
+            CaseStep(
+                step_type=StepType.action,
+                description="点击按钮",
+                action="element_action",
+                element_ref="btn1",
+                selector={"name": "OK", "role": "push button"},
+            ),
+            CaseStep(
+                step_type=StepType.action,
+                description="重启",
+                action="session_start",
+                text="test-app",
+            ),
+            CaseStep(
+                step_type=StepType.action,
+                description="再次点击",
+                action="element_action",
+                element_ref="btn2",
+                selector={"name": "Cancel", "role": "push button"},
+            ),
         ],
     )
     suite_cases = _build_suite_cases(suite)
@@ -406,9 +527,27 @@ def test_build_suite_cases_accumulates_steps():
         name="accumulate_test",
         module="测试",
         steps=[
-            CaseStep(step_type=StepType.action, description="第一步", action="element_action", element_ref="r1", selector={"name": "A", "role": "push button"}),
-            CaseStep(step_type=StepType.action, description="第二步", action="element_action", element_ref="r2", selector={"name": "B", "role": "push button"}),
-            CaseStep(step_type=StepType.assert_, description="断言", action="assert_element", element_ref="r3", selector={"name": "C", "role": "label"}),
+            CaseStep(
+                step_type=StepType.action,
+                description="第一步",
+                action="element_action",
+                element_ref="r1",
+                selector={"name": "A", "role": "push button"},
+            ),
+            CaseStep(
+                step_type=StepType.action,
+                description="第二步",
+                action="element_action",
+                element_ref="r2",
+                selector={"name": "B", "role": "push button"},
+            ),
+            CaseStep(
+                step_type=StepType.assert_,
+                description="断言",
+                action="assert_element",
+                element_ref="r3",
+                selector={"name": "C", "role": "label"},
+            ),
         ],
     )
     suite_cases = _build_suite_cases(suite)
@@ -454,7 +593,9 @@ def test_step_to_action_keyboard_type_text():
     from src.at.generator.yaml_generator import _step_to_action
     from src.at.parser.models import CaseStep, StepType
 
-    step = CaseStep(step_type=StepType.action, description="输入文字", action="keyboard_type_text", text="hello")
+    step = CaseStep(
+        step_type=StepType.action, description="输入文字", action="keyboard_type_text", text="hello"
+    )
     action = _step_to_action(step)
     assert action.action == "keyboard_type_text"
     assert action.text == "hello"
@@ -464,8 +605,13 @@ def test_step_to_action_mouse_right_click():
     from src.at.generator.yaml_generator import _step_to_action
     from src.at.parser.models import CaseStep, StepType
 
-    step = CaseStep(step_type=StepType.action, description="右键", action="mouse_right_click",
-                    element_ref="btn1", selector={"name": "OK", "role": "push button"})
+    step = CaseStep(
+        step_type=StepType.action,
+        description="右键",
+        action="mouse_right_click",
+        element_ref="btn1",
+        selector={"name": "OK", "role": "push button"},
+    )
     action = _step_to_action(step)
     assert action.action == "mouse_right_click"
     assert action.ref == "btn1"
@@ -476,8 +622,13 @@ def test_step_to_action_mouse_double_click():
     from src.at.generator.yaml_generator import _step_to_action
     from src.at.parser.models import CaseStep, StepType
 
-    step = CaseStep(step_type=StepType.action, description="双击", action="mouse_double_click",
-                    element_ref="btn1", selector={"name": "OK", "role": "push button"})
+    step = CaseStep(
+        step_type=StepType.action,
+        description="双击",
+        action="mouse_double_click",
+        element_ref="btn1",
+        selector={"name": "OK", "role": "push button"},
+    )
     action = _step_to_action(step)
     assert action.action == "mouse_double_click"
     assert action.ref == "btn1"
@@ -487,8 +638,14 @@ def test_step_to_action_element_set_value():
     from src.at.generator.yaml_generator import _step_to_action
     from src.at.parser.models import CaseStep, StepType
 
-    step = CaseStep(step_type=StepType.action, description="设值", action="element_set_value",
-                    element_ref="inp1", selector={"name": "输入框", "role": "text"}, text="hello")
+    step = CaseStep(
+        step_type=StepType.action,
+        description="设值",
+        action="element_set_value",
+        element_ref="inp1",
+        selector={"name": "输入框", "role": "text"},
+        text="hello",
+    )
     action = _step_to_action(step)
     assert action.action == "element_set_value"
     assert action.ref == "inp1"
@@ -511,7 +668,9 @@ def test_step_to_action_dbus_get_property():
     from src.at.parser.models import CaseStep, StepType
 
     params = {"dbus_name": "com.test.S", "object_path": "/t", "interface": "t.i"}
-    step = CaseStep(step_type=StepType.action, description="读属性", action="dbus_get_property", value=params)
+    step = CaseStep(
+        step_type=StepType.action, description="读属性", action="dbus_get_property", value=params
+    )
     action = _step_to_action(step)
     assert action.action == "dbus_get_property"
     assert action.value == params
@@ -521,7 +680,12 @@ def test_step_to_action_assert_process_running():
     from src.at.generator.yaml_generator import _step_to_action
     from src.at.parser.models import CaseStep, StepType
 
-    step = CaseStep(step_type=StepType.assert_, description="进程存在", action="assert_process_running", text="deepin-terminal")
+    step = CaseStep(
+        step_type=StepType.assert_,
+        description="进程存在",
+        action="assert_process_running",
+        text="deepin-terminal",
+    )
     action = _step_to_action(step)
     assert action.action == "assert_process_running"
     assert action.app == "deepin-terminal"
@@ -531,8 +695,12 @@ def test_step_to_action_assert_process_not_running():
     from src.at.generator.yaml_generator import _step_to_action
     from src.at.parser.models import CaseStep, StepType
 
-    step = CaseStep(step_type=StepType.assert_, description="进程不存在",
-                    action="assert_process_not_running", text="deepin-terminal")
+    step = CaseStep(
+        step_type=StepType.assert_,
+        description="进程不存在",
+        action="assert_process_not_running",
+        text="deepin-terminal",
+    )
     action = _step_to_action(step)
     assert action.action == "assert_process_not_running"
     assert action.app == "deepin-terminal"
@@ -542,7 +710,12 @@ def test_step_to_action_assert_file_exists():
     from src.at.generator.yaml_generator import _step_to_action
     from src.at.parser.models import CaseStep, StepType
 
-    step = CaseStep(step_type=StepType.assert_, description="文件存在", action="assert_file_exists", text="/tmp/test.txt")
+    step = CaseStep(
+        step_type=StepType.assert_,
+        description="文件存在",
+        action="assert_file_exists",
+        text="/tmp/test.txt",
+    )
     action = _step_to_action(step)
     assert action.action == "assert_file_exists"
     assert action.path == "/tmp/test.txt"
@@ -552,7 +725,12 @@ def test_step_to_action_assert_file_not_exists():
     from src.at.generator.yaml_generator import _step_to_action
     from src.at.parser.models import CaseStep, StepType
 
-    step = CaseStep(step_type=StepType.assert_, description="文件不存在", action="assert_file_not_exists", text="/tmp/nope")
+    step = CaseStep(
+        step_type=StepType.assert_,
+        description="文件不存在",
+        action="assert_file_not_exists",
+        text="/tmp/nope",
+    )
     action = _step_to_action(step)
     assert action.action == "assert_file_not_exists"
     assert action.path == "/tmp/nope"
@@ -562,7 +740,12 @@ def test_step_to_action_assert_image_exists():
     from src.at.generator.yaml_generator import _step_to_action
     from src.at.parser.models import CaseStep, StepType
 
-    step = CaseStep(step_type=StepType.assert_, description="图片存在", action="assert_image_exists", text="/tmp/shot.png")
+    step = CaseStep(
+        step_type=StepType.assert_,
+        description="图片存在",
+        action="assert_image_exists",
+        text="/tmp/shot.png",
+    )
     action = _step_to_action(step)
     assert action.action == "assert_image_exists"
     assert action.path == "/tmp/shot.png"
@@ -572,7 +755,12 @@ def test_step_to_action_assert_image_not_exists():
     from src.at.generator.yaml_generator import _step_to_action
     from src.at.parser.models import CaseStep, StepType
 
-    step = CaseStep(step_type=StepType.assert_, description="图片不存在", action="assert_image_not_exists", text="/tmp/bad.png")
+    step = CaseStep(
+        step_type=StepType.assert_,
+        description="图片不存在",
+        action="assert_image_not_exists",
+        text="/tmp/bad.png",
+    )
     action = _step_to_action(step)
     assert action.action == "assert_image_not_exists"
     assert action.path == "/tmp/bad.png"
@@ -582,7 +770,9 @@ def test_step_to_action_assert_ocr_exists():
     from src.at.generator.yaml_generator import _step_to_action
     from src.at.parser.models import CaseStep, StepType
 
-    step = CaseStep(step_type=StepType.assert_, description="文字存在", action="assert_ocr_exists", text="确认")
+    step = CaseStep(
+        step_type=StepType.assert_, description="文字存在", action="assert_ocr_exists", text="确认"
+    )
     action = _step_to_action(step)
     assert action.action == "assert_ocr_exists"
     assert action.value == "确认"
@@ -592,7 +782,12 @@ def test_step_to_action_assert_ocr_not_exists():
     from src.at.generator.yaml_generator import _step_to_action
     from src.at.parser.models import CaseStep, StepType
 
-    step = CaseStep(step_type=StepType.assert_, description="文字不存在", action="assert_ocr_not_exists", text="错误")
+    step = CaseStep(
+        step_type=StepType.assert_,
+        description="文字不存在",
+        action="assert_ocr_not_exists",
+        text="错误",
+    )
     action = _step_to_action(step)
     assert action.action == "assert_ocr_not_exists"
     assert action.value == "错误"
@@ -602,8 +797,12 @@ def test_step_to_action_assert_window_fallback_uses_selector():
     from src.at.generator.yaml_generator import _step_to_action
     from src.at.parser.models import CaseStep, ElementHint, StepType
 
-    step = CaseStep(step_type=StepType.assert_, description="验证窗口", element_hint=ElementHint.assert_window,
-                    selector={"name_pattern": "终端.*"})
+    step = CaseStep(
+        step_type=StepType.assert_,
+        description="验证窗口",
+        element_hint=ElementHint.assert_window,
+        selector={"name_pattern": "终端.*"},
+    )
     action = _step_to_action(step)
     assert action.action == "assert_window"
     assert action.name_pattern == "终端.*"
@@ -613,7 +812,9 @@ def test_step_to_action_assert_window_fallback_no_selector():
     from src.at.generator.yaml_generator import _step_to_action
     from src.at.parser.models import CaseStep, ElementHint, StepType
 
-    step = CaseStep(step_type=StepType.assert_, description="验证窗口", element_hint=ElementHint.assert_window)
+    step = CaseStep(
+        step_type=StepType.assert_, description="验证窗口", element_hint=ElementHint.assert_window
+    )
     action = _step_to_action(step)
     assert action.action == "assert_window"
     assert action.name_pattern is None
@@ -621,6 +822,7 @@ def test_step_to_action_assert_window_fallback_no_selector():
 
 def test_assert_process_not_running_in_handlers():
     from src.at.executor.handlers import HANDLERS
+
     assert "assert_process_not_running" in HANDLERS
 
 
@@ -633,10 +835,20 @@ def test_assert_prefix_routes_to_assert_steps():
         name="prefix_test",
         module="测试",
         steps=[
-            CaseStep(step_type=StepType.action, description="点击", action="element_action",
-                     element_ref="btn1", selector={"name": "OK", "role": "push button"}),
-            CaseStep(step_type=StepType.action, description="验证元素", action="assert_element",
-                     element_ref="btn2", selector={"name": "Label", "role": "label"}),
+            CaseStep(
+                step_type=StepType.action,
+                description="点击",
+                action="element_action",
+                element_ref="btn1",
+                selector={"name": "OK", "role": "push button"},
+            ),
+            CaseStep(
+                step_type=StepType.action,
+                description="验证元素",
+                action="assert_element",
+                element_ref="btn2",
+                selector={"name": "Label", "role": "label"},
+            ),
         ],
     )
     suite_cases = _build_suite_cases(suite)
@@ -654,10 +866,19 @@ def test_assert_window_prefix_routes_to_assert_steps():
         name="window_test",
         module="测试",
         steps=[
-            CaseStep(step_type=StepType.action, description="操作", action="element_action",
-                     element_ref="btn1", selector={"name": "OK", "role": "push button"}),
-            CaseStep(step_type=StepType.action, description="窗口检查", action="assert_window",
-                     selector={"name_pattern": "终端.*"}),
+            CaseStep(
+                step_type=StepType.action,
+                description="操作",
+                action="element_action",
+                element_ref="btn1",
+                selector={"name": "OK", "role": "push button"},
+            ),
+            CaseStep(
+                step_type=StepType.action,
+                description="窗口检查",
+                action="assert_window",
+                selector={"name_pattern": "终端.*"},
+            ),
         ],
     )
     suite_cases = _build_suite_cases(suite)
@@ -671,15 +892,20 @@ def test_assert_gate_exits_when_no_assertions(tmp_path):
 
     cases = {
         "metadata": {"generated_at": "2026-01-01", "source": "test"},
-        "suites": [
+        "cases": [
             {
                 "id": "no_assert_001",
                 "name": "no_assertions",
                 "module": "测试",
                 "status": "active",
                 "steps": [
-                    {"step_type": "action", "description": "点击", "action": "element_action",
-                     "element_ref": "btn1", "selector": {"name": "OK", "role": "push button"}},
+                    {
+                        "step_type": "action",
+                        "description": "点击",
+                        "action": "element_action",
+                        "element_ref": "btn1",
+                        "selector": {"name": "OK", "role": "push button"},
+                    },
                 ],
             },
         ],
@@ -701,17 +927,27 @@ def test_assert_gate_passes_with_assertions(tmp_path):
 
     cases = {
         "metadata": {"generated_at": "2026-01-01", "source": "test"},
-        "suites": [
+        "cases": [
             {
                 "id": "has_assert_001",
                 "name": "has_assertions",
                 "module": "测试",
                 "status": "active",
                 "steps": [
-                    {"step_type": "action", "description": "点击", "action": "element_action",
-                     "element_ref": "btn1", "selector": {"name": "OK", "role": "push button"}},
-                    {"step_type": "assert", "description": "验证", "action": "assert_element",
-                     "element_ref": "btn2", "selector": {"name": "Label", "role": "label"}},
+                    {
+                        "step_type": "action",
+                        "description": "点击",
+                        "action": "element_action",
+                        "element_ref": "btn1",
+                        "selector": {"name": "OK", "role": "push button"},
+                    },
+                    {
+                        "step_type": "assert",
+                        "description": "验证",
+                        "action": "assert_element",
+                        "element_ref": "btn2",
+                        "selector": {"name": "Label", "role": "label"},
+                    },
                 ],
             },
         ],
@@ -727,20 +963,25 @@ def test_assert_gate_passes_with_assertions(tmp_path):
     assert os.path.isdir(str(tmp_path / "out"))
 
 
-def test_assert_gate_default_false_no_exit(tmp_path):
+def test_assert_gate_disabled_no_exit(tmp_path):
     from src.at.generator.yaml_generator import generate_yaml
 
     cases = {
         "metadata": {"generated_at": "2026-01-01", "source": "test"},
-        "suites": [
+        "cases": [
             {
                 "id": "no_assert_002",
                 "name": "no_assertions",
                 "module": "测试",
                 "status": "active",
                 "steps": [
-                    {"step_type": "action", "description": "点击", "action": "element_action",
-                     "element_ref": "btn1", "selector": {"name": "OK", "role": "push button"}},
+                    {
+                        "step_type": "action",
+                        "description": "点击",
+                        "action": "element_action",
+                        "element_ref": "btn1",
+                        "selector": {"name": "OK", "role": "push button"},
+                    },
                 ],
             },
         ],
@@ -751,5 +992,40 @@ def test_assert_gate_default_false_no_exit(tmp_path):
         mappings_path="",
         output_dir=str(tmp_path / "out2"),
         app_name="test-app",
+        assert_gate=False,
     )
     assert os.path.isdir(str(tmp_path / "out2"))
+
+
+def test_assert_gate_default_true_exits_when_no_assertions(tmp_path):
+    from src.at.generator.yaml_generator import generate_yaml
+
+    cases = {
+        "metadata": {"generated_at": "2026-01-01", "source": "test"},
+        "cases": [
+            {
+                "id": "no_assert_003",
+                "name": "no_assertions",
+                "module": "测试",
+                "status": "active",
+                "steps": [
+                    {
+                        "step_type": "action",
+                        "description": "点击",
+                        "action": "element_action",
+                        "element_ref": "btn1",
+                        "selector": {"name": "OK", "role": "push button"},
+                    },
+                ],
+            },
+        ],
+    }
+    _write_temp(cases, str(tmp_path / "cases.yaml"))
+    with pytest.raises(SystemExit) as exc_info:
+        generate_yaml(
+            cases_path=str(tmp_path / "cases.yaml"),
+            mappings_path="",
+            output_dir=str(tmp_path / "out"),
+            app_name="test-app",
+        )
+    assert exc_info.value.code == 1

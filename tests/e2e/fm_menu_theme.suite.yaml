@@ -9,7 +9,7 @@ setup:
 teardown:
   - action: session_stop
 
-specs:
+suites:
   - id: fm_menu_theme_001
     name: "切换主题-跟随系统→浅色→深色"
     steps:

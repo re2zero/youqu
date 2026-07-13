@@ -7,7 +7,7 @@ env_check:
     name: dde-file-manager
     expect: not_running
 
-specs:
+suites:
   - id: fm_001
     name: open and close file manager
     tags: [smoke]

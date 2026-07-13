@@ -229,14 +229,20 @@ def main():
         help="Only scan source files under these subdirectories (e.g. src widgets)",
     )
 
-    p_at_parse = at_sub.add_parser("parse", help="Parse xlsx into cases.yaml (format conversion only)")
+    p_at_parse = at_sub.add_parser(
+        "parse", help="Parse xlsx into cases.yaml (format conversion only)"
+    )
     p_at_parse.add_argument("--input", required=True, help="Input xlsx or text directory")
     p_at_parse.add_argument("--at-tree", default="", help="(deprecated) Path to at-tree.yaml")
     p_at_parse.add_argument("--output", required=True, help="Output cases.yaml path")
 
-    p_at_tree_info = at_sub.add_parser("tree-info", help="Export compact at-tree listing for AI context")
+    p_at_tree_info = at_sub.add_parser(
+        "tree-info", help="Export compact at-tree listing for AI context"
+    )
     p_at_tree_info.add_argument("--at-tree", required=True, help="Path to at-tree.yaml")
-    p_at_tree_info.add_argument("--output", required=True, help="Output compact tree-info file path")
+    p_at_tree_info.add_argument(
+        "--output", required=True, help="Output compact tree-info file path"
+    )
 
     p_at_map = at_sub.add_parser("map", help="(deprecated) Map operations to AT-SPI elements")
     p_at_map.add_argument("--at-tree", required=True, help="Path to at-tree.yaml")
@@ -245,11 +251,20 @@ def main():
 
     p_at_generate = at_sub.add_parser("generate", help="Generate executable YAML")
     p_at_generate.add_argument("--cases", required=True, help="Path to cases.yaml")
-    p_at_generate.add_argument("--mappings", default="", help="(deprecated) Path to element-mappings.yaml")
+    p_at_generate.add_argument(
+        "--mappings", default="", help="(deprecated) Path to element-mappings.yaml"
+    )
     p_at_generate.add_argument("--output", required=True, help="Output directory")
     p_at_generate.add_argument("--app", default="", help="Application name (e.g. deepin-terminal)")
-    p_at_generate.add_argument("--at-tree", dest="at_tree", default="", help="Path to at-tree.yaml (for app name fallback)")
-    p_at_generate.add_argument("--assert-gate", action="store_true", help="Fail if any generated case has no assertion steps")
+    p_at_generate.add_argument(
+        "--at-tree", dest="at_tree", default="", help="Path to at-tree.yaml (for app name fallback)"
+    )
+    p_at_generate.add_argument(
+        "--no-assert-gate",
+        dest="assert_gate",
+        action="store_false",
+        help="Disable assertion gate (allow cases without assertions)",
+    )
 
     p_at_run = at_sub.add_parser("run", help="Run AT-SPI YAML tests")
     p_at_run.add_argument("--testdir", default="tests/at/yaml", help="Test directory")

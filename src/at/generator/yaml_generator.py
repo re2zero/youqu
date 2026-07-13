@@ -27,23 +27,44 @@ _SKIP_HINTS = {ElementHint.visual_check, ElementHint.physical_device, ElementHin
 
 try:
     from src.at.executor.handlers import HANDLERS as _EXEC_HANDLERS
+
     _VALID_ACTIONS = frozenset(_EXEC_HANDLERS.keys())
 except ImportError:
-    _VALID_ACTIONS = frozenset({
-        "session_start", "session_stop",
-        "keyboard_press", "keyboard_hot_key", "keyboard_type", "keyboard_type_text",
-        "mouse_click", "mouse_right_click", "mouse_double_click",
-        "mouse_scroll", "mouse_drag",
-        "element_action", "element_set_value",
-        "dtk_main_menu", "dtk_context_menu",
-        "dbus_call", "dbus_get_property",
-        "wait", "screenshot",
-        "assert_element", "assert_not_exists", "assert_window",
-        "assert_window_count", "assert_process_running", "assert_process_not_running",
-        "assert_file_exists", "assert_file_not_exists",
-        "assert_image_exists", "assert_image_not_exists",
-        "assert_ocr_exists", "assert_ocr_not_exists",
-    })
+    _VALID_ACTIONS = frozenset(
+        {
+            "session_start",
+            "session_stop",
+            "keyboard_press",
+            "keyboard_hot_key",
+            "keyboard_type",
+            "keyboard_type_text",
+            "mouse_click",
+            "mouse_right_click",
+            "mouse_double_click",
+            "mouse_scroll",
+            "mouse_drag",
+            "element_action",
+            "element_set_value",
+            "dtk_main_menu",
+            "dtk_context_menu",
+            "dbus_call",
+            "dbus_get_property",
+            "wait",
+            "screenshot",
+            "assert_element",
+            "assert_not_exists",
+            "assert_window",
+            "assert_window_count",
+            "assert_process_running",
+            "assert_process_not_running",
+            "assert_file_exists",
+            "assert_file_not_exists",
+            "assert_image_exists",
+            "assert_image_not_exists",
+            "assert_ocr_exists",
+            "assert_ocr_not_exists",
+        }
+    )
 
 
 def _load_yaml(path: str) -> dict | list | None:
@@ -63,7 +84,7 @@ def _extract_elements(mappings: ElementMappingsDoc) -> dict[str, dict]:
 
 def _extract_elements_from_cases(cases_doc: CasesDoc) -> dict[str, dict]:
     elements: dict[str, dict] = {}
-    for suite in cases_doc.suites:
+    for suite in cases_doc.cases:
         for step in suite.steps:
             if step.element_ref and step.selector:
                 elements[step.element_ref] = step.selector
@@ -186,7 +207,9 @@ def _step_to_action_fallback(step: CaseStep) -> SuiteActionStep:
 
 def _step_to_action(step: CaseStep) -> SuiteActionStep | None:
     if step.action and step.action not in _VALID_ACTIONS:
-        print(f"Warning: invalid action '{step.action}' in step '{step.description[:50]}', skipping")
+        print(
+            f"Warning: invalid action '{step.action}' in step '{step.description[:50]}', skipping"
+        )
         return None
 
     if step.action and step.action in _VALID_ACTIONS:
@@ -422,16 +445,18 @@ def _resolve_app_name(app_name: str, at_tree_path: str) -> str:
 
 def _write_app_optimization(cases_doc: CasesDoc, output_dir: str) -> None:
     entries: list[dict] = []
-    for suite in cases_doc.suites:
+    for suite in cases_doc.cases:
         for i, step in enumerate(suite.steps):
             if step.needs_accessible_name:
-                entries.append({
-                    "suite_id": suite.id,
-                    "step_index": i,
-                    "description": step.description,
-                    "suggestion": step.accessible_name_suggestion or "",
-                    "element_hint": step.element_hint.value if step.element_hint else "",
-                })
+                entries.append(
+                    {
+                        "suite_id": suite.id,
+                        "step_index": i,
+                        "description": step.description,
+                        "suggestion": step.accessible_name_suggestion or "",
+                        "element_hint": step.element_hint.value if step.element_hint else "",
+                    }
+                )
 
     if not entries:
         return
@@ -464,7 +489,7 @@ def generate_yaml(
     mappings_path: str = "",
     app_name: str = "",
     at_tree_path: str = "",
-    assert_gate: bool = False,
+    assert_gate: bool = True,
 ) -> None:
     cases_data = _load_yaml(cases_path)
     if not cases_data:
@@ -496,7 +521,7 @@ def generate_yaml(
     _write_app_optimization(cases_doc, output_dir)
 
     suites_by_module: dict[str, list[CaseSuite]] = defaultdict(list)
-    for suite in cases_doc.suites:
+    for suite in cases_doc.cases:
         if suite.status == "skipped":
             continue
         safe_module = suite.module.replace("/", "_")
@@ -515,25 +540,6 @@ def generate_yaml(
             suite_cases = _build_suite_cases(suite)
             all_suite_cases.extend(suite_cases)
 
-            case_steps: list[dict] = []
-            case_assert_steps: list[dict] = []
-            for sc in suite_cases:
-                for s in sc.steps:
-                    case_steps.append(s.model_dump(mode="json", exclude_none=True))
-                for s in sc.assert_steps:
-                    case_assert_steps.append(s.model_dump(mode="json", exclude_none=True))
-
-            if not case_steps and not case_assert_steps:
-                continue
-
-            case_yaml = {"app": resolved_app, "module": module}
-            if case_steps:
-                case_yaml["steps"] = case_steps
-            if case_assert_steps:
-                case_yaml["assert_steps"] = case_assert_steps
-            case_path = module_dir / f"test_{suite.id}.yaml"
-            _write_yaml(case_yaml, str(case_path))
-
         if not all_suite_cases:
             continue
 
@@ -542,12 +548,12 @@ def generate_yaml(
             app=resolved_app,
             module=module,
             setup=[SuiteActionStep(action="session_start", command=resolved_app, wait=3.0)],
-            specs=all_suite_cases,
+            suites=all_suite_cases,
             teardown=[SuiteActionStep(action="session_stop")],
         )
 
-        suite_path = module_dir / "suite.suite.yaml"
-        _write_yaml(suite_config.model_dump(mode="json", exclude_none=True, by_alias=True), str(suite_path))
+        suite_path = module_dir / f"{module}.suite.yaml"
+        _write_yaml(suite_config.model_dump(mode="json", exclude_none=True), str(suite_path))
         print(f"Wrote {suite_path} ({len(all_suite_cases)} suite cases)")
 
         no_assert = [sc for sc in all_suite_cases if not sc.assert_steps]
@@ -562,7 +568,8 @@ def generate_yaml(
         print(f"\n⚠ Assertion Coverage: {total_no_assert}/{total_cases} cases have no assertions")
         if assert_gate:
             import sys
-            print("  --assert-gate enabled: treating as error")
+
+            print("  assert-gate enabled: treating as error")
             sys.exit(1)
     elif total_cases > 0:
         print(f"\n✓ Assertion Coverage: all {total_cases} cases have assertions")

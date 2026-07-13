@@ -80,7 +80,12 @@ def cmd_dump(args):
                     bar_w = 20
                     filled = bar_w * i // total if total else 0
                     bar = "█" * filled + "░" * (bar_w - filled)
-                    print(f"\r\033[K  scanning: {bar} {i}/{total} ({pct}%)", file=sys.stderr, end="", flush=True)
+                    print(
+                        f"\r\033[K  scanning: {bar} {i}/{total} ({pct}%)",
+                        file=sys.stderr,
+                        end="",
+                        flush=True,
+                    )
 
             def _file_done_cb(rel_path: str, classes: list, error):
                 for cls in classes:
@@ -88,7 +93,10 @@ def cmd_dump(args):
                     target = ok_path if has_names else gaps_path
                     append_scan_entry(str(target), cls)
 
-            from src.at.scanner.clang_scanner import _get_qt_dtk_include_flags, _get_cxx_stdlib_flags
+            from src.at.scanner.clang_scanner import (
+                _get_qt_dtk_include_flags,
+                _get_cxx_stdlib_flags,
+            )
 
             extra_args = ["-x", "c++", "-std=c++17", "-fPIC"]
             extra_args.extend(_get_cxx_stdlib_flags())
@@ -145,9 +153,7 @@ def cmd_dump(args):
                             break
                         if not label:
                             label = f"unnamed_{state_index}"
-                        safe_label = "".join(
-                            c if c.isalnum() or c in "_-" else "_" for c in label
-                        )
+                        safe_label = "".join(c if c.isalnum() or c in "_-" else "_" for c in label)
                         state_path = states_dir / f"{state_index:02d}_{safe_label}.yaml"
                         write_runtime_dump(
                             state_tree,
@@ -185,7 +191,9 @@ def cmd_dump(args):
 
         if args.src and scan_result:
             stats = scan_result.stats
-            n_ok = sum(1 for c in scan_result.classes if c.get("object_names") or c.get("accessible_names"))
+            n_ok = sum(
+                1 for c in scan_result.classes if c.get("object_names") or c.get("accessible_names")
+            )
             n_gaps = len(scan_result.classes) - n_ok
             msg = f"  Scan done: {len(scan_result.classes)} UI classes in {stats['total_files']} files"
             if stats["failed_files"]:
@@ -203,6 +211,7 @@ def cmd_dump(args):
         static_classes = scan_result.classes if scan_result else []
 
         from src.at.scanner.merger import dedup_runtime_tree
+
         runtime_tree = dedup_runtime_tree(runtime_tree)
 
         states_dir = dump_dir / "states"
@@ -266,7 +275,7 @@ def cmd_generate(args):
             output_dir=args.output,
             app_name=getattr(args, "app", ""),
             at_tree_path=getattr(args, "at_tree", ""),
-            assert_gate=getattr(args, "assert_gate", False),
+            assert_gate=getattr(args, "assert_gate", True),
         )
     except ImportError:
         _not_implemented("generate")

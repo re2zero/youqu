@@ -9,7 +9,12 @@ from typing import Any
 
 from src.at.executor.crash_monitor import CrashMonitor
 from src.at.executor.handlers import HANDLERS, get_dog
-from src.at.executor.models import AtSpecResult, AtSpecResult as SpecResult, AtSuiteResult, SpecStatus
+from src.at.executor.models import (
+    AtSpecResult,
+    AtSpecResult as SpecResult,
+    AtSuiteResult,
+    SpecStatus,
+)
 from src.at.parser.models import EnvCheckItem, SuiteActionStep, SuiteCase, SuiteConfig
 
 _log = logging.getLogger(__name__)
@@ -20,7 +25,8 @@ _LIFECYCLE_ACTIONS = frozenset({"session_start", "session_stop"})
 def check_env_process(item: EnvCheckItem) -> bool:
     result = subprocess.run(
         ["pgrep", "-x", item.name],
-        capture_output=True, timeout=5,
+        capture_output=True,
+        timeout=5,
     )
     if item.expect == "not_running":
         return result.returncode != 0
@@ -76,7 +82,8 @@ def _wait_for_selector(wait_cond, context: dict[str, Any]) -> bool:
 
 
 def _extract_selector_from_step(
-    step: SuiteActionStep, elements: dict,
+    step: SuiteActionStep,
+    elements: dict,
 ) -> dict | None:
     if step.ref and step.ref in elements:
         attrs = elements[step.ref]
@@ -92,7 +99,9 @@ def _extract_selector_from_step(
 
 
 def _peek_next_selector(
-    idx: int, all_steps: list[SuiteActionStep], elements: dict,
+    idx: int,
+    all_steps: list[SuiteActionStep],
+    elements: dict,
 ) -> dict | None:
     if idx + 1 >= len(all_steps):
         return None
@@ -263,10 +272,14 @@ class AtSuiteExecutor:
             if err:
                 result.error = f"suite setup failed: {err}"
                 for s in specs:
-                    result.specs.append(SpecResult(
-                        id=s.id, name=s.name,
-                        status=SpecStatus.SKIPPED, error=result.error,
-                    ))
+                    result.specs.append(
+                        SpecResult(
+                            id=s.id,
+                            name=s.name,
+                            status=SpecStatus.SKIPPED,
+                            error=result.error,
+                        )
+                    )
                     result.skipped += 1
                 result.duration = time.monotonic() - start
                 return result
@@ -286,11 +299,14 @@ class AtSuiteExecutor:
                 if self.suite.fast_fail:
                     remaining = [s for s in specs if s.id != spec.id]
                     for s in remaining:
-                        result.specs.append(SpecResult(
-                            id=s.id, name=s.name,
-                            status=SpecStatus.SKIPPED,
-                            error="cancelled by fast_fail",
-                        ))
+                        result.specs.append(
+                            SpecResult(
+                                id=s.id,
+                                name=s.name,
+                                status=SpecStatus.SKIPPED,
+                                error="cancelled by fast_fail",
+                            )
+                        )
                         result.skipped += 1
                     break
             elif spec_result.status == SpecStatus.SKIPPED:
@@ -307,18 +323,17 @@ class AtSuiteExecutor:
         return result
 
     def _filter_specs(
-        self, spec_ids: str | None, tags: str | None,
+        self,
+        spec_ids: str | None,
+        tags: str | None,
     ) -> list[SuiteCase]:
-        candidates = list(self.suite.specs)
+        candidates = list(self.suite.suites)
         if spec_ids:
             ids = {s.strip() for s in spec_ids.split(",") if s.strip()}
             candidates = [s for s in candidates if s.id in ids]
         if tags:
             tag_list = [t.strip() for t in tags.split(",") if t.strip()]
-            candidates = [
-                s for s in candidates
-                if any(t in s.tags for t in tag_list)
-            ]
+            candidates = [s for s in candidates if any(t in s.tags for t in tag_list)]
         return candidates
 
     def _run_one_spec(

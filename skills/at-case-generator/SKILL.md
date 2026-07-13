@@ -159,7 +159,7 @@ output against them after mapping.
 metadata:
   generated_at: "2024-01-01T00:00:00"
   source: "input.xlsx"
-suites:
+cases:
   - id: "suite-id"
     name: "Suite name"
     module: "module-name"
@@ -263,7 +263,7 @@ youqu at generate --cases <mapped_cases.yaml> --output <output_dir> \
   --app <app_name> --at-tree <at_tree.yaml>
 ```
 
-Output: `elements.yaml`, `<module>/suite.suite.yaml`, `app-optimization.md`.
+Output: `elements.yaml`, `<module>/<module>.suite.yaml`, `app-optimization.md`.
 
 ### 4b: Validate
 

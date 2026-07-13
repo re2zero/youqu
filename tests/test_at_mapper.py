@@ -26,7 +26,7 @@ def test_map_elements_deprecated(tmp_path, capsys):
     tree_file = tmp_path / "tree.yaml"
     tree_file.write_text("tree: []\n", encoding="utf-8")
     cases_file = tmp_path / "cases.yaml"
-    cases_file.write_text("suites: []\n", encoding="utf-8")
+    cases_file.write_text("cases: []\n", encoding="utf-8")
     out_file = tmp_path / "mappings.yaml"
 
     map_elements(str(tree_file), str(cases_file), str(out_file))
