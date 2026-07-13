@@ -25,7 +25,7 @@ at-tree.yaml ──[tree-info]──→ compact_tree.txt ───────�
 
 Format-only conversion of xlsx/csv into raw cases.yaml. No LLM, no semantic
 mapping. Produces CaseStep entries with step_type, description, element_hint,
-menu_path — but action/element_ref/selector are null.
+items — but action/element_ref/selector are null.
 
 ```bash
 youqu at parse --input <path> --output <path>
@@ -105,7 +105,7 @@ suites:
       - step_type: "action"
         description: "step description"
         element_hint: "dtk_main_menu"
-        menu_path: ["Item1", "Item2"]
+        items: ["Item1", "Item2"]
         action: "dtk_main_menu"          # filled by AI
         key: null                         # keyboard combo
         text: null                        # input text / path / app name
@@ -124,7 +124,7 @@ suites:
 | step_type | string | "action" \| "assert" \| "navigate" |
 | description | string | Step description from xlsx |
 | element_hint | string | Hint for element type |
-| menu_path | list[string]/null | Menu navigation path |
+| items | list[string]/null | Menu navigation path |
 | action | string/null | Action type (AI fills — see valid values below) |
 | key | string/null | Keyboard combo (e.g., "ctrl+shift+a", "enter") |
 | text | string/null | Text to type for keyboard_type; also used as path/app/value for assert actions |

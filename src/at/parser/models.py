@@ -87,7 +87,7 @@ class CaseStep(BaseModel):
     step_type: StepType
     description: str
     element_hint: Optional[ElementHint] = None
-    menu_path: Optional[list[str]] = None
+    items: Optional[list[str]] = None
 
     action: Optional[str] = None
     key: Optional[str] = None
@@ -134,7 +134,7 @@ class MappingEntry(BaseModel):
     description: str
     step_type: StepType
     element_hint: Optional[ElementHint] = None
-    menu_path: Optional[list[str]] = None
+    items: Optional[list[str]] = None
     element_ref: Optional[str] = None
     selector: Optional[MappingSelector] = None
     status: MappingStatus = MappingStatus.mapped

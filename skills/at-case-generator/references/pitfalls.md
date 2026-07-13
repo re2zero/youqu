@@ -202,7 +202,7 @@ item, (b) right-click without selecting anything, (c) assertion that a
 context menu is displayed. Misclassifying these produces empty menu paths,
 garbage selectors, or vacuous assertions.
 
-**Impact**: dtk_context_menu with no menu_path is a no-op. element_action
+**Impact**: dtk_context_menu with no items is a no-op. element_action
 with selector "右键菜单" finds nothing. assert_element never validates
 the menu.
 

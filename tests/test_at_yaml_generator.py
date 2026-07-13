@@ -30,7 +30,7 @@ CASES_YAML = {
             "module": "菜单",
             "status": "active",
             "steps": [
-                {"step_type": "navigate", "description": "打开文件菜单", "element_hint": "dtk_main_menu", "menu_path": ["文件", "新建窗口"]},
+                {"step_type": "navigate", "description": "打开文件菜单", "element_hint": "dtk_main_menu", "items": ["文件", "新建窗口"]},
                 {"step_type": "action", "description": "点击播放", "element_hint": "click"},
             ],
         },
@@ -65,7 +65,7 @@ MAPPINGS_YAML = {
             "description": "打开文件菜单",
             "step_type": "navigate",
             "element_hint": "dtk_main_menu",
-            "menu_path": ["文件", "新建窗口"],
+            "items": ["文件", "新建窗口"],
             "status": "mapped",
         },
         {
@@ -136,7 +136,7 @@ def test_step_to_action_menu_comb():
     from src.at.generator.yaml_generator import _step_to_action
     from src.at.parser.models import CaseStep, ElementHint, StepType
 
-    step = CaseStep(step_type=StepType.navigate, description="打开文件", element_hint=ElementHint.dtk_main_menu, menu_path=["文件", "新建窗口"])
+    step = CaseStep(step_type=StepType.navigate, description="打开文件", element_hint=ElementHint.dtk_main_menu, items=["文件", "新建窗口"])
     action = _step_to_action(step)
     assert action.action == "dtk_main_menu"
     assert action.items == ["文件", "新建窗口"]
@@ -288,7 +288,7 @@ def test_step_to_action_dtk_context_menu():
     from src.at.generator.yaml_generator import _step_to_action
     from src.at.parser.models import CaseStep, ElementHint, StepType
 
-    step = CaseStep(step_type=StepType.navigate, description="右键菜单", action="dtk_context_menu", menu_path=["复制", "粘贴"])
+    step = CaseStep(step_type=StepType.navigate, description="右键菜单", action="dtk_context_menu", items=["复制", "粘贴"])
     action = _step_to_action(step)
     assert action.action == "dtk_context_menu"
     assert action.items == ["复制", "粘贴"]

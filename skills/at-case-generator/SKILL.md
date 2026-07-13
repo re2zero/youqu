@@ -60,7 +60,7 @@ youqu at parse --input <xlsx_or_csv> --output <cases_yaml>
 ```
 
 Output: CaseStep entries with `step_type`, `description`, `element_hint`,
-`menu_path` filled; `action`, `element_ref`, `selector` are null. Format-only.
+`items` filled; `action`, `element_ref`, `selector` are null. Format-only.
 
 ### 2b: Generate compact tree for AI reading
 

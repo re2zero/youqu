@@ -370,7 +370,13 @@ def handle_dtk_main_menu(step: SuiteActionStep, context: dict) -> None:
     nav = AtMenuNavigator(context.get("app", ""))
     nav.open_main_menu()
     if items:
-        nav.select(items)
+        try:
+            nav.select(items)
+        except BaseException:
+            nav.cancel()
+            raise
+    else:
+        nav.cancel()
 
 
 def handle_dtk_context_menu(step: SuiteActionStep, context: dict) -> None:
@@ -390,7 +396,15 @@ def handle_dtk_context_menu(step: SuiteActionStep, context: dict) -> None:
     nav = AtMenuNavigator(context.get("app", ""))
     nav.open_context_menu(x, y)
     if items:
-        nav.select(items)
+        try:
+            nav.select(items)
+        except BaseException:
+            # Dismiss the menu so the next spec doesn't see a stale menu
+            nav.cancel()
+            raise
+    else:
+        # No items to select — dismiss the unused menu
+        nav.cancel()
 
 
 def handle_dbus_call(step: SuiteActionStep, context: dict) -> None:

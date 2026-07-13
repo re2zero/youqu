@@ -133,13 +133,13 @@ def _normalize_key(key: str | None) -> str | None:
 def _step_to_action_fallback(step: CaseStep) -> SuiteActionStep:
     action_name = STEP_TYPE_MAP.get(step.step_type.value, "element_action")
 
-    if step.element_hint == ElementHint.dtk_main_menu and step.menu_path:
-        return SuiteActionStep(action="dtk_main_menu", items=step.menu_path)
+    if step.element_hint == ElementHint.dtk_main_menu and step.items:
+        return SuiteActionStep(action="dtk_main_menu", items=step.items)
 
-    if step.element_hint == ElementHint.dtk_context_menu and step.menu_path:
+    if step.element_hint == ElementHint.dtk_context_menu and step.items:
         return SuiteActionStep(
             action="dtk_context_menu",
-            items=step.menu_path,
+            items=step.items,
         )
 
     if step.element_hint == ElementHint.titlebar:
@@ -196,13 +196,13 @@ def _step_to_action(step: CaseStep) -> SuiteActionStep | None:
         if step.action == "dtk_main_menu":
             return SuiteActionStep(
                 action="dtk_main_menu",
-                items=step.menu_path or [],
+                items=step.items or [],
             )
 
         if step.action == "dtk_context_menu":
             return SuiteActionStep(
                 action="dtk_context_menu",
-                items=step.menu_path or [],
+                items=step.items or [],
                 ref=step.element_ref,
                 selector=step.selector,
             )

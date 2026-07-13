@@ -56,7 +56,7 @@ class TestCasesModels:
         assert step.step_type == StepType.action
         step_navigate = CaseStep(
             step_type=StepType.navigate, description="open menu",
-            element_hint=ElementHint.dtk_main_menu, menu_path=["文件"],
+            element_hint=ElementHint.dtk_main_menu, items=["文件"],
         )
         assert step_navigate.element_hint == ElementHint.dtk_main_menu
 
@@ -66,12 +66,12 @@ class TestCasesModels:
             id="s1", name="Menu Test", module="菜单",
             steps=[
                 CaseStep(step_type=StepType.navigate, description="open file menu",
-                          element_hint=ElementHint.dtk_main_menu, menu_path=["文件"]),
+                          element_hint=ElementHint.dtk_main_menu, items=["文件"]),
                 CaseStep(step_type=StepType.action, description="click new window"),
             ],
         )
         assert len(suite.steps) == 2
-        assert suite.steps[0].menu_path == ["文件"]
+        assert suite.steps[0].items == ["文件"]
 
     def test_cases_doc_validation(self):
         from src.at.parser.models import CaseSuite, CasesDoc

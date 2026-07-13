@@ -154,6 +154,11 @@ class AtMenuNavigator:
         gi.require_version("Atspi", "2.0")
         from gi.repository import Atspi, GLib
 
+        try:
+            Atspi.init()
+        except Exception:
+            pass
+
         focused_name = [""]
         found = [False]
         iteration = [0]
@@ -171,7 +176,7 @@ class AtMenuNavigator:
                 pass
 
         listener = Atspi.EventListener.new(on_focus_event)
-        Atspi.EventListener.register(listener, "object:state-changed:focused")
+        listener.register("object:state-changed:focused")
 
         loop = GLib.MainLoop()
 
@@ -216,7 +221,7 @@ class AtMenuNavigator:
         try:
             loop.run()
         finally:
-            Atspi.EventListener.deregister(listener, "object:state-changed:focused")
+            listener.deregister("object:state-changed:focused")
 
         if watchdog_fired[0]:
             return False, f"menu navigation timed out after {watchdog_ms}ms"
