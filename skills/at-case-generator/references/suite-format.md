@@ -194,5 +194,5 @@ Collects all steps with `needs_accessible_name: true`:
 | Menu actions | main_menu_comb, context_menu_comb | dtk_main_menu, dtk_context_menu |
 | Assertions | Inline per step (step.assert) | Case-level assert_steps[] |
 | Element registry | elements.yaml (app, vars, elements) | elements.yaml (elements only) |
-| Setup wait | wait: 1.0 (seconds) | wait: 3.0 (seconds) |
+| Setup wait | wait: 1.0 (seconds) | wait: 2.0 (seconds) |
 | Suite filename | various | {module}.suite.yaml |

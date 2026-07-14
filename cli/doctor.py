@@ -370,30 +370,7 @@ class _Doctor:
         print(f"\n  Found {len(available)} YouQu skills: {', '.join(available)}")
         print("  These enable AI agents to generate and run test cases automatically.")
 
-        CLI_CHOICES = {
-            "1": ("Claude", Path.home() / ".claude" / "skills"),
-            "2": ("OpenCode", Path.home() / ".config" / "opencode" / "skills"),
-        }
-
-        print("\n  Which AI agent CLI are you using?")
-        for k, (name, path) in CLI_CHOICES.items():
-            print(f"    {k}. {name:10s} → {path}")
-        print("    s. Skip (don't install skills)")
-
-        try:
-            choice = input("  Enter choice: ").strip().lower()
-        except (EOFError, KeyboardInterrupt):
-            print("\n  Skipped.\n")
-            return
-
-        if choice == "s":
-            return
-
-        if choice not in CLI_CHOICES:
-            print(f"\n  Unknown choice '{choice}', skipped.\n")
-            return
-
-        cli_name, target_dir = CLI_CHOICES[choice]
+        target_dir = Path.home() / ".agents" / "skills"
         target_dir.mkdir(parents=True, exist_ok=True)
 
         installed = 0
@@ -416,4 +393,4 @@ class _Doctor:
             self._ok(f"installed {installed} skills → {target_dir}")
         else:
             self._fail(f"installed {installed}/{len(available)} skills")
-        print(f"  Restart {cli_name} to load the new skills.\n")
+        print(f"  Skill installation path: {target_dir}\n")

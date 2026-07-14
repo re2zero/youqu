@@ -4,9 +4,9 @@ build-backend = "hatchling.build"
 
 [project]
 name = "youqu-ai"
-version = "2.17.3"
+version = "2.18.0"
 authors = [
-    { name = "wangpeng", email = "781757836@qq.com" },
+    { name = "re2zero", email = "yangwu@uniontech.com" },
 ]
 
 description = "youqu"
