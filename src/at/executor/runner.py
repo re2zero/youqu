@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
 from typing import Optional
 
@@ -9,6 +10,7 @@ import yaml
 from src.at.executor.executor import AtSuiteExecutor
 from src.at.executor.models import SpecStatus
 from src.at.parser.models import SuiteConfig
+from src.at.parser.variables import substitute_dict
 
 _log = logging.getLogger("youqu.at.executor")
 
@@ -67,6 +69,34 @@ def _load_and_run_suite(
     data = _parse_yaml(suite_path)
     if data is None:
         return {"suite": str(suite_path), "status": "error", "error": "invalid YAML"}
+
+    # Variable substitution for suite YAML
+    variables = data.get("vars", {}) or {}
+    if isinstance(variables, dict):
+        variables.setdefault("YAML_DIR", str(suite_path.parent))
+        project_root = Path(os.getcwd())
+        variables.setdefault("PROJECT_ROOT", str(project_root))
+        
+        _default_test_files = str(project_root / "tests" / "files")
+        variables.setdefault(
+            "TEST_FILES_DIR",
+            os.environ.get("YOUQU_TEST_FILES_DIR", _default_test_files),
+        )
+        
+        _raw_app = data.get("app", "")
+        if _raw_app:
+            variables.setdefault(
+                "APP_PATH",
+                os.path.basename(_raw_app) if "/" in str(_raw_app) else str(_raw_app),
+            )
+
+        for _ in range(5):
+            prev = dict(variables)
+            variables = {k: substitute_dict({k: v}, variables)[k] for k, v in variables.items()}
+            if variables == prev:
+                break
+
+        data = substitute_dict(data, variables)
 
     try:
         config = SuiteConfig.model_validate(data)
