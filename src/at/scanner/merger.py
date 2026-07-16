@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 from typing import Any
 
@@ -16,11 +17,90 @@ from src.at.scanner.clang_scanner import _ALL_UI_CLASSES
 
 logger = logging.getLogger(__name__)
 
+# Roles that are noise when they appear as leaf nodes (no children).
+# Containers with these roles are kept if they have children (structural).
+_NOISE_LEAF_ROLES: frozenset[str] = frozenset(
+    {
+        "panel",
+        "form",
+        "scroll pane",
+        "viewport",
+        "label",
+        "table cell",
+    }
+)
+
+# Name patterns that indicate auto-generated or non-interactive nodes.
+_NOISE_NAME_PATTERNS: list[re.Pattern] = [
+    re.compile(r"^Form_"),
+    re.compile(r"^qt_"),
+    re.compile(r"^\d+$"),
+    re.compile(r"^DMainWindow$"),
+    re.compile(r"^DTitlebar"),
+]
+
+_INTERACTIVE_ROLES: frozenset[str] = frozenset(
+    {
+        "push button",
+        "check box",
+        "radio button",
+        "toggle button",
+        "combo box",
+        "entry",
+        "text",
+        "spin button",
+        "slider",
+        "list item",
+        "menu item",
+        "menu",
+        "tab",
+        "tree item",
+        "tree",
+        "link",
+        "button",
+        "page tab",
+        "page tab list",
+    }
+)
+
+# AT-SPI actions that are system-level, not user-facing.
+# Nodes with only these actions are containers, not interactive controls.
+_NON_USER_ACTIONS: frozenset[str] = frozenset(
+    {
+        "SetFocus",
+        "SetSelected",
+        "ClearSelection",
+        "SelectAll",
+        "DeselectAll",
+        "GrabFocus",
+        "Focus",
+    }
+)
+
 
 def _is_noise_leaf(node: dict) -> bool:
     if node.get("children"):
         return False
     return not node.get("name") and not node.get("object_name") and not node.get("accessible_id")
+
+
+def _is_noise_name(node: dict) -> bool:
+    name = node.get("name", "")
+    if not name:
+        return False
+    return any(p.match(name) for p in _NOISE_NAME_PATTERNS)
+
+
+def _is_noise_node(node: dict) -> bool:
+    """Determine if a node is noise (should be filtered from the tree)."""
+    if _is_noise_leaf(node):
+        return True
+    role = node.get("role", "")
+    if role in _NOISE_LEAF_ROLES and not node.get("children"):
+        return True
+    if _is_noise_name(node) and not node.get("children"):
+        return True
+    return False
 
 
 def append_scan_entry(path: str, entry: dict) -> None:
@@ -34,14 +114,33 @@ def filter_noise(tree: list[dict]) -> list[dict]:
     def _filter_recursive(nodes: list[dict]) -> list[dict]:
         result = []
         for node in nodes:
-            if _is_noise_leaf(node):
+            if _is_noise_node(node):
                 continue
             if "children" in node:
                 node["children"] = _filter_recursive(node["children"])
+                if not node["children"] and node.get("role", "") in _NOISE_LEAF_ROLES:
+                    continue
             result.append(node)
         return result
 
     return _filter_recursive(tree)
+
+
+def classify_nodes(tree: list[dict]) -> None:
+
+    def _classify(node: dict) -> None:
+        actions = node.get("actions", [])
+        role = node.get("role", "")
+        user_actions = [a for a in actions if a not in _NON_USER_ACTIONS]
+        if user_actions or role in _INTERACTIVE_ROLES:
+            node["classification"] = "interactive"
+        else:
+            node["classification"] = "container"
+        for child in node.get("children", []):
+            _classify(child)
+
+    for node in tree:
+        _classify(node)
 
 
 def write_runtime_dump(
@@ -140,6 +239,9 @@ _NODE_DEFAULTS: dict[str, Any] = {
     "state_labels": [],
     "source": "runtime",
     "class_name": "",
+    "comment": "",
+    "annotation_status": "draft",
+    "classification": "",
 }
 
 _NODE_KEY_ORDER = [
@@ -533,6 +635,7 @@ def write_at_tree_yaml(merged_tree: list[dict], output_path: str, app_name: str 
     removed = len(merged_tree) - len(filtered)
     if removed:
         logger.info("Filter removed %d noise nodes from %d", removed, len(merged_tree))
+    classify_nodes(filtered)
     _normalize_tree(filtered)
     path = Path(output_path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -542,3 +645,36 @@ def write_at_tree_yaml(merged_tree: list[dict], output_path: str, app_name: str 
         yaml.dump(doc, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
 
     logger.info("Wrote at-tree.yaml to %s (%d root nodes)", output_path, len(filtered))
+
+
+def write_element_gaps(tree: list[dict], path: str, app_name: str = "") -> None:
+    classify_nodes(tree)
+    interactive_nodes = [
+        n for n in _flatten_runtime_tree(tree) if n.get("classification") == "interactive"
+    ]
+    gaps = [
+        {
+            "id": n.get("id", ""),
+            "name": n.get("name", ""),
+            "role": n.get("role", ""),
+            "class_name": n.get("class_name", ""),
+            "suggestion": f'Add setAccessibleName("{n.get("name", "")}") in source code',
+        }
+        for n in interactive_nodes
+        if not n.get("accessible_id") and not n.get("object_name")
+    ]
+    total = len(interactive_nodes)
+    report = {
+        "version": "1.0",
+        "app": app_name,
+        "summary": {
+            "total_interactive": total,
+            "with_accessible_id": total - len(gaps),
+            "missing_accessible_id": len(gaps),
+        },
+        "gaps": gaps,
+    }
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        yaml.dump(report, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
+    logger.info("Wrote element_gaps.yaml to %s (%d gaps)", path, len(gaps))

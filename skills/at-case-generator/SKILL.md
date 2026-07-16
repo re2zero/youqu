@@ -32,14 +32,25 @@ this) are the AI.** Framework provides data tools; you provide understanding.
 ```
 Step 1: Pre-flight checks
 Step 2: Data preparation
-    youqu at parse <xlsx> → cases.yaml (raw, format-only)
-    youqu at tree-info <at-tree> → compact_tree.txt (for AI reading)
+    youqu at parse <xlsx> → cases_raw.yaml (raw, format-only)
+    youqu at dump → at-tree.yaml (denoised) + element_gaps.yaml
+    youqu at tree-info --format yaml <at-tree> → at-tree-annotated.yaml (structured, for AI)
+Step 2.5: AT tree annotation (AI session)
+    AI fills comment for each interactive element → at-tree-annotated.yaml (draft)
+    Human reviews → at-tree-annotated.yaml (reviewed)
+    youqu at validate --gate 1
+Step 2.7: Case normalization (AI session)
+    AI groups cases by GUI interface → suite-cases.yaml + cases_non_gui.yaml
+    AI adds 4-field suite annotations (测试界面, 测试功能, 前置条件, AT元素引用)
+    youqu at validate --gate 2
 Step 3: AI semantic mapping (KEY STEP — AI does this through understanding)
-    AI reads compact_tree.txt + raw cases.yaml
+    AI reads at-tree-annotated.yaml + suite-cases.yaml
     AI fills action, element_ref, selector, items, key, text, assertion
-    AI writes semantically mapped cases.yaml
+    AI writes cases_mapped.yaml with format example in header
+    youqu at validate --gate 3
 Step 4: Generate + validate
     youqu at generate --cases <mapped> --output <dir> --app <app> --at-tree <tree>
+    youqu at validate --gate 4
     youqu at run --testdir <dir>  [NOT python -m src.yaml_test.suite]
 ```
 
@@ -62,14 +73,15 @@ youqu at parse --input <xlsx_or_csv> --output <cases_yaml>
 Output: CaseStep entries with `step_type`, `description`, `element_hint`,
 `items` filled; `action`, `element_ref`, `selector` are null. Format-only.
 
-### 2b: Generate compact tree for AI reading
+### 2b: Generate structured annotated tree for AI reading
 
 ```bash
-youqu at tree-info --at-tree <at_tree.yaml> --output <compact_tree.txt>
+youqu at tree-info --at-tree <at_tree.yaml> --output <at-tree-annotated.yaml> --format yaml
 ```
 
-One line per AT-SPI node: `nID | role: <role> | name: <name> | parent: <path>`.
-Typically 500-2000 lines. Contains full parent-child hierarchy.
+Outputs structured YAML with `comment`, `annotation_status`, `classification` fields
+for each node. The AI fills `comment` in Step 2.5; `classification` is pre-set by
+the denoise filter (interactive/container). Replaces the old flat `compact_tree.txt`.
 
 ### 2c: Acquire at-tree.yaml (if not present)
 
@@ -79,11 +91,88 @@ youqu at dump dtk <app_name> --src <source_dir> --output <output_dir>
 
 Requires desktop environment with target app running.
 
+## Step 2.5: AT Tree Annotation (AI Session)
+
+You (the agent) annotate each interactive element in `at-tree-annotated.yaml` with
+a `comment` field describing its GUI location and function.
+
+### Comment Format
+
+```
+GUI位置: <界面位置描述> | 功能: <功能描述>
+```
+
+Examples:
+- `GUI位置: 工具栏第一个按钮 | 功能: 打开文件`
+- `GUI位置: 左侧导航栏 | 功能: 切换书架视图`
+- `GUI位置: 设置对话框-通用标签页 | 功能: 设置默认字号`
+
+### Annotation Procedure
+
+1. Read `at-tree-annotated.yaml`
+2. For each node with `classification: interactive`:
+   - Infer the GUI location from parent chain (role/name hierarchy)
+   - Infer the function from `name`, `object_name`, `role`
+   - Write the `comment` field
+   - Set `annotation_status: draft`
+3. Human reviews and corrects annotations
+4. Set `annotation_status: reviewed` on corrected entries
+5. Run `youqu at validate --gate 1 --at-tree-annotated <path> --element-gaps <path>`
+
+### Element Gaps
+
+`element_gaps.yaml` lists interactive elements missing `object_name` and
+`accessible_id`. These need app-side `setAccessibleName()` to be fully
+AT-SPI addressable. Report gaps to the user — do not attempt to fix app source.
+
+## Step 2.7: Case Normalization (AI Session)
+
+You (the agent) normalize `cases_raw.yaml` into `suite-cases.yaml` with
+interface-based grouping and suite annotations.
+
+### Normalization Procedure
+
+1. Read `cases_raw.yaml`
+2. Separate non-GUI cases (terminal commands, DBus without UI, HTTP) into
+   `cases_non_gui.yaml` with `status: non_gui`
+3. Group remaining cases by GUI interface (not xlsx module path):
+   - Cases testing the same interface flow → one suite
+   - Cap: 15 cases per suite
+   - LLM-assisted grouping based on step descriptions
+4. For each suite, add 4 annotation fields:
+   - `测试界面`: which GUI interface this suite tests
+   - `测试功能`: what functionality this suite covers
+   - `前置条件`: setup requirements (moved from setup steps)
+   - `AT元素引用`: list of AT tree element names used by this suite
+5. Split compound steps (multiple operations in one step) into atomic steps
+6. Run `youqu at validate --gate 2 --suite-cases <path> --at-tree-annotated <path>`
+
+### Suite Annotation Example
+
+```yaml
+cases:
+  - id: "suite_reader_toolbar"
+    name: "阅读器工具栏功能"
+    status: "active"
+    annotation:
+      测试界面: "主窗口-工具栏"
+      测试功能: "工具栏按钮操作（打开/保存/书签）"
+      前置条件: "应用已启动，文档已打开"
+      AT元素引用: ["open_button", "save_button", "bookmark_button"]
+    steps:
+      - step_type: "action"
+        description: "点击打开按钮"
+      - step_type: "assert"
+        description: "验证文件已打开"
+```
+
 ## Step 3: AI Semantic Mapping (KEY STEP)
 
 **You (the agent executing this skill) do the mapping.** No external API
-calls, no scripts, no intermediate files. Read each case description,
-understand the intent, fill semantic fields directly.
+calls, no scripts, no intermediate files. Read each case description from
+`suite-cases.yaml`, understand the intent, match against the annotated AT-SPI
+tree (`at-tree-annotated.yaml`), and fill semantic fields directly in
+`cases_mapped.yaml`.
 
 ### CRITICAL: No Script-Based Mapping
 
@@ -104,9 +193,9 @@ Script-based mapping is a known failure mode — do not repeat it.
 ### Batch Processing
 
 For >20 cases, process in batches of ≤10:
-1. Read 10 case descriptions + relevant compact_tree.txt sections
+1. Read 10 case descriptions + relevant `at-tree-annotated.yaml` sections
 2. Map all 10 through understanding
-3. Append to cases.yaml
+3. Append to `cases_mapped.yaml`
 4. Next 10
 
 ### DTK Menu Actions (Core Rule)
@@ -133,17 +222,26 @@ Write `selector: {name, role}` from the description for runtime AT-SPI lookup.
 Do NOT rely on static at-tree node IDs (only ~3.6% coverage). The executor
 discovers elements dynamically at runtime by searching the live AT-SPI tree.
 
+**`assert_element` uses `name` only** — the executor constructs dogtail search
+expressions like `$//<name>/`, which search by element name. `role` is stored
+as metadata but NOT included in the search expression (dogtail parses
+`$//name/role/` as hierarchical path traversal, not attribute combination).
+
 **Element Target Priority** (executor checks in this order):
-1. **`selector`** — runtime AT-SPI lookup by name/role/name_pattern. Preferred.
+1. **`selector.name`** — runtime AT-SPI lookup by name. Primary for assert_element.
 2. **`ref`** — at-tree node ID lookup in elements.yaml. Fallback when selector
    is unavailable (e.g., element has no accessible name).
 3. **`x`/`y`** — coordinate-based click. Last resort when no AT-SPI metadata.
 
-Both `selector` and `ref` may appear in the same step; the executor uses
-`selector` first, falling back to `ref` if `selector` is null.
+For `mouse_click` and other coordinate-based actions, `resolve_coordinates`
+uses `name` first (dogtail search), then `role` (predicate search), then
+`ref` (elements.yaml), then `x`/`y` fallback.
 
-**Every `assert_element` MUST have a concrete `selector`** — an assertion
-without a target is a vacuous no-op.
+**Every `assert_element` MUST have a concrete `selector` with a `name`** — an
+assertion without a target is a vacuous no-op. If no AT-SPI element can serve
+as the assertion target (e.g., purely visual state change with no accessible
+element), **omit the assertion entirely** rather than creating one with an
+empty or unfindable selector.
 
 **Every `keyboard_type` text must be real input data** — not description
 fragments. If text is "任意长度字符" → use placeholder "test_input_123".
@@ -153,9 +251,38 @@ See `references/pitfalls.md` for documented edge cases and their correct
 handling. Review pitfalls before starting Step 3 and verify
 output against them after mapping.
 
-### Writing the Mapped cases.yaml
+### Writing the Mapped cases_mapped.yaml
+
+File header MUST include a `=== 格式范例 ===` comment block showing the
+exact structure for adding new cases. Each suite MUST retain its 4-field
+annotation from `suite-cases.yaml`.
 
 ```yaml
+# === 格式范例 ===
+# metadata:
+#   generated_at: "2024-01-01T00:00:00"
+#   source: "input.xlsx"
+# cases:
+#   - id: "suite-id"
+#     name: "Suite name"
+#     status: "active"
+#     annotation:
+#       测试界面: "主窗口"
+#       测试功能: "工具栏操作"
+#       前置条件: "应用已启动"
+#       AT元素引用: ["open_button"]
+#     steps:
+#       - step_type: "action"
+#         action: "session_start"
+#         command: "app-name"           # full launch command incl. file args
+#       - step_type: "action"
+#         action: "mouse_click"
+#         selector: {name: "打开", role: "push button"}
+#       - step_type: "assert"
+#         action: "assert_element"
+#         selector: {name: "文件内容", role: "text"}  # assert only uses name
+# === 格式范例结束 ===
+
 metadata:
   generated_at: "2024-01-01T00:00:00"
   source: "input.xlsx"
@@ -164,6 +291,11 @@ cases:
     name: "Suite name"
     module: "module-name"
     status: "active"
+    annotation:
+      测试界面: "主窗口"
+      测试功能: "工具栏操作"
+      前置条件: "应用已启动"
+      AT元素引用: ["open_button"]
     steps:
       - step_type: "action"
         description: "打开终端"
@@ -178,6 +310,10 @@ cases:
         action: "assert_window"
         assertion: "window_exists"
 ```
+
+After mapping, run `youqu at validate --gate 3 --cases-mapped <path> --at-tree-annotated <path>`
+to verify format example exists, selectors cross-reference the annotated tree,
+and no noise selectors remain.
 
 See `references/pipeline-reference.md` for full cases.yaml schema and
 `references/suite-format.md` for all action types and their fields.
@@ -291,7 +427,8 @@ The AT pipeline uses `AtSuiteExecutor` in `src/at/executor/`.
 |---------|--------------|---------------|
 | `youqu at dump dtk` | type, --app, --src | --output |
 | `youqu at parse` | --input, --output | — |
-| `youqu at tree-info` | --at-tree, --output | — |
+| `youqu at tree-info` | --at-tree, --output | --format (yaml\|text, default yaml) |
+| `youqu at validate` | — | --gate (1\|2\|3\|4\|all), --at-tree-annotated, --suite-cases, --cases-mapped, --generate-output, --element-gaps |
 | `youqu at generate` | --cases, --output | --app, --at-tree, --assert-gate |
 | `youqu at run` | — | --suite, --testdir, -k, --spec-ids, --tags |
 

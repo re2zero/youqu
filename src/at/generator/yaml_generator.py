@@ -308,7 +308,7 @@ def _step_to_action(step: CaseStep) -> SuiteActionStep | None:
             return SuiteActionStep(action="assert_window_count", expected=expected)
 
         if step.action == "session_start":
-            return SuiteActionStep(action="session_start", command=step.text or "")
+            return SuiteActionStep(action="session_start", command=step.command or "")
 
         if step.action == "session_stop":
             return SuiteActionStep(action="session_stop")
@@ -543,11 +543,20 @@ def generate_yaml(
         if not all_suite_cases:
             continue
 
+        session_cmd = resolved_app
+        for ms in module_suites:
+            for step in ms.steps:
+                if step.action == "session_start" and step.command:
+                    session_cmd = step.command
+                    break
+            if session_cmd != resolved_app:
+                break
+
         suite_config = SuiteConfig(
             name=f"{module}_suite",
             app=resolved_app,
             module=module,
-            setup=[SuiteActionStep(action="session_start", command=resolved_app, wait=3.0)],
+            setup=[SuiteActionStep(action="session_start", command=session_cmd, wait=3.0)],
             suites=all_suite_cases,
             teardown=[SuiteActionStep(action="session_stop")],
         )

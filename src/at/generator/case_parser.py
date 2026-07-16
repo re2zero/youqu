@@ -160,15 +160,87 @@ def _compact_at_tree(at_tree_text: str) -> str:
     return "\n".join(lines)
 
 
-def compact_at_tree_to_file(at_tree_path: str, output_path: str) -> None:
+_TREE_INFO_KEEP_FIELDS = (
+    "id",
+    "role",
+    "name",
+    "object_name",
+    "accessible_id",
+    "classification",
+    "comment",
+    "annotation_status",
+    "children",
+)
+
+
+def _simplify_tree(nodes: list[dict]) -> list[dict]:
+    result = []
+    for node in nodes:
+        if not isinstance(node, dict):
+            continue
+        simplified = {k: node.get(k, "") for k in _TREE_INFO_KEEP_FIELDS if k != "children"}
+        children = node.get("children", [])
+        if children:
+            simplified["children"] = _simplify_tree(children)
+        result.append(simplified)
+    return result
+
+
+def compact_at_tree_to_file(at_tree_path: str, output_path: str, fmt: str = "yaml") -> None:
     raw = Path(at_tree_path).read_text(encoding="utf-8")
-    compacted = _compact_at_tree(raw)
-    Path(output_path).write_text(compacted, encoding="utf-8")
-    print(
-        "Wrote {} ({} bytes, {} nodes)".format(
-            output_path, len(compacted), len(compacted.splitlines())
+    if fmt == "text":
+        compacted = _compact_at_tree(raw)
+        Path(output_path).write_text(compacted, encoding="utf-8")
+        print(
+            "Wrote {} ({} bytes, {} nodes)".format(
+                output_path, len(compacted), len(compacted.splitlines())
+            )
         )
+        return
+
+    try:
+        import yaml
+
+        tree = yaml.safe_load(raw)
+    except Exception:
+        Path(output_path).write_text(raw, encoding="utf-8")
+        return
+
+    if not tree or not isinstance(tree, dict):
+        Path(output_path).write_text(raw, encoding="utf-8")
+        return
+
+    tree_nodes = tree.get("tree", [])
+    if not isinstance(tree_nodes, list):
+        tree_nodes = []
+
+    try:
+        from src.at.scanner.merger import classify_nodes
+
+        classify_nodes(tree_nodes)
+    except ImportError:
+        pass
+
+    simplified = _simplify_tree(tree_nodes)
+    output_data = {"version": "1.0", "tree": simplified}
+
+    content = yaml.dump(
+        output_data,
+        allow_unicode=True,
+        default_flow_style=False,
+        sort_keys=False,
     )
+    Path(output_path).write_text(content, encoding="utf-8")
+
+    node_count = sum(1 for _ in _iter_nodes(simplified))
+    print("Wrote {} ({} bytes, {} nodes)".format(output_path, len(content), node_count))
+
+
+def _iter_nodes(nodes: list[dict]):
+    for node in nodes:
+        yield node
+        for child in _iter_nodes(node.get("children", [])):
+            yield child
 
 
 def parse_to_cases(input_path: str, output_path: str, at_tree_path: str = "") -> None:

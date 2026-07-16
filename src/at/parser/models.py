@@ -67,6 +67,9 @@ class AtTreeNode(BaseModel):
     accessible_id: str = ""
     source: SourceType = SourceType.runtime
     note: str = ""
+    comment: str = ""
+    annotation_status: str = "draft"
+    classification: str = ""
     children: list[AtTreeNode] = Field(default_factory=list)
 
 
@@ -94,6 +97,7 @@ class CaseStep(BaseModel):
     action: Optional[str] = None
     key: Optional[str] = None
     text: Optional[str] = None
+    command: Optional[str] = None
     element_ref: Optional[str] = None
     selector: Optional[dict[str, Any]] = None
     assertion: Optional[str] = None

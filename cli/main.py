@@ -243,6 +243,12 @@ def main():
     p_at_tree_info.add_argument(
         "--output", required=True, help="Output compact tree-info file path"
     )
+    p_at_tree_info.add_argument(
+        "--format",
+        choices=["yaml", "text"],
+        default="yaml",
+        help="Output format: yaml (structured, default) or text (legacy flat)",
+    )
 
     p_at_map = at_sub.add_parser("map", help="(deprecated) Map operations to AT-SPI elements")
     p_at_map.add_argument("--at-tree", required=True, help="Path to at-tree.yaml")
@@ -273,6 +279,14 @@ def main():
     p_at_run.add_argument("--spec-ids", help="Filter by spec IDs (comma-separated)")
     p_at_run.add_argument("--tags", help="Filter by tags (comma-separated)")
     p_at_run.add_argument("--skip-env-check", action="store_true", help="Skip environment checks")
+
+    p_at_validate = at_sub.add_parser("validate", help="Run verification gates on AT pipeline artifacts")
+    p_at_validate.add_argument("--gate", default="all", choices=["all", "1", "2", "3", "4"], help="Which gate to run (default: all)")
+    p_at_validate.add_argument("--at-tree-annotated", default="", help="Path to at-tree-annotated.yaml (Gate 1-4)")
+    p_at_validate.add_argument("--suite-cases", default="", help="Path to suite-cases.yaml (Gate 2)")
+    p_at_validate.add_argument("--cases-mapped", default="", help="Path to cases_mapped.yaml (Gate 3)")
+    p_at_validate.add_argument("--generate-output", default="", help="Path to generate output dir (Gate 4)")
+    p_at_validate.add_argument("--element-gaps", default="", help="Path to element_gaps.yaml (Gate 1)")
 
     args, extra = parser.parse_known_args()
 
@@ -348,7 +362,7 @@ def main():
             )
             sys.exit(1)
     elif args.command == "at":
-        from youqu.cli.at import cmd_dump, cmd_generate, cmd_map, cmd_parse, cmd_run, cmd_tree_info
+        from youqu.cli.at import cmd_dump, cmd_generate, cmd_map, cmd_parse, cmd_run, cmd_tree_info, cmd_validate
 
         dispatch = {
             "dump": cmd_dump,
@@ -357,12 +371,13 @@ def main():
             "map": cmd_map,
             "generate": cmd_generate,
             "run": cmd_run,
+            "validate": cmd_validate,
         }
         handler = dispatch.get(args.at_command)
         if handler:
             handler(args)
         else:
-            print("Usage: youqu at {dump|parse|tree-info|map|generate|run}")
+            print("Usage: youqu at {dump|parse|tree-info|map|generate|run|validate}")
             sys.exit(1)
     else:
         parser.print_help()

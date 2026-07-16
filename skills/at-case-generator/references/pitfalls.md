@@ -80,15 +80,25 @@ DTK6/Qt6 does not expose objectName via AT-SPI.
 `accessible_name_suggestion: "suggested name"`. The generate phase collects
 these into `app-optimization.md` for future app source code fixes.
 
-## 7. session_start.command must be app name
+## 7. session_start.command carries full launch command
 
-**Problem**: Using AT-SPI registered name or full path in `command` field.
+**Problem**: Using only the bare app name when the app needs a file argument
+to reach the tested UI state (e.g., deepin-reader without a PDF file won't
+show sidebar elements).
 
-**Impact**: App fails to launch.
+**Impact**: UI elements that only appear after opening a document are
+invisible; all tests targeting those elements fail with timeout.
 
-**Solution**: `session_start.command` is the app's executable name (e.g.,
-"deepin-terminal"), not the AT-SPI name or full path. Pass `--app` to
-`youqu at generate` to set this.
+**Solution**: In `cases_mapped.yaml`, `session_start` steps use the `command`
+field with the full launch command, including file arguments:
+```yaml
+- step_type: "action"
+  action: "session_start"
+  command: "deepin-reader ${TEST_FILES_DIR}/normal.pdf"
+```
+The yaml_generator propagates `command` directly to the generated suite's
+`setup` section. Use `${TEST_FILES_DIR}/normal.pdf` for variable substitution;
+the runner resolves it at execution time.
 
 ## 8. suites: vs specs: field name
 
@@ -119,15 +129,17 @@ output suite config uses `suites:`.
 **Solution**: Ensure column names match supported aliases (see
 pipeline-reference.md).
 
-## 11. at-tree simplification loses parent-child hierarchy
+## 11. at-tree-annotated.yaml hierarchy for element disambiguation
 
-**Problem**: If compact tree drops parent path, the AI cannot distinguish
-same-named elements under different parents.
+**Problem**: Same-named elements appear under different parents at different
+hierarchy depths. Without parent context, the AI cannot distinguish them.
 
 **Impact**: AI maps to wrong element; executor clicks wrong component.
 
-**Solution**: `youqu at tree-info` includes full parent path
-(e.g., `parent: n5 > n6 > n7`). The AI uses this to disambiguate.
+**Solution**: `youqu at tree-info --format yaml` outputs structured YAML with
+hierarchical `children` preserving the full parent-child chain. The AI reads
+the nested structure to disambiguate same-named elements by their parent
+path. This replaces the old flat `compact_tree.txt` format.
 
 ## 12. DTK button names — spacing varies
 

@@ -24,6 +24,7 @@ def cmd_dump(args):
             merge_state_snapshots,
             merge_trees,
             write_at_tree_yaml,
+            write_element_gaps,
             write_runtime_dump,
         )
 
@@ -225,6 +226,10 @@ def cmd_dump(args):
         write_at_tree_yaml(merged, str(final_path), app_name=args.app)
         print(f"  -> {final_path}")
 
+        gaps_path = output / "element_gaps.yaml"
+        write_element_gaps(merged, str(gaps_path), app_name=args.app)
+        print(f"  -> {gaps_path}")
+
     except ImportError as e:
         _not_implemented(f"dump ({e})")
     except Exception as e:
@@ -248,9 +253,11 @@ def cmd_tree_info(args):
     try:
         from youqu.src.at.generator.case_parser import compact_at_tree_to_file
 
+        fmt = getattr(args, "format", "yaml")
         compact_at_tree_to_file(
             at_tree_path=args.at_tree,
             output_path=args.output,
+            fmt=fmt,
         )
     except ImportError:
         _not_implemented("tree-info")
@@ -295,3 +302,57 @@ def cmd_run(args):
         )
     except ImportError:
         _not_implemented("run")
+
+
+def cmd_validate(args):
+    try:
+        from youqu.src.at.validator.gates import (
+            run_all_gates,
+            validate_gate1,
+            validate_gate2,
+            validate_gate3,
+            validate_gate4,
+        )
+
+        gate = getattr(args, "gate", "all")
+        results: list[dict] = []
+
+        if gate == "all":
+            results = run_all_gates(
+                at_tree_annotated_path=getattr(args, "at_tree_annotated", ""),
+                suite_cases_path=getattr(args, "suite_cases", ""),
+                cases_mapped_path=getattr(args, "cases_mapped", ""),
+                generate_output_dir=getattr(args, "generate_output", ""),
+                element_gaps_path=getattr(args, "element_gaps", ""),
+            )
+        else:
+            gate_num = int(gate)
+            at_tree = getattr(args, "at_tree_annotated", "")
+            if gate_num == 1:
+                results.append(validate_gate1(at_tree, getattr(args, "element_gaps", "")))
+            elif gate_num == 2:
+                results.append(validate_gate2(getattr(args, "suite_cases", ""), at_tree))
+            elif gate_num == 3:
+                results.append(validate_gate3(getattr(args, "cases_mapped", ""), at_tree))
+            elif gate_num == 4:
+                results.append(validate_gate4(getattr(args, "generate_output", ""), at_tree))
+
+        all_passed = True
+        for r in results:
+            status = "PASS" if r["passed"] else "FAIL"
+            print(f"Gate {r['gate']}: {r['name']} — {status}")
+            for err in r.get("errors", []):
+                print(f"  ERROR: {err}")
+                all_passed = False
+            for warn in r.get("warnings", []):
+                print(f"  WARN:  {warn}")
+
+        if all_passed:
+            print("\nAll gates passed.")
+        else:
+            print("\nSome gates failed. See errors above.")
+            import sys
+            sys.exit(1)
+
+    except ImportError:
+        _not_implemented("validate")

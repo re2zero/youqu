@@ -466,13 +466,8 @@ def _attrs_to_expr(attrs: dict) -> str:
     if not attrs:
         return "$/"
     name = attrs.get("name", "")
-    role = attrs.get("role", "")
-    if name and role:
-        return f"$//{name}/{role}/"
     if name:
         return f"$//{name}/"
-    if role:
-        return f"$//{role}/"
     return "$/"
 
 
@@ -486,17 +481,30 @@ def _assert_element_expr(step: SuiteActionStep, context: dict) -> str:
 
 
 def handle_assert_element(step: SuiteActionStep, context: dict) -> None:
-    from src.assert_common import AssertCommon
+    import logging
 
+    logger = logging.getLogger(__name__)
+    dog = get_dog(context, context.get("app") or "")
     expr = _assert_element_expr(step, context)
-    AssertCommon.assert_element_exist(expr)
+    logger.info(f"断言元素存在<{expr}>")
+    if not dog.find_elements_by_attr(expr):
+        raise AssertionError(f"元素不存在！！！expr= <{expr}>")
 
 
 def handle_assert_not_exists(step: SuiteActionStep, context: dict) -> None:
-    from src.assert_common import AssertCommon
+    import logging
 
+    logger = logging.getLogger(__name__)
+    dog = get_dog(context, context.get("app") or "")
     expr = _assert_element_expr(step, context)
-    AssertCommon.assert_element_not_exist(expr)
+    logger.info(f"断言元素不存在<{expr}>")
+    try:
+        dog.find_element_by_attr(expr)
+        raise AssertionError(f"元素不应存在！！！expr= <{expr}>")
+    except AssertionError:
+        raise
+    except Exception:
+        pass
 
 
 def handle_assert_window(step: SuiteActionStep, context: dict) -> None:
