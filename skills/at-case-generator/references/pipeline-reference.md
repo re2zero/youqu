@@ -158,6 +158,19 @@ cases:
         needs_accessible_name: false
         accessible_name_suggestion: null
         value: null                       # dbus params dict, scroll amount, OCR text
+      - step_type: "action"
+        description: "right-click context menu"
+        element_hint: "dtk_context_menu"
+        items: ["Copy"]
+        action: "dtk_context_menu"
+        selector: {"name": "SomeWidget"}  # right-click target (persistent AT-SPI element; menu items are transient)
+        element_ref: null
+        key: null
+        text: null
+        assertion: null
+        needs_accessible_name: false
+        accessible_name_suggestion: null
+        value: null
 ```
 
 ### CaseStep Fields

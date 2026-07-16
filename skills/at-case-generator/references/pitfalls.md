@@ -10,7 +10,7 @@
 ## 1. Compound steps not split
 
 **Problem**: xlsx test steps often combine multiple operations in one
-description (e.g., "打开终端，主菜单点击主题，切换深色" = 3 operations).
+description (e.g., "打开终端，主菜单点击某项，切换设置" = 3 operations).
 
 **Impact**: If not split, only the first operation matches a regex/action,
 the rest are lost. The generated suite has incomplete operations.
@@ -83,7 +83,7 @@ these into `app-optimization.md` for future app source code fixes.
 ## 7. session_start.command carries full launch command
 
 **Problem**: Using only the bare app name when the app needs a file argument
-to reach the tested UI state (e.g., deepin-reader without a PDF file won't
+to reach the tested UI state (e.g., a document viewer without a file won't
 show sidebar elements).
 
 **Impact**: UI elements that only appear after opening a document are
@@ -94,10 +94,10 @@ field with the full launch command, including file arguments:
 ```yaml
 - step_type: "action"
   action: "session_start"
-  command: "deepin-reader ${TEST_FILES_DIR}/normal.pdf"
+  command: "<app> ${TEST_FILES_DIR}/file.ext"
 ```
 The yaml_generator propagates `command` directly to the generated suite's
-`setup` section. Use `${TEST_FILES_DIR}/normal.pdf` for variable substitution;
+`setup` section. Use `${TEST_FILES_DIR}/file.ext` for variable substitution;
 the runner resolves it at execution time.
 
 ## 8. suites: vs specs: field name
@@ -159,9 +159,7 @@ non-breaking spaces, or lack thereof). Do not assume from visible UI text.
 
 **Solution**: Use child panel class names to reverse-lookup dialogs.
 Common patterns:
-- `CustomCommandOptDlg` → "自定义命令" dialog
-- `CustomThemeSettingDialog` → "自定义主题" dialog
-- `TabRenameDlg` → "重命名标签" dialog
+- `<DialogClassName>` → "某对话框" dialog
 
 ## 14. Invalid action names
 

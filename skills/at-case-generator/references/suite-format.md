@@ -31,9 +31,9 @@ suites:                   # MUST be "suites:" NOT "specs:"
     tags: []
     steps:
       - action: dtk_main_menu
-        items: ["主题", "深色"]
+        items: ["菜单项A", "子菜单项"]
         wait: 0
-        note: "切换深色主题"
+        note: "切换设置"
       - action: element_action
         ref: "ok_button"
         do: "click"
@@ -91,12 +91,12 @@ Keyboard navigation: Alt opens menu → Down/Right navigates → Enter confirms.
 
 ```yaml
 - action: dtk_main_menu
-  items: ["主题", "深色"]
+  items: ["菜单项A", "子菜单项"]
   wait: 0
 ```
 
 `items` is the menu path. Single-level: `["帮助"]`. Multi-level:
-`["主题", "深色"]`.
+`["菜单项A", "子菜单项"]`.
 
 ### dtk_context_menu
 
@@ -162,10 +162,10 @@ elements:
     name: "确定"
     role: "push button"
   n57:
-    name: "TerminalDisplay"
+    name: "SomeWidget"
     role: "panel"
   n6:
-    name: "主题"
+    name: "菜单项"
     role: "menu item"
 ```
 

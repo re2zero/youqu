@@ -302,11 +302,11 @@ cases:
         action: "session_start"
         command: "deepin-terminal"
       - step_type: "action"
-        description: "主菜单点击主题，切换深色"
+        description: "主菜单点击某项，切换设置"
         action: "dtk_main_menu"
-        items: ["主题", "深色"]
+        items: ["菜单项A", "子菜单项"]
       - step_type: "assert"
-        description: "验证主题已切换"
+        description: "验证设置已切换"
         action: "assert_window"
         assertion: "window_exists"
 ```

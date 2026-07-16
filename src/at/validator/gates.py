@@ -312,7 +312,9 @@ def validate_gate3(cases_mapped_path: str, at_tree_annotated_path: str = "") -> 
             selector = step.get("selector") or {}
             sel_name = selector.get("name", "")
             if sel_name:
-                if _NOISE_NAME_RE.match(sel_name):
+                if tree_names is not None and sel_name in tree_names:
+                    pass
+                elif _NOISE_NAME_RE.match(sel_name):
                     report["errors"].append(
                         f"[{sid}] step {i}: selector name '{sel_name}' is noise"
                     )
@@ -382,11 +384,14 @@ def validate_gate4(generate_output_dir: str, at_tree_annotated_path: str = "") -
 
                 selector = step.get("selector") or {}
                 sel_name = selector.get("name", "")
-                if sel_name and _NOISE_NAME_RE.match(sel_name):
-                    report["errors"].append(
-                        f"[{suite_file.name}:{sid}] step {i}: selector name '{sel_name}' is noise"
-                    )
-                    report["passed"] = False
+                if sel_name:
+                    if tree_names and sel_name in tree_names:
+                        pass
+                    elif _NOISE_NAME_RE.match(sel_name):
+                        report["errors"].append(
+                            f"[{suite_file.name}:{sid}] step {i}: selector name '{sel_name}' is noise"
+                        )
+                        report["passed"] = False
 
     return report
 

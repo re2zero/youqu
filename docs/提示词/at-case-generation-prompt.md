@@ -36,7 +36,17 @@
    - 生成 `cases_mapped.yaml`，文件头部必须包含 `=== 格式范例 ===` 格式说明
    - 每个 suite 保留注释（测试界面、测试功能、AT元素引用）
    - active（操作可 AT-SPI 执行 + 有 assert）和 unsupported（写具体原因）
-   - 右键菜单用 `dtk_context_menu`（不依赖 AT-SPI 树），文件路径用 `${TEST_FILES_DIR}/`中的具体文件
+   - 菜单操作必须使用 `dtk_main_menu` 或 `dtk_context_menu`，不能用 `mouse_click` / `element_action`
+   - `dtk_main_menu`：标题栏菜单按钮触发的菜单（DTitlebarMainMenu, DTitlebarThemeMenu），用 `items` 字段指定键盘导航路径
+      - 示例：`items: ["菜单项A", "子菜单项"]` → Alt 打开主菜单 → Down 到"菜单项A" → Right 展开子菜单 → Down 到"子菜单项" → Enter
+      - 子菜单用嵌套 items：`items: ["工具", "工具子项"]`
+      - 不需要 selector（菜单是瞬态弹窗，不在 AT-SPI 树中）
+    - `dtk_context_menu`：右键上下文菜单（文档区域、侧栏注释、书签等），用 `selector` 定位右键位置，`items` 指定菜单项
+      - 示例：`selector: {name: "SomeWidget"}` + `items: ["菜单项B"]` → 右键元素 → 选择"菜单项B"
+      - `selector` 是右键位置，应为 AT-SPI 树中的持久元素；`items` 是瞬态菜单项，不在 AT-SPI 树中
+      - **注意**：菜单项名称以 AT-SPI 实际显示名称为准，某些菜单可能因翻译未加载而显示英文
+   - **菜单项全覆盖**：从应用源码中枚举所有 DMenu 子类及其 addAction 调用，每个菜单项必须有对应测试步骤
+   - 文件路径用 `${TEST_FILES_DIR}/` 中的具体文件
    - selector 的 `name` 必须能在 at-tree-annotated.yaml 中找到对应元素（交叉引用）
 10. Assertion Coverage Gate：所有 active case 必须有 assert 步骤
 11. `youqu at validate --gate 3 --cases-mapped tests/at/cases_mapped.yaml --at-tree-annotated tests/at/at-tree-annotated.yaml`
