@@ -209,7 +209,14 @@ def execute_steps(
         if step.wait:
             target = _peek_next_selector(idx, steps, elements)
             if target:
-                _smart_wait(target, step.wait, context)
+                found = _smart_wait(target, step.wait, context)
+                if not found:
+                    _log.warning(
+                        "smart_wait timed out: step#%d selector=%s wait=%.1fs",
+                        idx,
+                        target,
+                        step.wait,
+                    )
             else:
                 time.sleep(step.wait)
 

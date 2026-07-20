@@ -11,6 +11,16 @@ from typing import Any, Callable
 
 from src.at.parser.models import SuiteActionStep
 
+try:
+    from src.custom_exception import ElementNotFound
+except (ImportError, ModuleNotFoundError):
+
+    class ElementNotFound(BaseException):
+        """Fallback when custom_exception is unavailable."""
+
+        pass
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -23,6 +33,7 @@ def resolve_ref(ref_name: str, elements: dict[str, dict[str, Any]]) -> dict[str,
 def get_mk(context: dict):
     if context.get("mk") is None:
         from src.mouse_key import MouseKey
+
         context["mk"] = MouseKey()
     return context["mk"]
 
@@ -30,6 +41,7 @@ def get_mk(context: dict):
 def get_dog(context: dict, app: str | None = None):
     if context.get("dog") is None:
         from src.dogtail_utils import DogtailUtils
+
         if app and "/" in app:
             atspi_name = os.path.basename(app.split()[0])
         else:
@@ -115,20 +127,31 @@ def resolve_coordinates(attrs: dict, context: dict) -> tuple[int, int]:
     name = attrs.get("name")
     role = attrs.get("role")
     accessible_id = attrs.get("accessible_id")
+    parent = attrs.get("parent")
 
-    if name or role or accessible_id:
+    has_locator = name or role or accessible_id or parent
+
+    if has_locator:
         try:
             dog = get_dog(context, context.get("app") or "")
             ensure_window_focus(context)
-            if name:
+
+            if parent:
+                element = _find_by_hierarchy(dog, attrs, attrs.get("index", 0))
+                found = [element] if element else []
+            elif accessible_id:
+                found = dog.find_elements_by_accessible_id(accessible_id)
+            elif name:
                 found = dog.find_elements_by_attr(f"$//{name}/")
             elif role:
                 from src.depends.dogtail.tree import predicate
+
                 found = dog.obj.findChildren(
                     predicate.GenericPredicate(roleName=role), recursive=True
                 )
             else:
                 found = []
+
             if found:
                 for node in found:
                     try:
@@ -152,60 +175,94 @@ def resolve_coordinates(attrs: dict, context: dict) -> tuple[int, int]:
                         return center
                 except BaseException:
                     pass
-        except BaseException:
-            pass
+
+            raise ElementNotFound(f"element not found, selector={attrs}")
+        except ElementNotFound:
+            raise
+        except BaseException as exc:
+            raise ElementNotFound(f"lookup error: {exc}, selector={attrs}") from exc
 
     if attrs.get("x") is not None and attrs.get("y") is not None:
         return attrs.get("x"), attrs.get("y")
 
-    # Fallback 1: direct AT-SPI window bounds lookup (fresh coordinates,
-       # immune to stale dogtail node references after context menu popups).
-    app_name = context.get("app", "")
-    if app_name:
-        bounds = _get_app_window_bounds(app_name)
-        if bounds:
-            x, y, w, h = bounds
-            return (x + w // 2, y + h // 2)
+    raise ElementNotFound(f"no locator and no coordinates: {attrs}")
 
-    # Fallback 2: dogtail application node extents.
-    # Slower and may be stale, but uses dogtail's own app-resolution logic
-    # which may succeed when direct AT-SPI tree iteration fails (e.g., app
-    # name mismatch between context["app"] and AT-SPI registered name).
-    if app_name:
-        try:
-            dog = get_dog(context, app_name)
-            if dog.obj:
-                ext = dog.obj[0].extents
-                if ext:
-                    try:
-                        ex, ey, ew, eh = ext.x, ext.y, ext.width, ext.height
-                    except (AttributeError, TypeError):
-                        ex, ey, ew, eh = ext
-                    if ew > 0 and eh > 0:
-                        return (ex + ew // 2, ey + eh // 2)
-        except Exception:
-            pass
 
-    return attrs.get("x") or 0, attrs.get("y") or 0
+def _find_by_hierarchy(dog, attrs, idx):
+    """通过 parent-child 层级路径定位元素，用于同名元素消歧。"""
+    parent_name = attrs.get("parent", "")
+    parent_role = attrs.get("parent_role", "")
+    child_name = attrs.get("name", "")
+    child_role = attrs.get("role", "")
+
+    if parent_name:
+        parents = dog.find_elements_by_attr(f"$//{parent_name}/")
+    elif parent_role:
+        from src.depends.dogtail.tree import predicate
+
+        parents = dog.obj.findChildren(
+            predicate.GenericPredicate(roleName=parent_role), recursive=True
+        )
+    else:
+        parents = [dog.obj] if dog.obj else []
+
+    results = []
+    if parents:
+        from src.depends.dogtail.tree import predicate
+
+        for p in parents:
+            if child_name:
+                children = p.findChildren(
+                    predicate.GenericPredicate(name=child_name), recursive=True
+                )
+            elif child_role:
+                children = p.findChildren(
+                    predicate.GenericPredicate(roleName=child_role), recursive=True
+                )
+            else:
+                children = []
+            results.extend(children)
+
+    if not results:
+        raise ElementNotFound(f"hierarchy: parent={parent_name}, child={child_name}")
+    try:
+        return results[idx]
+    except IndexError:
+        raise ElementNotFound(
+            f"hierarchy: parent={parent_name}, child={child_name}, idx={idx}"
+        ) from IndexError
 
 
 def find_element(dog, attrs, idx=0):
     name = attrs.get("name", "")
     role = attrs.get("role", "")
+    accessible_id = attrs.get("accessible_id", "")
+    parent = attrs.get("parent")
+
+    if parent:
+        return _find_by_hierarchy(dog, attrs, idx)
+    if accessible_id:
+        try:
+            found = dog.find_elements_by_accessible_id(accessible_id)
+            if found:
+                try:
+                    return found[idx]
+                except IndexError:
+                    pass
+        except Exception:
+            pass
     if name:
         expr = f"$//{name}/"
         return dog.find_element_by_attr(expr, idx)
     if role:
         from src.depends.dogtail.tree import predicate
-        results = dog.obj.findChildren(
-            predicate.GenericPredicate(roleName=role), recursive=True
-        )
+
+        results = dog.obj.findChildren(predicate.GenericPredicate(roleName=role), recursive=True)
         if not results:
-            from src.custom_exception import ElementNotFound
             raise ElementNotFound(f"role={role}")
         return results[idx]
-    from src.custom_exception import ElementNotFound
-    raise ElementNotFound("no name or role in element definition")
+
+    raise ElementNotFound("no name/role/accessible_id in element definition")
 
 
 # ---- Action Handlers ----
@@ -237,7 +294,8 @@ def handle_session_stop(step: SuiteActionStep, context: dict) -> None:
         pkill_name = os.path.basename(app) if "/" in app else app
         pgrep = subprocess.run(
             ["pgrep", "-f", re.escape(pkill_name)],
-            capture_output=True, text=True,
+            capture_output=True,
+            text=True,
         )
         if pgrep.stdout.strip():
             own_pid = os.getpid()
@@ -316,6 +374,9 @@ def handle_mouse_drag(step: SuiteActionStep, context: dict) -> None:
     mk.drag_to(x, y)
 
 
+_ELEMENT_DO_WHITELIST = {"click", "right_click", "double_click", "focus", "point"}
+
+
 def handle_element_action(step: SuiteActionStep, context: dict) -> None:
     app_name = context.get("app") or ""
     dog = get_dog(context, app_name)
@@ -325,6 +386,10 @@ def handle_element_action(step: SuiteActionStep, context: dict) -> None:
     idx = attrs.get("index", 0)
     element = find_element(dog, attrs, idx)
     action = step.do or "click"
+    if action not in _ELEMENT_DO_WHITELIST:
+        raise ValueError(
+            f"Unknown element action '{action}'. Supported: {sorted(_ELEMENT_DO_WHITELIST)}"
+        )
     if action == "click":
         element.click()
     elif action == "right_click":
@@ -333,12 +398,8 @@ def handle_element_action(step: SuiteActionStep, context: dict) -> None:
         element.doubleClick()
     elif action == "focus":
         element.grabFocus()
-    else:
-        method = getattr(element, action, None)
-        if callable(method):
-            method()
-        else:
-            raise ValueError(f"Unknown element action: {action}")
+    elif action == "point":
+        dog.element_point(element)
 
 
 def handle_element_set_value(step: SuiteActionStep, context: dict) -> None:

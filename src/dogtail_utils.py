@@ -182,7 +182,7 @@ class DogtailUtils(MouseKey):
         if node is None:
             return result
         try:
-            next_node = name[node.end() - 1:]
+            next_node = name[node.end() - 1 :]
             if next_node != "/":
                 for i in element:
                     self.__trace(i, result, next_node)
@@ -229,6 +229,39 @@ class DogtailUtils(MouseKey):
 
     def find_element_by_attr_and_right_click(self, expr, index=0):
         self.find_element_by_attr(expr, index).click(3)
+
+    def find_elements_by_accessible_id(self, accessible_id):
+        """通过 AT-SPI accessible attribute 查找元素。
+
+        AT-SPI get_attributes() 返回 ["key:value", ...] 列表，
+        accessible_id 存储在 "accessible" key 中。
+        """
+        logger.debug(f"查找元素 accessible_id={accessible_id}")
+
+        def _match(node):
+            try:
+                attrs = node.get_attributes()
+                for a in attrs:
+                    if a.startswith("accessible:") and accessible_id in a:
+                        return True
+            except Exception:
+                pass
+            return False
+
+        try:
+            return self.obj.findChildren(_match, recursive=True)
+        except Exception:
+            return []
+
+    def find_element_by_accessible_id(self, accessible_id, index=0):
+        """通过 accessible_id 查找单个元素。"""
+        elements = self.find_elements_by_accessible_id(accessible_id)
+        if not elements:
+            raise ElementNotFound(f"accessible_id={accessible_id}")
+        try:
+            return elements[index]
+        except IndexError:
+            raise ElementNotFound(f"accessible_id={accessible_id}, index:{index}") from IndexError
 
     def find_elements_to_the_end(self, ele_name):
         """

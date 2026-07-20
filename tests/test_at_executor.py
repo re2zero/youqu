@@ -695,20 +695,27 @@ class TestEnsureWindowFocus:
 
 
 class TestResolveCoordinatesFallback:
-    def test_resolve_coordinates_falls_back_to_window_center(self):
+    def test_resolve_coordinates_empty_attrs_raises(self):
         from src.at.executor.handlers import resolve_coordinates
 
-        fake_node = unittest.mock.MagicMock()
-        fake_node.extents = (100, 200, 300, 400)
+        with (
+            unittest.mock.patch("src.at.executor.handlers.get_dog"),
+            unittest.mock.patch("src.at.executor.handlers.ensure_window_focus"),
+        ):
+            with pytest.raises(BaseException, match="no locator"):
+                resolve_coordinates({}, {"app": "test-app"})
+
+    def test_resolve_coordinates_locator_not_found_raises(self):
+        from src.at.executor.handlers import resolve_coordinates
+
         fake_dog = unittest.mock.MagicMock()
-        fake_dog.obj = [fake_node]
+        fake_dog.find_elements_by_attr.return_value = []
         with (
             unittest.mock.patch("src.at.executor.handlers.get_dog", return_value=fake_dog),
             unittest.mock.patch("src.at.executor.handlers.ensure_window_focus"),
         ):
-            x, y = resolve_coordinates({}, {"app": "test-app"})
-        assert x == 250
-        assert y == 400
+            with pytest.raises(BaseException, match="not found"):
+                resolve_coordinates({"name": "nonexistent"}, {"app": "test-app"})
 
     def test_resolve_coordinates_prefers_element_center(self):
         from src.at.executor.handlers import resolve_coordinates
@@ -787,3 +794,126 @@ class TestNoYamlTestImport:
             for node in ast.walk(source):
                 if isinstance(node, ast.ImportFrom) and node.module and "yaml_test" in node.module:
                     pytest.fail(f"{mod_name} imports from src.yaml_test: {node.module}")
+
+
+class TestExecutorHardening:
+    """Tests for AT executor code patches (accessible_id, hierarchy, fail-fast,
+    do whitelist, smart_wait warning)."""
+
+    def test_find_element_accessible_id(self):
+        from src.at.executor.handlers import find_element
+
+        fake_element = unittest.mock.MagicMock()
+        fake_dog = unittest.mock.MagicMock()
+        fake_dog.find_elements_by_accessible_id.return_value = [fake_element]
+        result = find_element(fake_dog, {"accessible_id": "search_input"})
+        assert result is fake_element
+        fake_dog.find_elements_by_accessible_id.assert_called_once_with("search_input")
+
+    def test_find_element_accessible_id_falls_back_to_name(self):
+        from src.at.executor.handlers import find_element
+
+        fake_element = unittest.mock.MagicMock()
+        fake_dog = unittest.mock.MagicMock()
+        fake_dog.find_elements_by_accessible_id.return_value = []
+        fake_dog.find_element_by_attr.return_value = fake_element
+        result = find_element(fake_dog, {"accessible_id": "missing", "name": "fallback_name"})
+        assert result is fake_element
+        fake_dog.find_element_by_attr.assert_called_once()
+
+    def test_find_element_hierarchy_with_parent(self):
+        from src.at.executor import handlers
+
+        fake_element = unittest.mock.MagicMock()
+        with unittest.mock.patch.object(
+            handlers, "_find_by_hierarchy", return_value=fake_element
+        ) as mock_hier:
+            result = handlers.find_element(
+                unittest.mock.MagicMock(),
+                {"parent": "panel", "name": "find"},
+            )
+        assert result is fake_element
+        mock_hier.assert_called_once()
+
+    def test_find_element_hierarchy_not_found_raises(self):
+        from src.at.executor.handlers import find_element
+
+        fake_dog = unittest.mock.MagicMock()
+        fake_dog.find_elements_by_attr.return_value = []
+        with pytest.raises(BaseException, match="hierarchy"):
+            find_element(fake_dog, {"parent": "missing", "name": "child"})
+
+    def test_resolve_coordinates_accessible_id(self):
+        from src.at.executor.handlers import resolve_coordinates
+
+        fake_node = unittest.mock.MagicMock()
+        fake_node.extents = (100, 200, 50, 60)
+        fake_dog = unittest.mock.MagicMock()
+        fake_dog.find_elements_by_accessible_id.return_value = [fake_node]
+        with (
+            unittest.mock.patch("src.at.executor.handlers.get_dog", return_value=fake_dog),
+            unittest.mock.patch("src.at.executor.handlers.ensure_window_focus"),
+        ):
+            x, y = resolve_coordinates({"accessible_id": "btn_ok"}, {"app": "test-app"})
+        assert x == 125
+        assert y == 230
+
+    def test_element_action_unknown_do_raises(self):
+        from src.at.executor.handlers import handle_element_action
+        from src.at.parser.models import SuiteActionStep
+
+        fake_element = unittest.mock.MagicMock()
+        fake_dog = unittest.mock.MagicMock()
+        fake_dog.find_elements_by_accessible_id.return_value = [fake_element]
+        step = SuiteActionStep(
+            action="element_action",
+            selector={"accessible_id": "btn_ok"},
+            do="hover",
+        )
+        with (
+            unittest.mock.patch("src.at.executor.handlers.get_dog", return_value=fake_dog),
+        ):
+            with pytest.raises(ValueError, match="Unknown element action"):
+                handle_element_action(step, {"app": "test-app"})
+
+    def test_element_action_click_in_whitelist(self):
+        from src.at.executor.handlers import handle_element_action
+        from src.at.parser.models import SuiteActionStep
+
+        fake_element = unittest.mock.MagicMock()
+        fake_dog = unittest.mock.MagicMock()
+        fake_dog.find_elements_by_accessible_id.return_value = [fake_element]
+        step = SuiteActionStep(
+            action="element_action",
+            selector={"accessible_id": "btn_ok"},
+            do="click",
+        )
+        with unittest.mock.patch("src.at.executor.handlers.get_dog", return_value=fake_dog):
+            handle_element_action(step, {"app": "test-app"})
+        fake_element.click.assert_called_once()
+
+    def test_smart_wait_timeout_logs_warning(self, caplog):
+        import logging
+
+        from src.at.executor import executor as exec_mod
+        from src.at.parser.models import SuiteActionStep
+
+        step1 = SuiteActionStep(action="keyboard_press", key="Return", wait=1)
+        step2 = SuiteActionStep(action="mouse_click", selector={"name": "nonexistent"})
+        fake_handler = unittest.mock.MagicMock()
+        fake_dog = unittest.mock.MagicMock()
+        fake_dog.find_elements_by_attr.return_value = []
+        with (
+            unittest.mock.patch.dict(
+                exec_mod.HANDLERS,
+                {"keyboard_press": fake_handler, "mouse_click": unittest.mock.MagicMock()},
+            ),
+            unittest.mock.patch("src.at.executor.executor.get_dog", return_value=fake_dog),
+            unittest.mock.patch("src.at.executor.executor.time.sleep"),
+        ):
+            with caplog.at_level(logging.WARNING):
+                exec_mod.execute_steps(
+                    [step1, step2],
+                    {"app": "test-app"},
+                )
+        assert any("smart_wait timed out" in r.message for r in caplog.records)
