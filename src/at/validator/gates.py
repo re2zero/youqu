@@ -396,6 +396,89 @@ def validate_gate4(generate_output_dir: str, at_tree_annotated_path: str = "") -
     return report
 
 
+def validate_gate5(cases_mapped_path: str, at_tree_annotated_path: str = "") -> dict:
+    report = {
+        "gate": 5,
+        "name": "Semantic Safety Gate",
+        "errors": [],
+        "warnings": [],
+        "passed": True,
+    }
+
+    cases_data = _load_yaml(cases_mapped_path)
+    if not cases_data:
+        report["errors"].append(f"File not found or empty: {cases_mapped_path}")
+        report["passed"] = False
+        return report
+
+    cases = cases_data.get("cases", [])
+    _DESC_KEYWORDS = frozenset(
+        {"显示", "被清空", "可以重新", "正常", "异常", "检查", "查看", "应当", "应该"}
+    )
+    _PANEL_OPENER_ACTIONS = frozenset(
+        {
+            "element_action",
+            "dtk_main_menu",
+            "dtk_context_menu",
+            "mouse_click",
+            "mouse_right_click",
+            "keyboard_hot_key",
+        }
+    )
+    _ESCAPE_KEYS = frozenset({"escape", "esc", "tab"})
+
+    for suite in cases:
+        sid = suite.get("id", "?")
+        status = suite.get("status", "active")
+        if status in ("non_gui", "unsupported"):
+            continue
+
+        steps = suite.get("steps", [])
+        for i, step in enumerate(steps):
+            action = step.get("action", "")
+
+            if action in ("keyboard_type", "keyboard_type_text"):
+                text = step.get("text", "")
+                if text:
+                    hit = _DESC_KEYWORDS & {kw for kw in _DESC_KEYWORDS if kw in text}
+                    if hit or (len(text) > 20 and any(c in text for c in "，。；")):
+                        report["warnings"].append(
+                            f"[{sid}] step {i}: keyboard_type text疑似描述文本 "
+                            f"(keywords={hit or 'long+cn-punct'}): '{text[:40]}'"
+                        )
+
+            if action == "keyboard_press":
+                key = (step.get("key") or "").lower()
+                if key in _ESCAPE_KEYS and i > 0:
+                    prev = steps[i - 1] if i > 0 else {}
+                    prev_action = prev.get("action", "") if isinstance(prev, dict) else ""
+                    if prev_action not in _PANEL_OPENER_ACTIONS:
+                        report["warnings"].append(
+                            f"[{sid}] step {i}: keyboard_press '{key}' "
+                            f"前无打开面板操作 (prev={prev_action})"
+                        )
+
+            if action in (
+                "element_action",
+                "mouse_click",
+                "mouse_right_click",
+                "mouse_double_click",
+                "assert_element",
+            ):
+                selector = step.get("selector") or {}
+                has_name = bool(selector.get("name"))
+                has_accessible = bool(selector.get("accessible_id"))
+                has_xy = step.get("x") is not None and step.get("y") is not None
+                if not has_name and not has_accessible and not has_xy and not step.get("ref"):
+                    report["errors"].append(
+                        f"[{sid}] step {i}: {action} selector缺 name 和 accessible_id "
+                        f"(会导致运行时 ElementNotFound)"
+                    )
+                    report["passed"] = False
+
+    return report
+
+
 def run_all_gates(
     at_tree_annotated_path: str = "",
     suite_cases_path: str = "",
@@ -410,6 +493,7 @@ def run_all_gates(
         results.append(validate_gate2(suite_cases_path, at_tree_annotated_path))
     if cases_mapped_path:
         results.append(validate_gate3(cases_mapped_path, at_tree_annotated_path))
+        results.append(validate_gate5(cases_mapped_path, at_tree_annotated_path))
     if generate_output_dir:
         results.append(validate_gate4(generate_output_dir, at_tree_annotated_path))
     return results

@@ -312,6 +312,7 @@ def cmd_validate(args):
             validate_gate2,
             validate_gate3,
             validate_gate4,
+            validate_gate5,
         )
 
         gate = getattr(args, "gate", "all")
@@ -336,6 +337,8 @@ def cmd_validate(args):
                 results.append(validate_gate3(getattr(args, "cases_mapped", ""), at_tree))
             elif gate_num == 4:
                 results.append(validate_gate4(getattr(args, "generate_output", ""), at_tree))
+            elif gate_num == 5:
+                results.append(validate_gate5(getattr(args, "cases_mapped", ""), at_tree))
 
         all_passed = True
         for r in results:

@@ -403,3 +403,122 @@ class TestGate4:
         result = validate_gate4(str(tmp_path))
         assert not result["passed"]
         assert any("noise" in e for e in result["errors"])
+
+
+class TestGate5:
+    def test_passes_with_valid_cases(self, tmp_path):
+        from src.at.validator.gates import validate_gate5
+
+        cases_data = {
+            "cases": [
+                {
+                    "id": "case_001",
+                    "status": "active",
+                    "steps": [
+                        {"action": "dtk_main_menu", "items": ["设置"]},
+                        {"action": "element_action", "selector": {"name": "查找"}},
+                        {"action": "keyboard_type", "text": "hello"},
+                        {"action": "assert_element", "selector": {"name": "清空"}},
+                    ],
+                }
+            ]
+        }
+        path = _write_yaml(tmp_path / "cases_mapped.yaml", cases_data)
+        result = validate_gate5(path)
+        assert result["passed"]
+        assert len(result["errors"]) == 0
+
+    def test_warns_on_keyboard_type_description_text(self, tmp_path):
+        from src.at.validator.gates import validate_gate5
+
+        cases_data = {
+            "cases": [
+                {
+                    "id": "case_002",
+                    "status": "active",
+                    "steps": [
+                        {"action": "keyboard_type", "text": "内容被清空；可以重新输入"},
+                    ],
+                }
+            ]
+        }
+        path = _write_yaml(tmp_path / "cases_mapped.yaml", cases_data)
+        result = validate_gate5(path)
+        assert any("疑似描述文本" in w for w in result["warnings"])
+
+    def test_warns_on_escape_without_precondition(self, tmp_path):
+        from src.at.validator.gates import validate_gate5
+
+        cases_data = {
+            "cases": [
+                {
+                    "id": "case_003",
+                    "status": "active",
+                    "steps": [
+                        {"action": "wait", "wait": 1000},
+                        {"action": "keyboard_press", "key": "escape"},
+                    ],
+                }
+            ]
+        }
+        path = _write_yaml(tmp_path / "cases_mapped.yaml", cases_data)
+        result = validate_gate5(path)
+        assert any("无打开面板操作" in w for w in result["warnings"])
+
+    def test_no_warn_escape_after_panel_opener(self, tmp_path):
+        from src.at.validator.gates import validate_gate5
+
+        cases_data = {
+            "cases": [
+                {
+                    "id": "case_004",
+                    "status": "active",
+                    "steps": [
+                        {"action": "dtk_main_menu", "items": ["搜索"]},
+                        {"action": "keyboard_press", "key": "escape"},
+                    ],
+                }
+            ]
+        }
+        path = _write_yaml(tmp_path / "cases_mapped.yaml", cases_data)
+        result = validate_gate5(path)
+        assert not any("无打开面板操作" in w for w in result["warnings"])
+
+    def test_errors_on_empty_selector(self, tmp_path):
+        from src.at.validator.gates import validate_gate5
+
+        cases_data = {
+            "cases": [
+                {
+                    "id": "case_005",
+                    "status": "active",
+                    "steps": [
+                        {"action": "element_action", "selector": {}},
+                    ],
+                }
+            ]
+        }
+        path = _write_yaml(tmp_path / "cases_mapped.yaml", cases_data)
+        result = validate_gate5(path)
+        assert not result["passed"]
+        assert any("selector缺" in e for e in result["errors"])
+
+    def test_skips_unsupported_cases(self, tmp_path):
+        from src.at.validator.gates import validate_gate5
+
+        cases_data = {
+            "cases": [
+                {
+                    "id": "case_006",
+                    "status": "unsupported",
+                    "reason": "touchscreen",
+                    "steps": [
+                        {"action": "keyboard_type", "text": "内容被清空"},
+                    ],
+                }
+            ]
+        }
+        path = _write_yaml(tmp_path / "cases_mapped.yaml", cases_data)
+        result = validate_gate5(path)
+        assert result["passed"]
+        assert len(result["warnings"]) == 0

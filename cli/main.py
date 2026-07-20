@@ -281,7 +281,7 @@ def main():
     p_at_run.add_argument("--skip-env-check", action="store_true", help="Skip environment checks")
 
     p_at_validate = at_sub.add_parser("validate", help="Run verification gates on AT pipeline artifacts")
-    p_at_validate.add_argument("--gate", default="all", choices=["all", "1", "2", "3", "4"], help="Which gate to run (default: all)")
+    p_at_validate.add_argument("--gate", default="all", choices=["all", "1", "2", "3", "4", "5"], help="Which gate to run (default: all)")
     p_at_validate.add_argument("--at-tree-annotated", default="", help="Path to at-tree-annotated.yaml (Gate 1-4)")
     p_at_validate.add_argument("--suite-cases", default="", help="Path to suite-cases.yaml (Gate 2)")
     p_at_validate.add_argument("--cases-mapped", default="", help="Path to cases_mapped.yaml (Gate 3)")
