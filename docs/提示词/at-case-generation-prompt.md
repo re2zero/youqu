@@ -11,6 +11,7 @@
 ## 步骤
 
 1. 加载 at-case-generator 技能，阅读 references/ 下 pipeline-reference.md、suite-format.md、pitfalls.md
+   **同时加载 at-mapping-rules 技能**，阅读其步骤语义解析协议、selector 填写约束、强制规则、UNSUPPORTED 分类
 2. `youqu at parse --input <xlsx> --output tests/at/cases_raw.yaml`
 3. tmux 启动应用 → `youqu at dump dtk --app <app> --src <project_root> --output tests/at/`（timeout 300s）
    - dump 自动执行去噪过滤，生成 `tests/at/at-tree.yaml`（已去噪）和 `tests/at/element_gaps.yaml`（缺 accessible_id 的元素清单）
@@ -32,29 +33,84 @@
    - 拆分复合步骤（一个步骤含多个操作 → 拆成原子步骤），setup 动作移到 `前置条件`
 8. `youqu at validate --gate 2 --suite-cases tests/at/suite-cases.yaml --at-tree-annotated tests/at/at-tree-annotated.yaml`
    - 验证规范化和 suite 注释完整性，通过后才继续
-9. **AI 语义映射**：逐条分析 suite-cases.yaml 中的用例，将每个步骤映射到 at-tree-annotated.yaml 中的元素
+9. **AI 语义映射**（核心步骤）：逐条分析 suite-cases.yaml 中的用例，将每个步骤映射到 at-tree-annotated.yaml 中的元素
    - 生成 `cases_mapped.yaml`，文件头部必须包含 `=== 格式范例 ===` 格式说明
    - 每个 suite 保留注释（测试界面、测试功能、AT元素引用）
+
+   ### 步骤语义解析协议（at-mapping-rules skill）
+
+   对每个用例步骤，先做四字段拆解，再写 YAML：
+   - **operation**: 实际动作（打开/点击/输入/按键/选择/拖拽）
+   - **target**: 操作对象（从 at-tree 取 name+role+accessible_id+parent）
+   - **expected**: 预期结果（转为 assert_element/assert_ocr/assert_window）
+   - **precondition**: 前置条件（必须转为前置 action，不能只描述）
+
+   **严禁混淆四字段**：
+   - 预期结果文本 → 必须转为 assert 步骤，禁止当 keyboard_type 输入
+   - 前置条件 → 必须转为前置 action，禁止只描述不执行
+   - 按钮点击 → 必须用 element_action/mouse_click + selector，禁止猜测快捷键
+   - 描述性前缀（如"任意字符："）→ 必须剥离，只输入实际内容
+
+   ### selector 填写约束
+
+   selector 必须含以下至少一个定位字段：
+
+   | 字段 | 优先级 | 说明 |
+   |------|--------|------|
+   | accessible_id | 1st | 最稳定；at-tree 有则优先用 |
+   | name | 2nd | AT-SPI 可见名称（运行时精确匹配） |
+   | role | 3rd | 仅当 name 为空时用 |
+   | parent + parent_role | 消歧 | 同名元素必须加 parent 消歧 |
+   | index | 消歧 | 同名第 N 个，默认 0 |
+
+   ### 强制规则
+
    - active（操作可 AT-SPI 执行 + 有 assert）和 unsupported（写具体原因）
    - 菜单操作必须使用 `dtk_main_menu` 或 `dtk_context_menu`，不能用 `mouse_click` / `element_action`
    - `dtk_main_menu`：标题栏菜单按钮触发的菜单（DTitlebarMainMenu, DTitlebarThemeMenu），用 `items` 字段指定键盘导航路径
-      - 示例：`items: ["菜单项A", "子菜单项"]` → Alt 打开主菜单 → Down 到"菜单项A" → Right 展开子菜单 → Down 到"子菜单项" → Enter
-      - 子菜单用嵌套 items：`items: ["工具", "工具子项"]`
-      - 不需要 selector（菜单是瞬态弹窗，不在 AT-SPI 树中）
-    - `dtk_context_menu`：右键上下文菜单（文档区域、侧栏注释、书签等），用 `selector` 定位右键位置，`items` 指定菜单项
-      - 示例：`selector: {name: "SomeWidget"}` + `items: ["菜单项B"]` → 右键元素 → 选择"菜单项B"
-      - `selector` 是右键位置，应为 AT-SPI 树中的持久元素；`items` 是瞬态菜单项，不在 AT-SPI 树中
-      - **注意**：菜单项名称以 AT-SPI 实际显示名称为准，某些菜单可能因翻译未加载而显示英文
+     - 示例：`items: ["菜单项A", "子菜单项"]` → Alt 打开主菜单 → Down 到"菜单项A" → Right 展开子菜单 → Down 到"子菜单项" → Enter
+     - 子菜单用嵌套 items：`items: ["工具", "工具子项"]`
+     - 不需要 selector（菜单是瞬态弹窗，不在 AT-SPI 树中）
+   - `dtk_context_menu`：右键上下文菜单（文档区域、侧栏注释、书签等），用 `selector` 定位右键位置，`items` 指定菜单项
+     - 示例：`selector: {name: "SomeWidget"}` + `items: ["菜单项B"]` → 右键元素 → 选择"菜单项B"
+     - `selector` 是右键位置，应为 AT-SPI 树中的持久元素；`items` 是瞬态菜单项，不在 AT-SPI 树中
+     - **注意**：菜单项名称以 AT-SPI 实际显示名称为准，某些菜单可能因翻译未加载而显示英文
    - **菜单项全覆盖**：从应用源码中枚举所有 DMenu 子类及其 addAction 调用，每个菜单项必须有对应测试步骤
    - 文件路径用 `${TEST_FILES_DIR}/` 中的具体文件
    - selector 的 `name` 必须能在 at-tree-annotated.yaml 中找到对应元素（交叉引用）
-10. Assertion Coverage Gate：所有 active case 必须有 assert 步骤
-11. `youqu at validate --gate 3 --cases-mapped tests/at/cases_mapped.yaml --at-tree-annotated tests/at/at-tree-annotated.yaml`
+
+   ### UNSUPPORTED 分类
+
+   不可自动化的用例标记为 unsupported 并写明原因：
+   - 触摸屏/触控板交互
+   - 纯人工判断（如"界面美观"/"动画流畅"）
+   - 依赖外部硬件
+   - 依赖网络环境（如 SSH 连接远程）
+   - 无状态变化的纯等待（只有 wait + 无 assert）
+
+   **禁止生成 no-op YAML**（session_start → wait → assert_window → session_stop）来"通过"不可自动化的用例。
+
+   ### 瞬态元素处理
+
+   某些元素（如查找框内的搜索框/按钮）不在静态 at-tree 中（因为 dump 时未打开）。
+   处理方式：
+   1. 运行时用 dogtail 抓取瞬态元素的 AT-SPI name/role（如 DLineEditChildLineEdit、DLineEditClearButton）
+   2. 在 selector 中用这些运行时名称
+   3. 用 keyboard_hot_key 打开瞬态界面作为前置步骤
+   4. assert_element 验证瞬态元素已出现
+
+10. **Gate 5 语义安全门禁**：`youqu at validate --gate 5 --cases-mapped tests/at/cases_mapped.yaml`
+    - 检测 keyboard_type 文本是否疑似描述（C2）
+    - 检测 ESC/Tab 前是否缺打开面板步骤（C3）
+    - 检测 selector 是否缺 name 和 accessible_id（C4，error 级）
+    - **0 errors 才能继续**，warnings 需人工确认
+11. Assertion Coverage Gate：所有 active case 必须有 assert 步骤
+12. `youqu at validate --gate 3 --cases-mapped tests/at/cases_mapped.yaml --at-tree-annotated tests/at/at-tree-annotated.yaml`
     - 验证映射格式、selector 交叉引用，通过后才继续
-12. `youqu at generate --cases tests/at/cases_mapped.yaml --output tests/at/yaml --app <app> --at-tree tests/at/at-tree.yaml`
-13. `youqu at validate --gate 4 --generate-output tests/at/yaml`
+13. `youqu at generate --cases tests/at/cases_mapped.yaml --output tests/at/yaml --app <app> --at-tree tests/at/at-tree.yaml`
+14. `youqu at validate --gate 4 --generate-output tests/at/yaml`
     - 验证生成产物
-14. `find tests/at/yaml -type d -empty -delete`
+15. `find tests/at/yaml -type d -empty -delete`
 
 ## 可追溯性链
 
@@ -64,3 +120,13 @@
 - Layer 3: `cases_mapped.yaml` 的 `selector.name` → 最终映射到哪个元素
 
 追溯链：`at-tree.comment ↔ suite-cases.AT元素引用 ↔ cases_mapped.selector.name`
+
+## 质量保障链
+
+三层防御确保生成的 YAML 100% 可执行：
+
+| 层 | 机制 | 作用 |
+|---|------|------|
+| B 规范层 | at-mapping-rules skill 步骤语义解析协议 | LLM 映射时不混淆操作/预期/前置 |
+| C 门禁层 | Gate 5 语义安全门禁 | 运行前拦截语义错误（0 errors 才继续） |
+| A 代码层 | 执行器 fail-fast + accessible_id 查找 | 映射正确的用例 100% 可执行 |
