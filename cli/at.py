@@ -7,6 +7,23 @@ def _not_implemented(cmd: str):
     print(f"youqu at {cmd}: not implemented yet")
 
 
+def cmd_split(args):
+    from src.at.generator.splitter import split_cases
+
+    split_cases(
+        cases_path=args.cases,
+        at_tree_path=args.at_tree,
+        output_dir=args.output,
+        app_name=getattr(args, "app", ""),
+    )
+
+
+def cmd_docs(args):
+    from src.at.generator.manual_loader import cmd_docs as _cmd_docs
+
+    _cmd_docs(args)
+
+
 def cmd_dump(args):
     try:
         import multiprocessing
