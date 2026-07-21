@@ -123,6 +123,46 @@ def _get_app_window_bounds(app_name: str) -> tuple[int, int, int, int] | None:
     return None
 
 
+def _node_role(node) -> str:
+    try:
+        return (getattr(node, "roleName", "") or "").strip()
+    except BaseException:
+        return ""
+
+
+def _node_name(node) -> str:
+    try:
+        return (getattr(node, "name", "") or "").strip()
+    except BaseException:
+        return ""
+
+
+def _select_child(parent_node, attrs):
+    child_index = attrs.get("child_index")
+    child_role = attrs.get("child_role")
+    child_name = attrs.get("child_name")
+    try:
+        children = list(parent_node.children)
+    except BaseException as exc:
+        raise ElementNotFound(f"cannot read children: {exc}") from exc
+    if child_role:
+        children = [c for c in children if _node_role(c) == child_role]
+    if child_name:
+        children = [c for c in children if _node_name(c) == child_name]
+    if not children:
+        raise ElementNotFound(
+            f"no matching child: child_role={child_role}, child_name={child_name}"
+        )
+    try:
+        return children[int(child_index)]
+    except IndexError:
+        raise ElementNotFound(
+            f"child_index {child_index} out of range (have {len(children)} children)"
+        ) from IndexError
+    except (TypeError, ValueError) as exc:
+        raise ElementNotFound(f"invalid child_index: {exc}") from exc
+
+
 def resolve_coordinates(attrs: dict, context: dict) -> tuple[int, int]:
     name = attrs.get("name")
     role = attrs.get("role")
@@ -153,6 +193,7 @@ def resolve_coordinates(attrs: dict, context: dict) -> tuple[int, int]:
                 found = []
 
             if found:
+                parent_node = None
                 for node in found:
                     try:
                         x, y, width, height = node.extents
@@ -166,15 +207,37 @@ def resolve_coordinates(attrs: dict, context: dict) -> tuple[int, int]:
                             and width > 0
                             and height > 0
                         ):
+                            parent_node = node
+                            break
+                    except BaseException:
+                        pass
+                if parent_node is None and found:
+                    parent_node = found[0]
+
+                if parent_node is not None:
+                    if attrs.get("child_index") is not None:
+                        parent_node = _select_child(parent_node, attrs)
+                    try:
+                        x, y, width, height = parent_node.extents
+                        center = (x + width / 2, y + height / 2)
+                        if (
+                            center
+                            and center[0] >= 0
+                            and center[1] >= 0
+                            and width is not None
+                            and height is not None
+                            and width > 0
+                            and height > 0
+                        ):
                             return center
                     except BaseException:
                         pass
-                try:
-                    center = dog.element_center(found[0])
-                    if center and center[0] >= 0 and center[1] >= 0:
-                        return center
-                except BaseException:
-                    pass
+                    try:
+                        center = dog.element_center(parent_node)
+                        if center and center[0] >= 0 and center[1] >= 0:
+                            return center
+                    except BaseException:
+                        pass
 
             raise ElementNotFound(f"element not found, selector={attrs}")
         except ElementNotFound:
@@ -233,7 +296,7 @@ def _find_by_hierarchy(dog, attrs, idx):
         ) from IndexError
 
 
-def find_element(dog, attrs, idx=0):
+def _find_parent_element(dog, attrs, idx=0):
     name = attrs.get("name", "")
     role = attrs.get("role", "")
     accessible_id = attrs.get("accessible_id", "")
@@ -265,13 +328,51 @@ def find_element(dog, attrs, idx=0):
     raise ElementNotFound("no name/role/accessible_id in element definition")
 
 
+def find_element(dog, attrs, idx=0):
+    element = _find_parent_element(dog, attrs, idx)
+    if attrs.get("child_index") is not None:
+        return _select_child(element, attrs)
+    return element
+
+
 # ---- Action Handlers ----
+
+
+def _kill_running_app(app_name: str) -> None:
+    if not app_name:
+        return
+    pgrep = subprocess.run(
+        ["pgrep", "-f", re.escape(app_name)],
+        capture_output=True,
+        text=True,
+    )
+    if not pgrep.stdout.strip():
+        return
+    own_pid = os.getpid()
+    for pid in pgrep.stdout.strip().split():
+        pid_int = int(pid)
+        if pid_int == own_pid:
+            continue
+        try:
+            comm = open(f"/proc/{pid_int}/comm").read().strip()
+        except (FileNotFoundError, PermissionError):
+            continue
+        if comm in ("python3", "python", "sh", "bash"):
+            continue
+        try:
+            os.kill(pid_int, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
 
 
 def handle_session_start(step: SuiteActionStep, context: dict) -> None:
     cmd = step.command or context.get("app", "")
     if not cmd:
         raise ValueError("session_start requires 'command' or app name")
+    app_token = cmd.split()[0] if cmd else ""
+    if app_token:
+        _kill_running_app(os.path.basename(app_token) if "/" in app_token else app_token)
+        time.sleep(0.5)
     if not any(c in cmd for c in "|&;><$`"):
         parts = cmd.split()
         if len(parts) == 1:
@@ -292,27 +393,7 @@ def handle_session_stop(step: SuiteActionStep, context: dict) -> None:
     app = context.get("app", "")
     if app:
         pkill_name = os.path.basename(app) if "/" in app else app
-        pgrep = subprocess.run(
-            ["pgrep", "-f", re.escape(pkill_name)],
-            capture_output=True,
-            text=True,
-        )
-        if pgrep.stdout.strip():
-            own_pid = os.getpid()
-            for pid in pgrep.stdout.strip().split():
-                pid_int = int(pid)
-                if pid_int == own_pid:
-                    continue
-                try:
-                    comm = open(f"/proc/{pid_int}/comm").read().strip()
-                except (FileNotFoundError, PermissionError):
-                    continue
-                if comm in ("python3", "python", "sh", "bash"):
-                    continue
-                try:
-                    os.kill(pid_int, signal.SIGKILL)
-                except ProcessLookupError:
-                    pass
+        _kill_running_app(pkill_name)
 
 
 def handle_keyboard_press(step: SuiteActionStep, context: dict) -> None:
@@ -541,11 +622,28 @@ def _assert_element_expr(step: SuiteActionStep, context: dict) -> str:
     return "$/"
 
 
+def _assert_step_attrs(step: SuiteActionStep, context: dict) -> dict | None:
+    elements = context.get("elements") or {}
+    if step.ref and step.ref in elements:
+        return dict(elements[step.ref])
+    if step.selector:
+        return {k: v for k, v in step.selector.items() if v is not None}
+    return None
+
+
 def handle_assert_element(step: SuiteActionStep, context: dict) -> None:
     import logging
 
     logger = logging.getLogger(__name__)
     dog = get_dog(context, context.get("app") or "")
+    attrs = _assert_step_attrs(step, context)
+    if attrs and attrs.get("child_index") is not None:
+        logger.info(f"断言子元素存在<{attrs}>")
+        try:
+            find_element(dog, attrs, attrs.get("index", 0))
+        except ElementNotFound as exc:
+            raise AssertionError(f"子元素不存在！！！selector= <{attrs}>: {exc}")
+        return
     expr = _assert_element_expr(step, context)
     logger.info(f"断言元素存在<{expr}>")
     if not dog.find_elements_by_attr(expr):
@@ -557,6 +655,14 @@ def handle_assert_not_exists(step: SuiteActionStep, context: dict) -> None:
 
     logger = logging.getLogger(__name__)
     dog = get_dog(context, context.get("app") or "")
+    attrs = _assert_step_attrs(step, context)
+    if attrs and attrs.get("child_index") is not None:
+        logger.info(f"断言子元素不存在<{attrs}>")
+        try:
+            found = find_element(dog, attrs, attrs.get("index", 0))
+        except ElementNotFound:
+            return
+        raise AssertionError(f"子元素不应存在！！！selector= <{attrs}>: {found}")
     expr = _assert_element_expr(step, context)
     logger.info(f"断言元素不存在<{expr}>")
     try:

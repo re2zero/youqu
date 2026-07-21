@@ -135,6 +135,8 @@ selector with at least one of:
 | `role` | 3rd | Only when name is empty |
 | `parent` + `parent_role` | disambiguation | Required when multiple elements share the same name |
 | `index` | disambiguation | Zero-based; when parent alone can't disambiguate |
+| `child_index` | child navigation | Picks the Nth child of a located container (see Constraint 4) |
+| `child_role` / `child_name` | child filter | Optionally filter children by role/name before indexing |
 
 ### Constraint 2: Hierarchy Disambiguation
 
@@ -147,6 +149,55 @@ selector:
   parent: 设置对话框           # ← disambiguates which dialog's button
   parent_role: dialog
 ```
+
+### Constraint 4: Dynamic List Child Navigation
+
+When the target is a **child of a container whose contents are only known at
+runtime** (e.g., a `list`/`icon list`/`tree` whose items are populated by the
+app, not by the at-tree dump), locate the container first, then navigate to
+its Nth child with `child_index`.
+
+`child_index` is **orthogonal** to `index`:
+- `index` = which of the *same-named containers* to pick (parent-level disambiguation)
+- `child_index` = which *child inside* the chosen container to pick
+
+Supported actions (child nav applies wherever a selector is used):
+`mouse_click`, `mouse_right_click`, `mouse_double_click`, `dtk_context_menu`,
+`element_action`, `element_set_value`, `assert_element`, `assert_not_exists`.
+
+Example — right-click the 1st item in a runtime-populated image list:
+
+```yaml
+- action: dtk_context_menu
+  selector:
+    name: View_ImageList
+    role: list
+    child_index: 0          # ← the list's 1st child (runtime)
+    menu:
+      - 复制
+```
+
+Example — assert the 2nd list item exists:
+
+```yaml
+- action: assert_element
+  selector:
+    name: View_ImageList
+    role: list
+    child_index: 1
+```
+
+Filter children by role before indexing (e.g., 3rd `list item` in the list):
+
+```yaml
+selector:
+  name: View_ImageList
+  role: list
+  child_role: list item
+  child_index: 2
+```
+
+`child_index` is zero-based and supports negative values (`-1` = last child).
 
 ### Constraint 3: DTK Menu Items Use Menu Navigation
 
@@ -346,6 +397,7 @@ After writing cases_mapped.yaml, before `youqu at generate`:
 - [ ] Every `element_action`/`mouse_click` has a selector with name or
   accessible_id
 - [ ] No menu item uses `element_action` (must use `dtk_main_menu`/`dtk_context_menu`)
+- [ ] Runtime-populated list/tree children use `child_index` (not a bare `index`)
 - [ ] Every suite has at least one non-`assert_window` assert step
 - [ ] No suite is a no-op (session_start → wait → assert_window → session_stop)
 - [ ] UNSUPPORTED cases are marked and have `reason` filled

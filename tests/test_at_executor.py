@@ -184,13 +184,228 @@ class TestHandlers:
 
     def test_handler_session_start(self):
         import subprocess
+        from src.at.executor import handlers
         from src.at.executor.handlers import handle_session_start
         from src.at.parser.models import SuiteActionStep
 
         step = SuiteActionStep(action="session_start", command="echo hello")
         ctx = {}
-        handle_session_start(step, ctx)
+        with (
+            unittest.mock.patch.object(handlers, "_kill_running_app"),
+            unittest.mock.patch.object(handlers.time, "sleep"),
+        ):
+            handle_session_start(step, ctx)
         assert "app_process" in ctx
+
+    def test_session_start_kills_existing_app_before_launch(self):
+        from src.at.executor import handlers
+        from src.at.executor.handlers import handle_session_start
+        from src.at.parser.models import SuiteActionStep
+
+        step = SuiteActionStep(action="session_start", command="deepin-music")
+        killed = []
+        with (
+            unittest.mock.patch.object(
+                handlers,
+                "_kill_running_app",
+                side_effect=lambda n: killed.append(n),
+            ),
+            unittest.mock.patch.object(handlers.time, "sleep"),
+            unittest.mock.patch.object(
+                handlers.subprocess, "Popen", return_value=unittest.mock.MagicMock()
+            ),
+        ):
+            ctx = {}
+            handle_session_start(step, ctx)
+        assert killed == ["deepin-music"]
+        assert "app_process" in ctx
+
+    def test_session_start_strips_path_for_kill(self):
+        from src.at.executor import handlers
+        from src.at.executor.handlers import handle_session_start
+        from src.at.parser.models import SuiteActionStep
+
+        step = SuiteActionStep(action="session_start", command="/usr/bin/deepin-music --foo")
+        killed = []
+        with (
+            unittest.mock.patch.object(
+                handlers,
+                "_kill_running_app",
+                side_effect=lambda n: killed.append(n),
+            ),
+            unittest.mock.patch.object(handlers.time, "sleep"),
+            unittest.mock.patch.object(
+                handlers.subprocess, "Popen", return_value=unittest.mock.MagicMock()
+            ),
+        ):
+            handle_session_start(step, {})
+        assert killed == ["deepin-music"]
+
+    def test_session_stop_uses_kill_helper(self):
+        from src.at.executor import handlers
+        from src.at.executor.handlers import handle_session_stop
+        from src.at.parser.models import SuiteActionStep
+
+        step = SuiteActionStep(action="session_stop")
+        proc = unittest.mock.MagicMock()
+        proc.poll.return_value = None
+        killed = []
+        with unittest.mock.patch.object(
+            handlers,
+            "_kill_running_app",
+            side_effect=lambda n: killed.append(n),
+        ):
+            handle_session_stop(step, {"app": "deepin-music", "app_process": proc})
+        proc.terminate.assert_called_once()
+        assert killed == ["deepin-music"]
+
+    def test_find_element_child_index(self):
+        from src.at.executor.handlers import find_element
+
+        parent = unittest.mock.MagicMock()
+        child0 = unittest.mock.MagicMock(name="child0")
+        child1 = unittest.mock.MagicMock(name="child1")
+        parent.children = [child0, child1]
+        fake_dog = unittest.mock.MagicMock()
+        fake_dog.find_element_by_attr.return_value = parent
+        result = find_element(fake_dog, {"name": "View_ImageList", "child_index": 1})
+        assert result is child1
+
+    def test_find_element_child_index_negative_last(self):
+        from src.at.executor.handlers import find_element
+
+        parent = unittest.mock.MagicMock()
+        c0 = unittest.mock.MagicMock()
+        c1 = unittest.mock.MagicMock()
+        c2 = unittest.mock.MagicMock()
+        parent.children = [c0, c1, c2]
+        fake_dog = unittest.mock.MagicMock()
+        fake_dog.find_element_by_attr.return_value = parent
+        result = find_element(fake_dog, {"name": "lst", "child_index": -1})
+        assert result is c2
+
+    def test_find_element_child_role_filter(self):
+        from src.at.executor.handlers import find_element
+
+        parent = unittest.mock.MagicMock()
+        c0 = unittest.mock.MagicMock()
+        c0.roleName = "panel"
+        c1 = unittest.mock.MagicMock()
+        c1.roleName = "list item"
+        c2 = unittest.mock.MagicMock()
+        c2.roleName = "list item"
+        parent.children = [c0, c1, c2]
+        fake_dog = unittest.mock.MagicMock()
+        fake_dog.find_element_by_attr.return_value = parent
+        result = find_element(
+            fake_dog, {"name": "lst", "child_role": "list item", "child_index": 1}
+        )
+        assert result is c2
+
+    def test_find_element_child_index_out_of_range_raises(self):
+        from src.at.executor.handlers import find_element
+
+        parent = unittest.mock.MagicMock()
+        parent.children = [unittest.mock.MagicMock()]
+        fake_dog = unittest.mock.MagicMock()
+        fake_dog.find_element_by_attr.return_value = parent
+        with pytest.raises(BaseException, match="out of range"):
+            find_element(fake_dog, {"name": "lst", "child_index": 5})
+
+    def test_resolve_coordinates_child_index(self):
+        from src.at.executor.handlers import resolve_coordinates
+
+        child = unittest.mock.MagicMock()
+        child.extents = (200, 300, 40, 40)
+        parent = unittest.mock.MagicMock()
+        parent.extents = (10, 20, 500, 500)
+        parent.children = [unittest.mock.MagicMock(), child]
+        fake_dog = unittest.mock.MagicMock()
+        fake_dog.find_elements_by_attr.return_value = [parent]
+        with (
+            unittest.mock.patch("src.at.executor.handlers.get_dog", return_value=fake_dog),
+            unittest.mock.patch("src.at.executor.handlers.ensure_window_focus"),
+        ):
+            x, y = resolve_coordinates(
+                {"name": "View_ImageList", "child_index": 1}, {"app": "test-app"}
+            )
+        assert x == 220
+        assert y == 320
+
+    def test_assert_element_child_index_exists(self):
+        from src.at.executor.handlers import handle_assert_element
+        from src.at.parser.models import SuiteActionStep
+
+        parent = unittest.mock.MagicMock()
+        child = unittest.mock.MagicMock()
+        parent.children = [child]
+        fake_dog = unittest.mock.MagicMock()
+        fake_dog.find_element_by_attr.return_value = parent
+        step = SuiteActionStep(
+            action="assert_element",
+            selector={"name": "lst", "child_index": 0},
+        )
+        with unittest.mock.patch("src.at.executor.handlers.get_dog", return_value=fake_dog):
+            handle_assert_element(step, {"app": "test-app"})
+
+    def test_assert_element_child_index_not_found_raises(self):
+        from src.at.executor.handlers import handle_assert_element
+        from src.at.parser.models import SuiteActionStep
+
+        parent = unittest.mock.MagicMock()
+        parent.children = []
+        fake_dog = unittest.mock.MagicMock()
+        fake_dog.find_element_by_attr.return_value = parent
+        step = SuiteActionStep(
+            action="assert_element",
+            selector={"name": "lst", "child_index": 0},
+        )
+        with unittest.mock.patch("src.at.executor.handlers.get_dog", return_value=fake_dog):
+            with pytest.raises(AssertionError, match="子元素不存在"):
+                handle_assert_element(step, {"app": "test-app"})
+
+    def test_assert_not_exists_child_index_present_raises(self):
+        from src.at.executor.handlers import handle_assert_not_exists
+        from src.at.parser.models import SuiteActionStep
+
+        parent = unittest.mock.MagicMock()
+        child = unittest.mock.MagicMock()
+        parent.children = [child]
+        fake_dog = unittest.mock.MagicMock()
+        fake_dog.find_element_by_attr.return_value = parent
+        step = SuiteActionStep(
+            action="assert_not_exists",
+            selector={"name": "lst", "child_index": 0},
+        )
+        with unittest.mock.patch("src.at.executor.handlers.get_dog", return_value=fake_dog):
+            with pytest.raises(AssertionError, match="不应存在"):
+                handle_assert_not_exists(step, {"app": "test-app"})
+
+    def test_assert_not_exists_child_index_absent_passes(self):
+        from src.at.executor.handlers import handle_assert_not_exists
+        from src.at.parser.models import SuiteActionStep
+
+        parent = unittest.mock.MagicMock()
+        parent.children = []
+        fake_dog = unittest.mock.MagicMock()
+        fake_dog.find_element_by_attr.return_value = parent
+        step = SuiteActionStep(
+            action="assert_not_exists",
+            selector={"name": "lst", "child_index": 0},
+        )
+        with unittest.mock.patch("src.at.executor.handlers.get_dog", return_value=fake_dog):
+            handle_assert_not_exists(step, {"app": "test-app"})
+
+    def test_assert_element_without_child_index_uses_expr_path(self):
+        from src.at.executor.handlers import handle_assert_element
+        from src.at.parser.models import SuiteActionStep
+
+        fake_dog = unittest.mock.MagicMock()
+        fake_dog.find_elements_by_attr.return_value = [unittest.mock.MagicMock()]
+        step = SuiteActionStep(action="assert_element", selector={"name": "OK"})
+        with unittest.mock.patch("src.at.executor.handlers.get_dog", return_value=fake_dog):
+            handle_assert_element(step, {"app": "test-app"})
+        fake_dog.find_elements_by_attr.assert_called_once_with("$//OK/")
 
     def test_handler_wait_noop(self):
         from src.at.executor.handlers import handle_wait
