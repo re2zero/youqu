@@ -304,6 +304,16 @@ def main():
     p_at_precandidate.add_argument("--output", default="", help="Output suite-cases.yaml path")
     p_at_precandidate.add_argument("--module-dir", default="", help="Module directory (alternative to --cases)")
 
+    p_at_smoke = at_sub.add_parser("smoke", help="L2: module smoke test (runtime addressability)")
+    p_at_smoke.add_argument("--modules-dir", default="", help="Directory containing all modules")
+    p_at_smoke.add_argument("--module-dir", default="", help="Single module directory")
+    p_at_smoke.add_argument("--skip-env-check", action="store_true", help="Skip environment checks")
+
+    p_at_verify = at_sub.add_parser("verify", help="L3: single case runtime verification")
+    p_at_verify.add_argument("--suite", required=True, help="Path to .suite.yaml")
+    p_at_verify.add_argument("--spec-id", default="", help="Specific spec ID to verify")
+    p_at_verify.add_argument("--skip-env-check", action="store_true", help="Skip environment checks")
+
     args, extra = parser.parse_known_args()
 
     if args.command == "make":
@@ -378,7 +388,7 @@ def main():
             )
             sys.exit(1)
     elif args.command == "at":
-        from youqu.cli.at import cmd_docs, cmd_dump, cmd_generate, cmd_map, cmd_parse, cmd_precandidate, cmd_run, cmd_split, cmd_tree_info, cmd_validate
+        from youqu.cli.at import cmd_docs, cmd_dump, cmd_generate, cmd_map, cmd_parse, cmd_precandidate, cmd_run, cmd_smoke, cmd_split, cmd_tree_info, cmd_validate, cmd_verify
 
         dispatch = {
             "dump": cmd_dump,
@@ -391,12 +401,14 @@ def main():
             "split": cmd_split,
             "docs": cmd_docs,
             "precandidate": cmd_precandidate,
+            "smoke": cmd_smoke,
+            "verify": cmd_verify,
         }
         handler = dispatch.get(args.at_command)
         if handler:
             handler(args)
         else:
-            print("Usage: youqu at {dump|parse|tree-info|map|generate|run|validate|split|docs|precandidate}")
+            print("Usage: youqu at {dump|parse|tree-info|map|generate|run|validate|split|docs|precandidate|smoke|verify}")
             sys.exit(1)
     else:
         parser.print_help()

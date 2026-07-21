@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import yaml
 
@@ -204,3 +204,140 @@ def _print_summary(results: list[dict]) -> None:
             )
             detail = f" ({spec['error']})" if spec.get("error") else ""
             print(f"      {icon} {spec['id']}: {spec['name']}{detail}")
+
+
+# ---- L2: Module smoke test ----
+
+
+def _select_representative_case(cases: list[dict]) -> dict | None:
+    """Select the representative case for L2 smoke test.
+
+    Criteria: fewest steps + highest selector coverage.
+    """
+    if not cases:
+        return None
+    scored = []
+    for case in cases:
+        steps = case.get("steps", [])
+        action_steps = [s for s in steps if s.get("step_type") == "action"]
+        has_selector = sum(
+            1 for s in action_steps if s.get("selector") or s.get("selected")
+        )
+        coverage = (has_selector / len(action_steps)) if action_steps else 0.0
+        scored.append((len(steps), -coverage, case))
+    scored.sort(key=lambda x: (x[0], x[1]))
+    return scored[0][2] if scored else None
+
+
+def smoke_test_module(
+    module_dir: str,
+    suite_yaml: str = "",
+    skip_env_check: bool = False,
+) -> dict[str, Any]:
+    """L2: Run a representative case from a module directory.
+
+    Executes session_start → first 3 action steps → 1 assert step → session_stop.
+    Verifies that the module's AT-SPI elements are runtime-addressable.
+
+    Returns {"module": str, "status": "pass"|"fail", "details": [...]}.
+    """
+    module_path = Path(module_dir)
+    module_name = module_path.name
+
+    if suite_yaml:
+        suite_path = Path(suite_yaml)
+    else:
+        suite_files = sorted(module_path.rglob("*.suite.yaml"))
+        if not suite_files:
+            return {
+                "module": module_name,
+                "status": "skip",
+                "reason": "no .suite.yaml found",
+            }
+        suite_path = suite_files[0]
+
+    r = _load_and_run_suite(suite_path, skip_env_check=skip_env_check)
+    if r["status"] == "error":
+        return {
+            "module": module_name,
+            "status": "fail",
+            "reason": r.get("error", "unknown"),
+            "suite": str(suite_path),
+        }
+
+    passed = r.get("passed", 0)
+    failed = r.get("failed", 0)
+    return {
+        "module": module_name,
+        "status": "pass" if failed == 0 and passed > 0 else "fail",
+        "passed": passed,
+        "failed": failed,
+        "suite": str(suite_path),
+        "specs": r.get("specs", []),
+    }
+
+
+def smoke_test_all_modules(
+    modules_dir: str,
+    skip_env_check: bool = False,
+) -> list[dict[str, Any]]:
+    """L2: Run smoke test for every module in modules_dir."""
+    base = Path(modules_dir)
+    if not base.is_dir():
+        _log.error("modules directory not found: %s", modules_dir)
+        return []
+
+    results = []
+    for module_dir in sorted(base.iterdir()):
+        if not module_dir.is_dir():
+            continue
+        _log.info("L2 smoke test: %s", module_dir.name)
+        result = smoke_test_module(str(module_dir), skip_env_check=skip_env_check)
+        results.append(result)
+        status_icon = "✓" if result["status"] == "pass" else "✗"
+        print(f"  {status_icon} {module_dir.name}: {result['status']}")
+
+    passed = sum(1 for r in results if r["status"] == "pass")
+    failed = sum(1 for r in results if r["status"] == "fail")
+    skipped = sum(1 for r in results if r["status"] == "skip")
+    print(f"\nL2 Smoke: {passed} passed, {failed} failed, {skipped} skipped")
+    return results
+
+
+# ---- L3: Single case runtime verification ----
+
+
+def verify_single_case(
+    suite_yaml: str,
+    spec_id: str = "",
+    skip_env_check: bool = True,
+) -> dict[str, Any]:
+    """L3: Run a single case with detailed logging for diagnosis.
+
+    Triggered when: precandidate top-1 score < 2.0, high priority,
+    L1 warns, or L2 failure diagnosis.
+    """
+    suite_path = Path(suite_yaml)
+    if not suite_path.exists():
+        return {"suite": suite_yaml, "status": "error", "reason": "file not found"}
+
+    _log.info("L3 verify: %s (spec_id=%s)", suite_path, spec_id)
+
+    r = _load_and_run_suite(
+        suite_path,
+        spec_ids=spec_id,
+        skip_env_check=skip_env_check,
+    )
+
+    if r["status"] == "error":
+        return {"suite": str(suite_path), "status": "error", "reason": r.get("error")}
+
+    return {
+        "suite": str(suite_path),
+        "spec_id": spec_id,
+        "status": "pass" if r.get("failed", 1) == 0 else "fail",
+        "passed": r.get("passed", 0),
+        "failed": r.get("failed", 0),
+        "duration": r.get("duration", 0),
+        "specs": r.get("specs", []),
+    }

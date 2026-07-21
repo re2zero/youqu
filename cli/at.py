@@ -40,6 +40,33 @@ def cmd_precandidate(args):
         )
 
 
+def cmd_smoke(args):
+    from src.at.executor.runner import smoke_test_all_modules, smoke_test_module
+
+    if args.module_dir:
+        result = smoke_test_module(args.module_dir, skip_env_check=args.skip_env_check)
+        print(f"  {result['module']}: {result['status']}")
+    else:
+        smoke_test_all_modules(args.modules_dir, skip_env_check=args.skip_env_check)
+
+
+def cmd_verify(args):
+    from src.at.executor.runner import verify_single_case
+
+    result = verify_single_case(
+        suite_yaml=args.suite,
+        spec_id=args.spec_id,
+        skip_env_check=args.skip_env_check,
+    )
+    status_icon = "✓" if result["status"] == "pass" else "✗"
+    print(f"  {status_icon} {result.get('suite', '')} [{result['status']}]")
+    for spec in result.get("specs", []):
+        icon = "✓" if spec["status"] == "passed" else "✗"
+        print(f"    {icon} {spec['id']}: {spec['name']}")
+        if spec.get("error"):
+            print(f"       error: {spec['error']}")
+
+
 def cmd_dump(args):
     try:
         import multiprocessing

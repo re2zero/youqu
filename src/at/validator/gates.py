@@ -275,20 +275,30 @@ def validate_gate3(cases_mapped_path: str, at_tree_annotated_path: str = "") -> 
         return report
 
     tree_names: set[str] | None = None
+    tree_roles: dict[str, str] | None = None
     if at_tree_annotated_path:
         tree_data = _load_yaml(at_tree_annotated_path)
         if tree_data:
             tree_nodes = tree_data.get("tree", [])
             tree_names = set()
+            tree_roles = {}
             for node, _ in _flatten_tree(tree_nodes):
                 n = node.get("name", "")
                 if n:
                     tree_names.add(n)
+                    tree_roles[n] = node.get("role", "")
                 on = node.get("object_name", "")
                 if on:
                     tree_names.add(on)
 
     cases = cases_data.get("cases", [])
+
+    _ACTION_ROLE_MAP: dict[str, frozenset[str]] = {
+        "dtk_main_menu": frozenset({"menu item", "menu"}),
+        "dtk_context_menu": frozenset({"menu item", "menu"}),
+        "keyboard_type": frozenset({"text", "entry", "edit bar", "spin button"}),
+        "keyboard_type_text": frozenset({"text", "entry", "edit bar", "spin button"}),
+    }
 
     for suite in cases:
         sid = suite.get("id", "?")
@@ -303,6 +313,21 @@ def validate_gate3(cases_mapped_path: str, at_tree_annotated_path: str = "") -> 
                 report["passed"] = False
 
         steps = suite.get("steps", [])
+
+        # L1 check: assertion coverage
+        has_non_window_assert = any(
+            s.get("step_type") == "assert" and s.get("action") != "assert_window"
+            for s in steps
+        )
+        if steps and not has_non_window_assert:
+            report["warnings"].append(
+                f"[{sid}] no non-assert_window assertions "
+                f"(quality_warning: low_assertion_coverage)"
+            )
+
+        # L1 check: duplicate step blocks (≥3 consecutive identical)
+        _check_duplicate_blocks(steps, sid, report)
+
         for i, step in enumerate(steps):
             action = step.get("action", "")
             if action and action not in _VALID_ACTIONS:
@@ -311,6 +336,8 @@ def validate_gate3(cases_mapped_path: str, at_tree_annotated_path: str = "") -> 
 
             selector = step.get("selector") or {}
             sel_name = selector.get("name", "")
+            sel_role = selector.get("role", "")
+
             if sel_name:
                 if tree_names is not None and sel_name in tree_names:
                     pass
@@ -325,13 +352,49 @@ def validate_gate3(cases_mapped_path: str, at_tree_annotated_path: str = "") -> 
                     )
                     report["passed"] = False
 
-            sel_role = selector.get("role", "")
+            # L1 check: action-role consistency
+            if action and sel_role and tree_roles is not None:
+                valid_roles = _ACTION_ROLE_MAP.get(action)
+                if valid_roles and sel_role not in valid_roles:
+                    report["errors"].append(
+                        f"[{sid}] step {i}: action '{action}' incompatible with "
+                        f"role '{sel_role}' (expected one of {valid_roles})"
+                    )
+                    report["passed"] = False
+
             if not sel_name and not sel_role and not selector.get("name_pattern"):
                 report["warnings"].append(
                     f"[{sid}] step {i}: selector is empty (no name/role/name_pattern)"
                 )
 
     return report
+
+
+def _check_duplicate_blocks(steps: list[dict], sid: str, report: dict) -> None:
+    """L1 check: detect ≥3 consecutive identical steps (duplicate_block warning)."""
+    if len(steps) < 3:
+        return
+
+    dup_count = 0
+    for i in range(len(steps) - 2):
+        a, b, c = steps[i], steps[i + 1], steps[i + 2]
+        if not all(isinstance(s, dict) for s in (a, b, c)):
+            continue
+        key_a = (a.get("action", ""), a.get("selector", {}).get("name", ""), a.get("key", ""), a.get("text", ""))
+        key_b = (b.get("action", ""), b.get("selector", {}).get("name", ""), b.get("key", ""), b.get("text", ""))
+        key_c = (c.get("action", ""), c.get("selector", {}).get("name", ""), c.get("key", ""), c.get("text", ""))
+        if key_a == key_b == key_c:
+            dup_count += 1
+            if dup_count == 1:
+                report["warnings"].append(
+                    f"[{sid}] duplicate step block at steps {i}-{i + 2} "
+                    f"(quality_warning: duplicate_block)"
+                )
+
+    if dup_count > 3:
+        report["warnings"].append(
+            f"[{sid}] {dup_count} duplicate blocks total — suite marked needs_review"
+        )
 
 
 def validate_gate4(generate_output_dir: str, at_tree_annotated_path: str = "") -> dict:
