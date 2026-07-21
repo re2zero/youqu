@@ -24,6 +24,22 @@ def cmd_docs(args):
     _cmd_docs(args)
 
 
+def cmd_precandidate(args):
+    from src.at.generator.precandidate import (
+        precandidate_from_cases,
+        precandidate_from_module,
+    )
+
+    if getattr(args, "module_dir", None):
+        precandidate_from_module(args.module_dir)
+    else:
+        precandidate_from_cases(
+            cases_path=args.cases,
+            at_tree_path=args.at_tree,
+            output_path=args.output,
+        )
+
+
 def cmd_dump(args):
     try:
         import multiprocessing

@@ -298,6 +298,12 @@ def main():
     p_at_docs.add_argument("app", help="App ID (e.g. deepin-terminal)")
     p_at_docs.add_argument("--output", default="docs", help="Output directory")
 
+    p_at_precandidate = at_sub.add_parser("precandidate", help="Pre-filter candidates for each step")
+    p_at_precandidate.add_argument("--cases", default="", help="Path to cases_raw.yaml")
+    p_at_precandidate.add_argument("--at-tree", default="", help="Path to at-tree-annotated.yaml")
+    p_at_precandidate.add_argument("--output", default="", help="Output suite-cases.yaml path")
+    p_at_precandidate.add_argument("--module-dir", default="", help="Module directory (alternative to --cases)")
+
     args, extra = parser.parse_known_args()
 
     if args.command == "make":
@@ -372,7 +378,7 @@ def main():
             )
             sys.exit(1)
     elif args.command == "at":
-        from youqu.cli.at import cmd_docs, cmd_dump, cmd_generate, cmd_map, cmd_parse, cmd_run, cmd_split, cmd_tree_info, cmd_validate
+        from youqu.cli.at import cmd_docs, cmd_dump, cmd_generate, cmd_map, cmd_parse, cmd_precandidate, cmd_run, cmd_split, cmd_tree_info, cmd_validate
 
         dispatch = {
             "dump": cmd_dump,
@@ -384,12 +390,13 @@ def main():
             "validate": cmd_validate,
             "split": cmd_split,
             "docs": cmd_docs,
+            "precandidate": cmd_precandidate,
         }
         handler = dispatch.get(args.at_command)
         if handler:
             handler(args)
         else:
-            print("Usage: youqu at {dump|parse|tree-info|map|generate|run|validate|split|docs}")
+            print("Usage: youqu at {dump|parse|tree-info|map|generate|run|validate|split|docs|precandidate}")
             sys.exit(1)
     else:
         parser.print_help()
