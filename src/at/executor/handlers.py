@@ -246,6 +246,7 @@ def resolve_coordinates(attrs: dict, context: dict) -> tuple[int, int]:
             raise ElementNotFound(f"lookup error: {exc}, selector={attrs}") from exc
 
     if attrs.get("x") is not None and attrs.get("y") is not None:
+        logger.warning("coordinate fallback used (no AT-SPI locator matched): %s", attrs)
         return attrs.get("x"), attrs.get("y")
 
     raise ElementNotFound(f"no locator and no coordinates: {attrs}")
@@ -526,6 +527,18 @@ def handle_dtk_context_menu(step: SuiteActionStep, context: dict) -> None:
 
     elements = context.get("elements") or {}
     attrs = resolve_step_attrs(step, elements)
+
+    has_locator = (
+        attrs.get("name") or attrs.get("role") or attrs.get("accessible_id") or attrs.get("parent")
+    )
+    has_coords = attrs.get("x") is not None and attrs.get("y") is not None
+    if has_coords and not has_locator:
+        logger.warning(
+            "dtk_context_menu using pure coordinates without AT-SPI locator "
+            "(quality_warning: coordinate_fallback): %s",
+            attrs,
+        )
+
     x, y = resolve_coordinates(attrs, context)
     items = attrs.get("menu", []) or attrs.get("items", [])
 
@@ -675,13 +688,23 @@ def handle_assert_not_exists(step: SuiteActionStep, context: dict) -> None:
 
 
 def handle_assert_window(step: SuiteActionStep, context: dict) -> None:
-    from src.assert_common import AssertCommon
-
     app = step.app or context.get("app", "")
-    if step.name_pattern:
-        AssertCommon.assert_element_exist(f"$/{app}//{step.name_pattern}/")
-    else:
-        AssertCommon.assert_element_exist(f"$/{app}//DMainWindow")
+    dog = get_dog(context, app)
+    ensure_window_focus(context)
+
+    from src.depends.dogtail.tree import predicate
+
+    frames = dog.obj.findChildren(predicate.GenericPredicate(roleName="frame"), recursive=True)
+    if not frames:
+        frames = dog.obj.findChildren(predicate.GenericPredicate(roleName="window"), recursive=True)
+    if not frames:
+        raise AssertionError(f"未找到应用 {app} 的窗口")
+
+    pattern = step.name_pattern
+    if pattern and pattern != app:
+        matched = [f for f in frames if pattern.lower() in (f.name or "").lower()]
+        if not matched:
+            raise AssertionError(f"应用 {app} 窗口存在但名称不匹配 pattern={pattern}")
 
 
 def handle_assert_window_count(step: SuiteActionStep, context: dict) -> None:
