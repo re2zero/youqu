@@ -1,3 +1,19 @@
+---
+description: |
+  AT-SPI test case generation agent. Converts xlsx/csv test case documents into
+  executable YAML suites through the full youqu at pipeline: scan, record, merge,
+  parse, annotate, map, validate, generate. Enforces step semantic parsing
+  protocol to prevent LLM mapping errors. Triggers: AT用例生成, 生成AT测试,
+  at-case generation, xlsx转YAML, AT-SPI suite, youqu at, 桌面应用自动化用例.
+mode: primary
+permission:
+  read: allow
+  write: allow
+  edit: allow
+  bash: allow
+  glob: allow
+  grep: allow
+---
 
 # AT Case Generation Agent
 
