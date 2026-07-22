@@ -1,6 +1,6 @@
 ---
 name: at-case-generator
-version: "0.4.0"
+version: "0.5.0"
 description: >
   Use when generating AT-SPI test suites from xlsx/csv test case documents
   for a Linux desktop application. Triggers: AT用例生成, at-case generation,
@@ -43,15 +43,25 @@ Step 2.7: Case normalization (AI session)
     AI groups cases by GUI interface → suite-cases.yaml + cases_non_gui.yaml
     AI adds 4-field suite annotations (测试界面, 测试功能, 前置条件, AT元素引用)
     youqu at validate --gate 2
+Step 2.8: Module split (optional, for large case sets)
+    youqu at split --cases <cases_raw> --at-tree <annotated> --output <dir>
+    youqu at docs <app> --output <docs_dir>  (optional: import help manual chapters)
 Step 3: AI semantic mapping (KEY STEP — AI does this through understanding)
-    AI reads at-tree-annotated.yaml + suite-cases.yaml
+    AI reads at-tree-annotated.yaml + suite-cases.yaml (or per-module files)
     AI fills action, element_ref, selector, items, key, text, assertion
     AI writes cases_mapped.yaml with format example in header
     youqu at validate --gate 3
+    youqu at validate --gate 5  (semantic safety: description-as-input, missing precondition, empty selector)
+Step 3.5: Precandidate (optional, for constraint-based selector pre-filtering)
+    youqu at precandidate --cases <cases_raw> --at-tree <annotated> --output <suite-cases.yaml>
+    (or per-module: youqu at precandidate --module-dir <dir>)
 Step 4: Generate + validate
     youqu at generate --cases <mapped> --output <dir> --app <app> --at-tree <tree>
     youqu at validate --gate 4
     youqu at run --testdir <dir>  [NOT python -m src.yaml_test.suite]
+Step 5: Layered runtime verification (optional)
+    youqu at smoke --modules-dir <dir>   (L2: one representative case per module)
+    youqu at verify --suite <suite.yaml> --spec-id <id>  (L3: single case deep verify)
 ```
 
 `youqu at map` is **deprecated**. Mapping is done by you (the agent) in Step 3.
@@ -315,6 +325,10 @@ After mapping, run `youqu at validate --gate 3 --cases-mapped <path> --at-tree-a
 to verify format example exists, selectors cross-reference the annotated tree,
 and no noise selectors remain.
 
+Then run `youqu at validate --gate 5 --cases-mapped <path>` to verify semantic
+safety: no description text as keyboard input, no keyboard_press without a prior
+panel-opener action, no selector missing both name and accessible_id.
+
 See `references/pipeline-reference.md` for full cases.yaml schema and
 `references/suite-format.md` for all action types and their fields.
 
@@ -425,12 +439,17 @@ The AT pipeline uses `AtSuiteExecutor` in `src/at/executor/`.
 
 | Command | Required Args | Optional Args |
 |---------|--------------|---------------|
-| `youqu at dump dtk` | type, --app, --src | --output |
-| `youqu at parse` | --input, --output | — |
+| `youqu at dump dtk` | type, --app, --src | --output, --launch, --no-record, --include-dirs |
+| `youqu at parse` | --input, --output | --at-tree (deprecated) |
 | `youqu at tree-info` | --at-tree, --output | --format (yaml\|text, default yaml) |
-| `youqu at validate` | — | --gate (1\|2\|3\|4\|all), --at-tree-annotated, --suite-cases, --cases-mapped, --generate-output, --element-gaps |
-| `youqu at generate` | --cases, --output | --app, --at-tree, --assert-gate |
-| `youqu at run` | — | --suite, --testdir, -k, --spec-ids, --tags |
+| `youqu at split` | --cases, --at-tree, --output | --app |
+| `youqu at docs` | app | --output |
+| `youqu at precandidate` | — | --cases, --at-tree, --output, --module-dir |
+| `youqu at validate` | — | --gate (1\|2\|3\|4\|5\|all), --at-tree-annotated, --suite-cases, --cases-mapped, --generate-output, --element-gaps |
+| `youqu at generate` | --cases, --output | --app, --at-tree, --no-assert-gate |
+| `youqu at run` | — | --suite, --testdir, -k, --spec-ids, --tags, --skip-env-check |
+| `youqu at smoke` | — | --modules-dir, --module-dir, --skip-env-check |
+| `youqu at verify` | --suite | --spec-id, --skip-env-check |
 
 ## Reference Files
 

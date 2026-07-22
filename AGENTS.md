@@ -196,7 +196,20 @@ Ruff: line-length=100, 4-space indent, Python 3.10+。仅启用 E4/E7/E9/F 规�
 
 ### AT-SPI YAML 测试管道 (youqu at)
 
-`youqu at dump <type> --app <app_id> --src <src_dir> --output <output_dir>` 用于生成 AT-SPI YAML 测试树。
+`youqu at` 命令族提供完整的 AT-SPI YAML 测试自动化管道: dump → parse → tree-info → split → docs → precandidate → validate → generate → run → smoke/verify。
+
+**管道命令一览**:
+- `youqu at dump dtk --app <id> --src <dir> --output <dir>` — 抓取 AT-SPI 树 + 静态源码扫描 + 去噪合并
+- `youqu at parse --input <xlsx> --output <yaml>` — xlsx/csv → cases_raw.yaml (格式转换)
+- `youqu at tree-info --at-tree <yaml> --output <yaml> --format yaml` — 生成 AI 标注用结构化 YAML
+- `youqu at split --cases <raw> --at-tree <annotated> --output <dir>` — 按模块分片 cases + at-tree 子集
+- `youqu at docs <app> --output <dir>` — 导入帮助手册章节 (按 `##` 切分)
+- `youqu at precandidate --cases <raw> --at-tree <annotated> --output <yaml>` — 约束式选择器预筛选
+- `youqu at validate --gate <1|2|3|4|5|all>` — 分层验证 (5 个 gate)
+- `youqu at generate --cases <mapped> --output <dir> --app <app> --at-tree <tree>` — 生成 suite YAML
+- `youqu at run --testdir <dir>` — 执行 AT-SPI YAML 测试
+- `youqu at smoke --modules-dir <dir>` — L2 模块烟雾测试 (每模块 1 个代表 case)
+- `youqu at verify --suite <yaml> --spec-id <id>` — L3 单 case 深度验证
 
 **静态扫描依赖**：
 - 需要 libclang Python 绑定以提取 DTK/Qt 控件声明骨架
@@ -206,7 +219,14 @@ Ruff: line-length=100, 4-space indent, Python 3.10+。仅启用 E4/E7/E9/F 规�
 **命令示例**：
 ```bash
 youqu at dump dtk --app dde-file-manager --src /path/to/source --output /path/to/output
+youqu at split --cases cases_raw.yaml --at-tree at-tree-annotated.yaml --output /tmp/modules/
+youqu at precandidate --module-dir /tmp/modules/find/
+youqu at validate --gate 5 --cases-mapped cases_mapped.yaml
+youqu at smoke --modules-dir /tmp/modules/
+youqu at verify --suite find/find.suite.yaml --spec-id find_s0
 ```
+
+**技能文件**: `skills/at-case-generator/SKILL.md` (主管道 + CLI 参考) 和 `skills/at-mapping-rules/SKILL.md` (步骤语义解析协议)。
 
 ### 远程执行
 `manage.py remote` 通过 SSH 分发代码，`--slaves` 参数格式: `user@ip:password`，多台用 `/` 分隔。

@@ -10,13 +10,20 @@ do semantic mapping in the session, not a CLI LLM call.
 xlsx/csv ──[parse]──→ cases_raw.yaml ──[AI normalize]──→ suite-cases.yaml
                                                               │
 at-tree.yaml ──[tree-info --format yaml]──→ at-tree-annotated.yaml (draft)
-                                                        │
-                                    AI annotates → at-tree-annotated.yaml (reviewed)
-                                                        │
-                                    suite-cases.yaml + at-tree-annotated.yaml
-                                              ──[AI map]──→ cases_mapped.yaml
-                                                                   │
-                                          cases_mapped.yaml ──[generate]──→ suite YAML
+                                                         │
+                                     AI annotates → at-tree-annotated.yaml (reviewed)
+                                                         │
+                                     [optional] youqu at split → per-module dirs
+                                     [optional] youqu at docs → help manual chapters
+                                     [optional] youqu at precandidate → pre-filtered candidates
+                                                         │
+                                     suite-cases.yaml + at-tree-annotated.yaml
+                                               ──[AI map]──→ cases_mapped.yaml
+                                                                    │
+                                           cases_mapped.yaml ──[generate]──→ suite YAML
+                                                                    │
+                                           [optional] youqu at smoke → L2 module smoke
+                                           [optional] youqu at verify → L3 single case
 ```
 
 1. `youqu at parse` — format-only conversion (no LLM, no semantic mapping)
@@ -26,10 +33,16 @@ at-tree.yaml ──[tree-info --format yaml]──→ at-tree-annotated.yaml (dr
 5. `youqu at validate --gate 1` — verify denoising + annotation completeness
 6. AI normalization — group cases by GUI interface, add suite annotations, split compound steps
 7. `youqu at validate --gate 2` — verify normalization + suite annotations
-8. You (the agent) — semantic mapping (fills action, element_ref, selector, etc.)
-9. `youqu at validate --gate 3` — verify mapping format + selector cross-references
-10. `youqu at generate` — pure rules-based generation with post-validation
-11. `youqu at validate --gate 4` — verify generation output
+8. [optional] `youqu at split` — split cases_raw into per-module directories with at-tree subsets
+9. [optional] `youqu at docs` — import help manual chapters for LLM-assisted grouping
+10. [optional] `youqu at precandidate` — constraint-based selector pre-filtering
+11. You (the agent) — semantic mapping (fills action, element_ref, selector, etc.)
+12. `youqu at validate --gate 3` — verify mapping format + selector cross-references
+13. `youqu at validate --gate 5` — semantic safety (description-as-input, missing precondition, empty selector)
+14. `youqu at generate` — pure rules-based generation with post-validation
+15. `youqu at validate --gate 4` — verify generation output
+16. [optional] `youqu at smoke` — L2: one representative case per module (runtime addressability)
+17. [optional] `youqu at verify` — L3: single case deep verification
 
 ## CLI Commands
 
@@ -81,7 +94,7 @@ Emits a DeprecationWarning. Use AI semantic mapping in session instead.
 Runs programmatic verification gates on AT pipeline artifacts. No LLM.
 
 ```bash
-youqu at validate --gate <1|2|3|4|all> [artifact paths...]
+youqu at validate --gate <1|2|3|4|5|all> [artifact paths...]
 ```
 
 Gates:
@@ -96,8 +109,98 @@ Gates:
   no noise selectors, valid action values.
 - **Gate 4** (Generation): `--generate-output <path>`.
   Checks: suite files exist, no noise selectors, no Form_DMainWindow generic assertions.
+- **Gate 5** (Semantic Safety): `--cases-mapped <path>`.
+  Checks: no description text as keyboard input, no keyboard_press without prior
+  panel-opener action, no selector missing both name and accessible_id.
 
 Exit code 0 = all gates passed; 1 = some gates failed.
+
+### split
+
+Splits `cases_raw.yaml` into per-module directories, each with its own
+`cases.md`, `at-tree-subtree.yaml`, and `manifest.yaml` entry.
+
+```bash
+youqu at split --cases <cases_raw.yaml> --at-tree <at-tree-annotated.yaml> --output <dir> [--app <app_name>]
+```
+
+Parameters:
+- `--cases`: required. Path to cases_raw.yaml.
+- `--at-tree`: required. Path to at-tree-annotated.yaml (for subtree extraction).
+- `--output`: required. Output directory for module directories.
+- `--app`: optional. Application name (default: from cases source).
+
+Output structure:
+```
+<output>/
+├── manifest.yaml
+├── modules/
+│   ├── find/
+│   │   ├── cases.md
+│   │   ├── at-tree-subtree.yaml
+│   │   └── suite-cases.yaml
+│   ├── settings/
+│   │   └── ...
+```
+
+### docs
+
+Imports help manual chapters for an application, split by `##` headings
+into per-module markdown files for LLM-assisted case grouping.
+
+```bash
+youqu at docs <app> [--output <dir>]
+```
+
+Parameters:
+- `app`: required. App ID (e.g. `deepin-terminal`).
+- `--output`: optional. Output directory (default: `docs`).
+
+### precandidate
+
+Pre-filters AT-SPI elements as candidate selectors for each case step using
+weighted keyword matching. Produces `suite-cases.yaml` with embedded
+candidates and `action_rules` auto-mapping (role → action, wait injection).
+
+```bash
+youqu at precandidate --cases <cases_raw> --at-tree <annotated> --output <suite-cases.yaml>
+# or per-module:
+youqu at precandidate --module-dir <module_dir>
+```
+
+Parameters:
+- `--cases`: Path to cases_raw.yaml (alternative to --module-dir).
+- `--at-tree`: Path to at-tree-annotated.yaml.
+- `--output`: Output suite-cases.yaml path.
+- `--module-dir`: Module directory (uses its cases.md + at-tree-subtree.yaml).
+
+### smoke
+
+L2 runtime verification: runs one representative case per module to verify
+AT-SPI element addressability at runtime.
+
+```bash
+youqu at smoke --modules-dir <dir>           # all modules
+youqu at smoke --module-dir <dir>            # single module
+```
+
+Parameters:
+- `--modules-dir`: Directory containing all module subdirectories.
+- `--module-dir`: Single module directory.
+- `--skip-env-check`: Skip environment checks.
+
+### verify
+
+L3 deep verification: runs a single case and reports detailed results.
+
+```bash
+youqu at verify --suite <suite.yaml> [--spec-id <id>]
+```
+
+Parameters:
+- `--suite`: required. Path to .suite.yaml file.
+- `--spec-id`: optional. Specific spec ID to verify.
+- `--skip-env-check`: Skip environment checks.
 
 ### generate
 
