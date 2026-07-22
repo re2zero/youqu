@@ -630,7 +630,18 @@ def merge_trees(runtime_tree: list[dict], static_classes: list[dict]) -> list[di
     return result
 
 
-def write_at_tree_yaml(merged_tree: list[dict], output_path: str, app_name: str = "") -> None:
+def write_at_tree_yaml(
+    merged_tree: list[dict],
+    output_path: str,
+    app_name: str = "",
+    transient_contexts: list[dict] | None = None,
+) -> None:
+    """Write the final at-tree.yaml.
+
+    When *transient_contexts* is provided, writes version 2.0 with
+    both ``tree`` (persistent layer) and ``transient_contexts`` fields.
+    Otherwise writes version 1.0 (backward compatible).
+    """
     filtered = filter_noise(merged_tree)
     removed = len(merged_tree) - len(filtered)
     if removed:
@@ -640,11 +651,275 @@ def write_at_tree_yaml(merged_tree: list[dict], output_path: str, app_name: str 
     path = Path(output_path)
     path.parent.mkdir(parents=True, exist_ok=True)
 
-    doc: dict[str, Any] = {"version": "1.0", "app": app_name, "tree": filtered}
+    if transient_contexts is not None:
+        doc: dict[str, Any] = {
+            "version": "2.0",
+            "app": app_name,
+            "tree": filtered,
+            "transient_contexts": transient_contexts,
+        }
+    else:
+        doc = {"version": "1.0", "app": app_name, "tree": filtered}
+
     with open(path, "w", encoding="utf-8") as f:
         yaml.dump(doc, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
 
     logger.info("Wrote at-tree.yaml to %s (%d root nodes)", output_path, len(filtered))
+
+
+# ---------------------------------------------------------------------------
+# Layered merge: persistent + transient + static injection
+# ---------------------------------------------------------------------------
+
+
+def load_record_session(record_dir: str | Path) -> dict[str, Any] | None:
+    """Load record_session.yaml from a record output directory.
+
+    Returns the parsed dict or ``None`` if the file doesn't exist.
+    """
+    record_path = Path(record_dir) / "record_session.yaml"
+    if not record_path.is_file():
+        return None
+    with open(record_path, encoding="utf-8") as f:
+        data = yaml.safe_load(f)
+    return data
+
+
+def _load_state_snapshot(state_path: Path) -> list[dict] | None:
+    """Load a single state snapshot YAML and return its tree."""
+    if not state_path.is_file():
+        return None
+    with open(state_path, encoding="utf-8") as f:
+        data = yaml.safe_load(f)
+    if data and "tree" in data:
+        return data["tree"]
+    return None
+
+
+def _anonymous_path_key(node: dict, parent_path: str = "") -> str:
+    """Build a path-based identity key for anonymous nodes.
+
+    Uses ``role:index_in_parent`` at each level from root to node,
+    so two anonymous nodes at the same position in the tree are
+    considered the same node.
+    """
+    role = node.get("role", "")
+    idx = node.get("index_in_parent", -1)
+    return f"{parent_path}/{role}:{idx}"
+
+
+def _merge_persistent_state(
+    base_nodes: list[dict],
+    state_nodes: list[dict],
+    state_label: str,
+    parent_path: str = "",
+) -> None:
+    """Merge a state snapshot into base with last-wins for states.
+
+    Unlike :func:`_merge_one_state` (which unions states), this function
+    **overwrites** the states list with the latest snapshot's values.
+    Anonymous nodes are matched by parent-chain path instead of
+    identity key.
+    """
+    for s_node in state_nodes:
+        s_key = _identity_key(s_node)
+        s_anon_path = _anonymous_path_key(s_node, parent_path)
+        matched = None
+
+        for b_node in base_nodes:
+            # Named nodes: match by identity key
+            if _has_name(s_node) and _has_name(b_node):
+                if _identity_key(b_node) == s_key:
+                    matched = b_node
+                    break
+            # Anonymous nodes: match by parent-chain path
+            elif not _has_name(s_node) and not _has_name(b_node):
+                if _anonymous_path_key(b_node, parent_path) == s_anon_path:
+                    matched = b_node
+                    break
+
+        if matched:
+            # last-wins: overwrite states with latest observed values
+            if s_node.get("states"):
+                matched["states"] = list(s_node["states"])
+
+            if "state_labels" not in matched:
+                matched["state_labels"] = []
+            if state_label and state_label not in matched["state_labels"]:
+                matched["state_labels"].append(state_label)
+
+            # Recurse into children
+            if "children" in s_node:
+                if "children" not in matched:
+                    matched["children"] = []
+                child_path = f"{s_anon_path}" if not _has_name(s_node) else s_anon_path
+                _merge_persistent_state(
+                    matched["children"],
+                    s_node["children"],
+                    state_label,
+                    child_path,
+                )
+        else:
+            # New node — add to base
+            new_node = dict(s_node)
+            if "children" in s_node:
+                new_node["children"] = [dict(c) for c in s_node["children"]]
+            if state_label:
+                new_node["state_labels"] = [state_label]
+            base_nodes.append(new_node)
+
+
+def merge_persistent(
+    base_tree: list[dict],
+    session_data: dict[str, Any],
+    record_dir: str | Path,
+) -> list[dict]:
+    """Merge persistent-layer snapshots (launch + window:activate) into base.
+
+    States use **last-wins** (overwrite, not union).  Anonymous nodes
+    are deduplicated by parent-chain path.  Transient snapshots
+    (menu_open, window_create) are skipped — they go to the
+    transient layer.
+    """
+    result = [dict(n) for n in base_tree]
+    for node in result:
+        if "children" in node:
+            node["children"] = [dict(c) for c in node["children"]]
+
+    record_dir = Path(record_dir)
+
+    for segment in session_data.get("segments", []):
+        trigger = segment.get("trigger") or {}
+        trigger_type = trigger.get("type", "")
+
+        # Only persistent snapshots: launch + window_activate
+        if trigger_type not in ("launch", "window_activate"):
+            continue
+
+        state_label = segment.get("label", trigger_type)
+
+        for state_ref in segment.get("states", []):
+            state_path = record_dir / state_ref
+            snapshot = _load_state_snapshot(state_path)
+            if snapshot is None:
+                logger.warning("State snapshot not found: %s", state_path)
+                continue
+
+            if not result:
+                result = [dict(n) for n in snapshot]
+            else:
+                _merge_persistent_state(result, snapshot, state_label)
+
+    return result
+
+
+def extract_transient(session_data: dict[str, Any]) -> list[dict[str, Any]]:
+    """Extract transient contexts from a record session.
+
+    Walks the session's segments and events, extracting:
+    - ``menu_open`` events → ``right_click_menu_NNN``
+    - ``window_create`` events → ``child_window_NNN``
+
+    Transient contexts store trigger condition, items (for menus),
+    and snapshot path reference.  They are NOT mixed into the main tree.
+    """
+    contexts: list[dict[str, Any]] = []
+    menu_count = 0
+    window_count = 0
+
+    for segment in session_data.get("segments", []):
+        seg_trigger = segment.get("trigger") or {}
+
+        for event in segment.get("events", []):
+            evt_type = event.get("type", "")
+
+            if evt_type == "menu_open":
+                contexts.append(
+                    {
+                        "id": f"right_click_menu_{menu_count:03d}",
+                        "trigger": seg_trigger,
+                        "items": event.get("menu_items", []),
+                        "at_tree": event.get("at_tree", ""),
+                    }
+                )
+                menu_count += 1
+
+            elif evt_type == "window_create":
+                contexts.append(
+                    {
+                        "id": f"child_window_{window_count:03d}",
+                        "trigger": {
+                            "type": "window_create",
+                            "app": event.get("app", ""),
+                            "element": event.get("element", {}),
+                        },
+                        "at_tree": event.get("at_tree", ""),
+                    }
+                )
+                window_count += 1
+
+    return contexts
+
+
+def layered_merge(
+    scan_classes: list[dict],
+    record_dir: str | Path,
+) -> tuple[list[dict], list[dict[str, Any]]]:
+    """Full layered merge pipeline: persistent + transient + static injection.
+
+    Parameters
+    ----------
+    scan_classes
+        Static scan output (list of class dicts from clang_scanner).
+    record_dir
+        Directory containing ``record_session.yaml`` and ``states/*.yaml``.
+
+    Returns
+    -------
+    (merged_tree, transient_contexts)
+        The persistent tree (with static info injected) and the
+        transient contexts list.
+    """
+    record_dir = Path(record_dir)
+    session = load_record_session(record_dir)
+
+    if session is None:
+        # Fallback: old-style state snapshots (no record_session.yaml)
+        states_dir = record_dir / "states"
+        if not states_dir.is_dir():
+            states_dir = record_dir / "dump" / "states"
+        state_snapshots = load_state_snapshots(str(states_dir))
+        if state_snapshots:
+            base_tree = state_snapshots[0][1]
+            for label, tree in state_snapshots[1:]:
+                _merge_persistent_state(base_tree, tree, label)
+        else:
+            base_tree = []
+        merged = merge_trees(base_tree, scan_classes)
+        return merged, []
+
+    # Build base tree from launch segment
+    base_tree: list[dict] = []
+    for segment in session.get("segments", []):
+        trigger = segment.get("trigger") or {}
+        if trigger.get("type") == "launch":
+            for state_ref in segment.get("states", []):
+                snapshot = _load_state_snapshot(record_dir / state_ref)
+                if snapshot:
+                    base_tree = snapshot
+                    break
+            break
+
+    # Merge persistent snapshots (launch + window_activate)
+    base_tree = merge_persistent(base_tree, session, record_dir)
+
+    # Extract transient contexts
+    transient = extract_transient(session)
+
+    # Inject static scan info
+    merged = merge_trees(base_tree, scan_classes)
+
+    return merged, transient
 
 
 def write_element_gaps(tree: list[dict], path: str, app_name: str = "") -> None:

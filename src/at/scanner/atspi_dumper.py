@@ -89,9 +89,7 @@ def _extract_node(obj: pyatspi.Accessible, depth: int, stats: dict[str, int]) ->
 
     try:
         state_set = obj.getState()
-        state_names = sorted(
-            _STATE_MAP.get(s, str(s)) for s in state_set.getStates()
-        )
+        state_names = sorted(_STATE_MAP.get(s, str(s)) for s in state_set.getStates())
     except Exception:
         state_names = []
 
@@ -103,9 +101,7 @@ def _extract_node(obj: pyatspi.Accessible, depth: int, stats: dict[str, int]) ->
     try:
         action_iface = obj.queryAction()
         actions = [
-            action_iface.getName(i)
-            for i in range(action_iface.nActions)
-            if action_iface.getName(i)
+            action_iface.getName(i) for i in range(action_iface.nActions) if action_iface.getName(i)
         ]
     except Exception:
         actions = []
@@ -131,6 +127,15 @@ def _extract_node(obj: pyatspi.Accessible, depth: int, stats: dict[str, int]) ->
         children: list[dict[str, Any]] = []
         try:
             child_count = obj.get_child_count()
+            if child_count > _MAX_CHILDREN_PER_NODE:
+                logger.warning(
+                    "Node %s (role=%s) has %d children, truncating to %d",
+                    name[:30] if name else "<anonymous>",
+                    role_name,
+                    child_count,
+                    _MAX_CHILDREN_PER_NODE,
+                )
+                stats["truncated"] += 1
             limit = min(child_count, _MAX_CHILDREN_PER_NODE)
             for i in range(limit):
                 try:
@@ -160,6 +165,7 @@ def dump_at_spi_tree(app_name: str) -> list[dict[str, Any]]:
         "total": 0,
         "skipped": 0,
         "errors": 0,
+        "truncated": 0,
     }
     t0 = time.monotonic()
 

@@ -209,6 +209,17 @@ def main():
     p_at = sub.add_parser("at", help="AT-SPI YAML test pipeline")
     at_sub = p_at.add_subparsers(dest="at_command")
 
+    p_at_scan = at_sub.add_parser("scan", help="Scan source code for DTK/Qt widget classes")
+    p_at_scan.add_argument("--src", required=True, help="App source directory")
+    p_at_scan.add_argument("--app", required=True, help="App ID (e.g. dde-file-manager)")
+    p_at_scan.add_argument("--output", default="tests/at", help="Output directory")
+    p_at_scan.add_argument(
+        "--include-dirs",
+        nargs="*",
+        default=None,
+        help="Only scan source files under these subdirectories (e.g. src widgets)",
+    )
+
     p_at_dump = at_sub.add_parser("dump", help="Dump AT-SPI tree")
     p_at_dump.add_argument("type", choices=["dtk"], help="App framework type")
     p_at_dump.add_argument("--app", required=True, help="App ID (e.g. dde-file-manager)")
@@ -228,6 +239,26 @@ def main():
         default=None,
         help="Only scan source files under these subdirectories (e.g. src widgets)",
     )
+
+    p_at_record = at_sub.add_parser("record", help="Event-driven AT-SPI recording")
+    p_at_record.add_argument("--app", required=True, help="App ID (e.g. dde-file-manager)")
+    p_at_record.add_argument(
+        "--launch",
+        default="",
+        help="Launch command (e.g. /usr/bin/dde-file-manager)",
+    )
+    p_at_record.add_argument("--output", default="tests/at", help="Output directory")
+    p_at_record.add_argument(
+        "--gui",
+        action="store_true",
+        help="GUI mode: PyQt6 floating widget with event log",
+    )
+
+    p_at_merge = at_sub.add_parser("merge", help="Layered merge: scan + record → at-tree.yaml")
+    p_at_merge.add_argument("--app", default="", help="Application name")
+    p_at_merge.add_argument("--scan", default="", help="Scan output directory (scanned_ok.yaml)")
+    p_at_merge.add_argument("--record", required=True, help="Record output directory")
+    p_at_merge.add_argument("--output", default="tests/at", help="Output directory")
 
     p_at_parse = at_sub.add_parser(
         "parse", help="Parse xlsx into cases.yaml (format conversion only)"
@@ -280,29 +311,52 @@ def main():
     p_at_run.add_argument("--tags", help="Filter by tags (comma-separated)")
     p_at_run.add_argument("--skip-env-check", action="store_true", help="Skip environment checks")
 
-    p_at_validate = at_sub.add_parser("validate", help="Run verification gates on AT pipeline artifacts")
-    p_at_validate.add_argument("--gate", default="all", choices=["all", "1", "2", "3", "4", "5"], help="Which gate to run (default: all)")
-    p_at_validate.add_argument("--at-tree-annotated", default="", help="Path to at-tree-annotated.yaml (Gate 1-4)")
-    p_at_validate.add_argument("--suite-cases", default="", help="Path to suite-cases.yaml (Gate 2)")
-    p_at_validate.add_argument("--cases-mapped", default="", help="Path to cases_mapped.yaml (Gate 3)")
-    p_at_validate.add_argument("--generate-output", default="", help="Path to generate output dir (Gate 4)")
-    p_at_validate.add_argument("--element-gaps", default="", help="Path to element_gaps.yaml (Gate 1)")
+    p_at_validate = at_sub.add_parser(
+        "validate", help="Run verification gates on AT pipeline artifacts"
+    )
+    p_at_validate.add_argument(
+        "--gate",
+        default="all",
+        choices=["all", "1", "2", "3", "4", "5"],
+        help="Which gate to run (default: all)",
+    )
+    p_at_validate.add_argument(
+        "--at-tree-annotated", default="", help="Path to at-tree-annotated.yaml (Gate 1-4)"
+    )
+    p_at_validate.add_argument(
+        "--suite-cases", default="", help="Path to suite-cases.yaml (Gate 2)"
+    )
+    p_at_validate.add_argument(
+        "--cases-mapped", default="", help="Path to cases_mapped.yaml (Gate 3)"
+    )
+    p_at_validate.add_argument(
+        "--generate-output", default="", help="Path to generate output dir (Gate 4)"
+    )
+    p_at_validate.add_argument(
+        "--element-gaps", default="", help="Path to element_gaps.yaml (Gate 1)"
+    )
 
     p_at_split = at_sub.add_parser("split", help="Split cases_raw.yaml into per-module directories")
     p_at_split.add_argument("--cases", required=True, help="Path to cases_raw.yaml")
     p_at_split.add_argument("--at-tree", required=True, help="Path to at-tree-annotated.yaml")
     p_at_split.add_argument("--output", required=True, help="Output directory")
-    p_at_split.add_argument("--app", default="", help="Application name (default: from cases source)")
+    p_at_split.add_argument(
+        "--app", default="", help="Application name (default: from cases source)"
+    )
 
     p_at_docs = at_sub.add_parser("docs", help="Import deepin-manual for an app")
     p_at_docs.add_argument("app", help="App ID (e.g. deepin-terminal)")
     p_at_docs.add_argument("--output", default="docs", help="Output directory")
 
-    p_at_precandidate = at_sub.add_parser("precandidate", help="Pre-filter candidates for each step")
+    p_at_precandidate = at_sub.add_parser(
+        "precandidate", help="Pre-filter candidates for each step"
+    )
     p_at_precandidate.add_argument("--cases", default="", help="Path to cases_raw.yaml")
     p_at_precandidate.add_argument("--at-tree", default="", help="Path to at-tree-annotated.yaml")
     p_at_precandidate.add_argument("--output", default="", help="Output suite-cases.yaml path")
-    p_at_precandidate.add_argument("--module-dir", default="", help="Module directory (alternative to --cases)")
+    p_at_precandidate.add_argument(
+        "--module-dir", default="", help="Module directory (alternative to --cases)"
+    )
 
     p_at_smoke = at_sub.add_parser("smoke", help="L2: module smoke test (runtime addressability)")
     p_at_smoke.add_argument("--modules-dir", default="", help="Directory containing all modules")
@@ -312,7 +366,9 @@ def main():
     p_at_verify = at_sub.add_parser("verify", help="L3: single case runtime verification")
     p_at_verify.add_argument("--suite", required=True, help="Path to .suite.yaml")
     p_at_verify.add_argument("--spec-id", default="", help="Specific spec ID to verify")
-    p_at_verify.add_argument("--skip-env-check", action="store_true", help="Skip environment checks")
+    p_at_verify.add_argument(
+        "--skip-env-check", action="store_true", help="Skip environment checks"
+    )
 
     args, extra = parser.parse_known_args()
 
@@ -388,10 +444,29 @@ def main():
             )
             sys.exit(1)
     elif args.command == "at":
-        from youqu.cli.at import cmd_docs, cmd_dump, cmd_generate, cmd_map, cmd_parse, cmd_precandidate, cmd_run, cmd_smoke, cmd_split, cmd_tree_info, cmd_validate, cmd_verify
+        from youqu.cli.at import (
+            cmd_docs,
+            cmd_dump,
+            cmd_generate,
+            cmd_map,
+            cmd_merge,
+            cmd_parse,
+            cmd_precandidate,
+            cmd_record,
+            cmd_run,
+            cmd_scan,
+            cmd_smoke,
+            cmd_split,
+            cmd_tree_info,
+            cmd_validate,
+            cmd_verify,
+        )
 
         dispatch = {
+            "scan": cmd_scan,
             "dump": cmd_dump,
+            "record": cmd_record,
+            "merge": cmd_merge,
             "parse": cmd_parse,
             "tree-info": cmd_tree_info,
             "map": cmd_map,
@@ -408,7 +483,9 @@ def main():
         if handler:
             handler(args)
         else:
-            print("Usage: youqu at {dump|parse|tree-info|map|generate|run|validate|split|docs|precandidate|smoke|verify}")
+            print(
+                "Usage: youqu at {scan|dump|record|merge|parse|tree-info|map|generate|run|validate|split|docs|precandidate|smoke|verify}"
+            )
             sys.exit(1)
     else:
         parser.print_help()

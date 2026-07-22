@@ -7,6 +7,123 @@ def _not_implemented(cmd: str):
     print(f"youqu at {cmd}: not implemented yet")
 
 
+def cmd_scan(args):
+    try:
+        import multiprocessing
+        import os
+        import sys
+        import threading
+        from pathlib import Path
+
+        from src.at.scanner.clang_scanner import (
+            _get_cxx_stdlib_flags,
+            _get_qt_dtk_include_flags,
+            _worker_init,
+            scan_source_dir,
+        )
+        from src.at.scanner.merger import (
+            append_scan_entry,
+            generate_name_gaps_report,
+        )
+
+        output = Path(args.output)
+        output.mkdir(parents=True, exist_ok=True)
+
+        ok_path = output / "scanned_ok.yaml"
+        gaps_path = output / "scanned_gaps.yaml"
+
+        if ok_path.exists():
+            ok_path.unlink()
+        if gaps_path.exists():
+            gaps_path.unlink()
+
+        _last_pct = [-1]
+
+        def _progress_cb(i: int, total: int, fp: str):
+            pct = (i * 100 // total) if total else 0
+            if pct != _last_pct[0] or i == total:
+                _last_pct[0] = pct
+                bar_w = 20
+                filled = bar_w * i // total if total else 0
+                bar = "█" * filled + "░" * (bar_w - filled)
+                print(
+                    f"\r\033[K  scanning: {bar} {i}/{total} ({pct}%)",
+                    file=sys.stderr,
+                    end="",
+                    flush=True,
+                )
+
+        def _file_done_cb(rel_path: str, classes: list, error):
+            for cls in classes:
+                has_names = cls.get("object_names") or cls.get("accessible_names")
+                target = ok_path if has_names else gaps_path
+                append_scan_entry(str(target), cls)
+
+        extra_args = ["-x", "c++", "-std=c++17", "-fPIC"]
+        extra_args.extend(_get_cxx_stdlib_flags())
+        extra_args.extend(_get_qt_dtk_include_flags())
+        n_workers = min(os.cpu_count() or 4, 8)
+
+        scan_pool = multiprocessing.Pool(
+            processes=n_workers, initializer=_worker_init, initargs=(extra_args,)
+        )
+
+        scan_holder = [None, None]
+
+        def _run_scan_thread():
+            try:
+                scan_holder[0] = scan_source_dir(
+                    args.src,
+                    progress_cb=_progress_cb,
+                    file_done_cb=_file_done_cb,
+                    include_dirs=getattr(args, "include_dirs", None),
+                    pool=scan_pool,
+                )
+            except Exception as e:
+                scan_holder[1] = e
+
+        scan_thread = threading.Thread(target=_run_scan_thread, daemon=True)
+        scan_thread.start()
+        print(f"  Scanning source: {args.src} ...", file=sys.stderr, end="", flush=True)
+
+        scan_thread.join()
+        scan_pool.close()
+        scan_pool.join()
+        print(file=sys.stderr, flush=True)
+
+        scan_result = scan_holder[0]
+        scan_error = scan_holder[1]
+
+        if scan_error:
+            print(f"  Scan error: {scan_error}", file=sys.stderr, flush=True)
+            return
+
+        if scan_result:
+            stats = scan_result.stats
+            n_ok = sum(
+                1 for c in scan_result.classes if c.get("object_names") or c.get("accessible_names")
+            )
+            n_gaps = len(scan_result.classes) - n_ok
+            msg = f"  Scan done: {len(scan_result.classes)} UI classes in {stats['total_files']} files"
+            if stats["failed_files"]:
+                msg += f" ({stats['failed_files']} failed)"
+            print(msg, file=sys.stderr, flush=True)
+            print(f"  -> {ok_path} ({n_ok} with names)")
+            if n_gaps > 0:
+                print(f"  -> {gaps_path} ({n_gaps} missing names)")
+
+            gaps_report_path = output / "element_gaps.yaml"
+            generate_name_gaps_report(scan_result.classes, str(gaps_report_path), app_name=args.app)
+            print(f"  -> {gaps_report_path}")
+        else:
+            print("  Scan failed — no results")
+
+    except ImportError as e:
+        _not_implemented(f"scan ({e})")
+    except Exception as e:
+        print(f"Error: {e}")
+
+
 def cmd_split(args):
     from src.at.generator.splitter import split_cases
 
@@ -65,6 +182,109 @@ def cmd_verify(args):
         print(f"    {icon} {spec['id']}: {spec['name']}")
         if spec.get("error"):
             print(f"       error: {spec['error']}")
+
+
+def cmd_record(args):
+    """Event-driven AT-SPI recording engine.
+
+    Captures AT-SPI focus/window/children-changed events and input events
+    (mouse/keyboard), organizes into segments, and outputs
+    record_session.yaml + states/*.yaml.
+    """
+    try:
+        from src.at.scanner.recorder import RecordSession, qt_available
+
+        gui_mode = getattr(args, "gui", False)
+        if gui_mode and not qt_available():
+            print("PyQt6 not installed — falling back to CLI mode")
+            gui_mode = False
+
+        session = RecordSession(
+            app_name=args.app,
+            output_dir=args.output,
+            gui_mode=gui_mode,
+            launch_cmd=getattr(args, "launch", None),
+        )
+        session.start()
+    except ImportError as e:
+        print(f"Error: {e}")
+        print("Install dependencies: pip install pyatspi2 python-xlib")
+    except Exception as e:
+        print(f"Error: {e}")
+
+
+def cmd_merge(args):
+    """Layered merge: scan output + record session → at-tree.yaml.
+
+    Merges persistent-layer snapshots (launch + window:activate) with
+    last-wins states, extracts transient contexts (menu/dialog/child_window),
+    and injects static scan info.  Outputs at-tree.yaml (v2.0).
+    """
+    try:
+        import sys
+        from pathlib import Path
+        from src.at.scanner.merger import (
+            layered_merge,
+            load_record_session,
+            merge_trees,
+            write_at_tree_yaml,
+            write_element_gaps,
+        )
+        from src.at.scanner.clang_scanner import scan_source_dir
+
+        output = Path(args.output)
+        output.mkdir(parents=True, exist_ok=True)
+
+        scan_dir = Path(args.scan) if args.scan else None
+        record_dir = Path(args.record) if args.record else None
+
+        scan_classes: list = []
+
+        if scan_dir and scan_dir.is_dir():
+            scanned_ok = scan_dir / "scanned_ok.yaml"
+            if scanned_ok.is_file():
+                import yaml
+
+                with open(scanned_ok, encoding="utf-8") as f:
+                    for doc in yaml.safe_load_all(f):
+                        if doc:
+                            scan_classes.append(doc)
+                print(f"  Loaded {len(scan_classes)} static classes from {scanned_ok}")
+            else:
+                print(f"  Warning: scanned_ok.yaml not found in {scan_dir}")
+
+        if not record_dir or not record_dir.is_dir():
+            print("Error: --record directory is required and must exist")
+            sys.exit(1)
+
+        session = load_record_session(record_dir)
+        if session:
+            print(
+                f"  Record session: {session.get('app', '?')}, "
+                f"{len(session.get('segments', []))} segments"
+            )
+        else:
+            print("  No record_session.yaml found — using old-style state snapshots")
+
+        merged, transient = layered_merge(scan_classes, record_dir)
+
+        final_path = output / "at-tree.yaml"
+        write_at_tree_yaml(
+            merged,
+            str(final_path),
+            app_name=args.app,
+            transient_contexts=transient,
+        )
+        print(f"  -> {final_path} ({len(merged)} root nodes, {len(transient)} transient contexts)")
+
+        gaps_path = output / "element_gaps.yaml"
+        write_element_gaps(merged, str(gaps_path), app_name=args.app)
+        print(f"  -> {gaps_path}")
+
+    except ImportError as e:
+        print(f"Error: {e}")
+    except Exception as e:
+        print(f"Error: {e}")
 
 
 def cmd_dump(args):
@@ -415,6 +635,7 @@ def cmd_validate(args):
         else:
             print("\nSome gates failed. See errors above.")
             import sys
+
             sys.exit(1)
 
     except ImportError:
