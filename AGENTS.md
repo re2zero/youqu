@@ -196,10 +196,12 @@ Ruff: line-length=100, 4-space indent, Python 3.10+。仅启用 E4/E7/E9/F 规�
 
 ### AT-SPI YAML 测试管道 (youqu at)
 
-`youqu at` 命令族提供完整的 AT-SPI YAML 测试自动化管道: dump → parse → tree-info → split → docs → precandidate → validate → generate → run → smoke/verify。
+`youqu at` 命令族提供完整的 AT-SPI YAML 测试自动化管道: scan → record → merge → parse → tree-info → split → docs → precandidate → validate → generate → run → smoke/verify。
 
 **管道命令一览**:
-- `youqu at dump dtk --app <id> --src <dir> --output <dir>` — 抓取 AT-SPI 树 + 静态源码扫描 + 去噪合并
+- `youqu at scan --src <dir> --app <id> --output <dir>` — 源码扫描 (libclang，headless 可用)
+- `youqu at record --app <id> [--launch <cmd>] [--gui]` — 事件驱动录制 (X11 XRecord / Wayland evdev)
+- `youqu at merge --record <dir> [--scan <dir>] --output <dir>` — 分层合并 (持久层 + 瞬态层)
 - `youqu at parse --input <xlsx> --output <yaml>` — xlsx/csv → cases_raw.yaml (格式转换)
 - `youqu at tree-info --at-tree <yaml> --output <yaml> --format yaml` — 生成 AI 标注用结构化 YAML
 - `youqu at split --cases <raw> --at-tree <annotated> --output <dir>` — 按模块分片 cases + at-tree 子集
@@ -211,14 +213,26 @@ Ruff: line-length=100, 4-space indent, Python 3.10+。仅启用 E4/E7/E9/F 规�
 - `youqu at smoke --modules-dir <dir>` — L2 模块烟雾测试 (每模块 1 个代表 case)
 - `youqu at verify --suite <yaml> --spec-id <id>` — L3 单 case 深度验证
 
+**at-tree.yaml v2.0 格式** (scan+record+merge 产出):
+- `tree`: 持久层 — 始终可见的元素 (base dump + window:activate 合并，states 最后观测值覆盖)
+- `transient_contexts`: 瞬态层 — 右键菜单、对话框、子窗口 (不混入主树，标注触发条件)
+
 **静态扫描依赖**：
 - 需要 libclang Python 绑定以提取 DTK/Qt 控件声明骨架
 - 安装命令: `sudo apt install python3-clang-18 libclang-18-dev` (或 17/19 版本)
 - 若未安装，静态扫描将跳过，仅保留运行时 AT-SPI 树抓取
 
+**录制依赖**:
+- X11: python-xlib (XRecord 被动监听，不干扰用户操作)
+- Wayland: evdev (低精度模式，需 root 或 input 组)
+- 未安装时降级为纯 AT-SPI focus 事件模式
+
 **命令示例**：
 ```bash
-youqu at dump dtk --app dde-file-manager --src /path/to/source --output /path/to/output
+youqu at scan --src /path/to/source --app dde-file-manager --output /tmp/at-scan
+youqu at record --app dde-file-manager --launch /usr/bin/dde-file-manager --output /tmp/at-record
+youqu at merge --scan /tmp/at-scan --record /tmp/at-record --output /tmp/at-merge
+youqu at tree-info --at-tree /tmp/at-merge/at-tree.yaml --output at-tree-annotated.yaml
 youqu at split --cases cases_raw.yaml --at-tree at-tree-annotated.yaml --output /tmp/modules/
 youqu at precandidate --module-dir /tmp/modules/find/
 youqu at validate --gate 5 --cases-mapped cases_mapped.yaml

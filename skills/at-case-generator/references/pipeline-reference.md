@@ -9,25 +9,34 @@ do semantic mapping in the session, not a CLI LLM call.
 ```
 xlsx/csv ──[parse]──→ cases_raw.yaml ──[AI normalize]──→ suite-cases.yaml
                                                               │
+--- AT tree acquisition ---
+    source ──[scan]──→ scanned_ok.yaml + element_gaps.yaml
+    ⏸ STOP: ask user to run `youqu at record` and return with results
+    scan + record ──[merge]──→ at-tree.yaml (v2.0, with transient_contexts)
+---
+                                                              │
 at-tree.yaml ──[tree-info --format yaml]──→ at-tree-annotated.yaml (draft)
-                                                         │
-                                     AI annotates → at-tree-annotated.yaml (reviewed)
-                                                         │
-                                     [optional] youqu at split → per-module dirs
-                                     [optional] youqu at docs → help manual chapters
-                                     [optional] youqu at precandidate → pre-filtered candidates
-                                                         │
-                                     suite-cases.yaml + at-tree-annotated.yaml
-                                               ──[AI map]──→ cases_mapped.yaml
-                                                                    │
-                                           cases_mapped.yaml ──[generate]──→ suite YAML
-                                                                    │
-                                           [optional] youqu at smoke → L2 module smoke
-                                           [optional] youqu at verify → L3 single case
+                                                          │
+                                      AI annotates → at-tree-annotated.yaml (reviewed)
+                                                          │
+                                      [optional] youqu at split → per-module dirs
+                                      [optional] youqu at docs → help manual chapters
+                                      [optional] youqu at precandidate → pre-filtered candidates
+                                                          │
+                                      suite-cases.yaml + at-tree-annotated.yaml
+                                                ──[AI map]──→ cases_mapped.yaml
+                                                                     │
+                                            cases_mapped.yaml ──[generate]──→ suite YAML
+                                                                     │
+                                            [optional] youqu at smoke → L2 module smoke
+                                            [optional] youqu at verify → L3 single case
 ```
 
 1. `youqu at parse` — format-only conversion (no LLM, no semantic mapping)
-2. `youqu at dump` — AT-SPI tree dump with built-in denoise filtering + element_gaps.yaml
+2. AT tree acquisition:
+   - `youqu at scan` — source code scanning (headless, no desktop required)
+   - `youqu at record` — event-driven recording (requires desktop + user interaction)
+   - `youqu at merge` — layered merge of scan + record output
 3. `youqu at tree-info --format yaml` — structured YAML for AI annotation (replaces compact_tree.txt)
 4. AI annotation — fill `comment` field for each interactive element, human review
 5. `youqu at validate --gate 1` — verify denoising + annotation completeness
@@ -45,6 +54,41 @@ at-tree.yaml ──[tree-info --format yaml]──→ at-tree-annotated.yaml (dr
 17. [optional] `youqu at verify` — L3: single case deep verification
 
 ## CLI Commands
+
+### scan
+
+Scans application source code for DTK/Qt widget classes using libclang.
+Does NOT require a desktop environment — can run in CI/headless.
+
+```bash
+youqu at scan --src <dir> --app <id> [--output <dir>] [--include-dirs src widgets]
+```
+
+Output: `scanned_ok.yaml` (classes with names), `scanned_gaps.yaml` (missing names),
+`element_gaps.yaml` (summary report).
+
+### record
+
+Event-driven AT-SPI recording. Captures focus/window/children-changed events
+and input events (mouse/keyboard via X11 XRecord or Wayland evdev).
+
+```bash
+youqu at record --app <id> [--launch <cmd>] [--output <dir>] [--gui]
+```
+
+CLI controls: `s`+Enter = new segment, `q`+Enter or Ctrl+C = finish.
+
+Output: `record_session.yaml` (event sequence + segments), `states/*.yaml` (subtree snapshots).
+
+### merge
+
+Layered merge: scan + record → at-tree.yaml (v2.0 with transient_contexts).
+
+```bash
+youqu at merge --record <dir> [--scan <dir>] [--app <id>] [--output <dir>]
+```
+
+Output: `at-tree.yaml` (v2.0: `tree` + `transient_contexts`), `element_gaps.yaml`.
 
 ### parse
 

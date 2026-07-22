@@ -1,6 +1,6 @@
 ---
 name: at-case-generator
-version: "0.5.0"
+version: "0.6.0"
 description: >
   Use when generating AT-SPI test suites from xlsx/csv test case documents
   for a Linux desktop application. Triggers: AT用例生成, at-case generation,
@@ -25,7 +25,6 @@ this) are the AI.** Framework provides data tools; you provide understanding.
 
 - Standard YAML test cases → use `youqu-case-generator`
 - Run existing AT suites → use `youqu at run`
-- Dump AT-SPI tree only → use `youqu at dump`
 
 ## Pipeline
 
@@ -33,7 +32,14 @@ this) are the AI.** Framework provides data tools; you provide understanding.
 Step 1: Pre-flight checks
 Step 2: Data preparation
     youqu at parse <xlsx> → cases_raw.yaml (raw, format-only)
-    youqu at dump → at-tree.yaml (denoised) + element_gaps.yaml
+    --- AT tree acquisition (requires user interaction) ---
+    youqu at scan --src <dir> --app <id> → scanned_ok.yaml + element_gaps.yaml
+    ⏸ STOP: ask user to run `youqu at record` and return with results
+        user runs: youqu at record --app <id> [--launch <cmd>]
+        user operates app (clicks, menus, dialogs), then finishes
+        user returns: record_session.yaml + states/*.yaml produced
+    youqu at merge --scan <scan_dir> --record <record_dir> → at-tree.yaml (v2.0)
+    ---
     youqu at tree-info --format yaml <at-tree> → at-tree-annotated.yaml (structured, for AI)
 Step 2.5: AT tree annotation (AI session)
     AI fills comment for each interactive element → at-tree-annotated.yaml (draft)
@@ -48,6 +54,7 @@ Step 2.8: Module split (optional, for large case sets)
     youqu at docs <app> --output <docs_dir>  (optional: import help manual chapters)
 Step 3: AI semantic mapping (KEY STEP — AI does this through understanding)
     AI reads at-tree-annotated.yaml + suite-cases.yaml (or per-module files)
+    AI also reads transient_contexts (if v2.0) to understand menu/dialog elements
     AI fills action, element_ref, selector, items, key, text, assertion
     AI writes cases_mapped.yaml with format example in header
     youqu at validate --gate 3
@@ -439,7 +446,9 @@ The AT pipeline uses `AtSuiteExecutor` in `src/at/executor/`.
 
 | Command | Required Args | Optional Args |
 |---------|--------------|---------------|
-| `youqu at dump dtk` | type, --app, --src | --output, --launch, --no-record, --include-dirs |
+| `youqu at scan` | --src, --app | --output, --include-dirs |
+| `youqu at record` | --app | --launch, --output, --gui |
+| `youqu at merge` | --record | --scan, --app, --output |
 | `youqu at parse` | --input, --output | --at-tree (deprecated) |
 | `youqu at tree-info` | --at-tree, --output | --format (yaml\|text, default yaml) |
 | `youqu at split` | --cases, --at-tree, --output | --app |
@@ -450,6 +459,41 @@ The AT pipeline uses `AtSuiteExecutor` in `src/at/executor/`.
 | `youqu at run` | — | --suite, --testdir, -k, --spec-ids, --tags, --skip-env-check |
 | `youqu at smoke` | — | --modules-dir, --module-dir, --skip-env-check |
 | `youqu at verify` | --suite | --spec-id, --skip-env-check |
+
+## at-tree.yaml v2.0 Format (scan + record + merge)
+
+The `scan` + `record` + `merge` pipeline produces `at-tree.yaml` v2.0
+with two layers:
+
+```yaml
+version: "2.0"
+app: "deepin-screenshot"
+tree:                       # Persistent layer (always-visible elements)
+  - id: n0
+    role: frame
+    name: "截图区域"
+    children: [...]
+transient_contexts:         # Transient layer (menus, dialogs, child windows)
+  - id: right_click_menu_000
+    trigger:
+      type: right_click
+      element: {name: "View_ImageList", role: "list"}
+    items:
+      - {name: "复制", role: "menu item"}
+      - {name: "粘贴", role: "menu item"}
+    at_tree: "states/01_menu_open.yaml"
+```
+
+**AI mapper must read both layers:**
+- `tree`: same as v1.0, contains persistent elements for `element_action`/`assert_element`
+- `transient_contexts`: menu items, dialogs, child windows — these are NOT in the main tree
+  - Menu items → use `dtk_main_menu`/`dtk_context_menu` (NOT `element_action`)
+  - Dialog elements → reference via `at_tree` snapshot path
+  - Child window elements → separate app, may need separate handling
+
+The `merge` command always produces v2.0. If `record_session.yaml` is
+absent, it falls back to old-style state snapshots (v1.0 without
+`transient_contexts`).
 
 ## Reference Files
 
