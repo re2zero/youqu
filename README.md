@@ -77,6 +77,26 @@ export PATH=$PATH:$HOME/.local/bin
 
 </details>
 
+使用 pipx 安装（推荐，自动隔离环境）:
+
+```shell
+$ sudo apt install pipx
+$ pipx ensurepath
+# 安装或升级已有的 youqu-ai whl 包
+$ pipx install --system-site-packages --force youqu-ai
+# 安装本地 whl 文件
+$ pipx install --system-site-packages --force /path/to/youqu_ai-*.whl
+```
+
+> **为什么需要 `--system-site-packages`？**
+> pipx 默认创建一个完全隔离的虚拟环境，而 youqu 依赖的部分系统包（`python3-pyatspi`、`python3-opencv`、`python3-clang` 等）只通过 `apt` 安装到 `/usr/lib/python3/dist-packages/`，PyPI 上没有。
+> 加上此参数后，pipx 虚拟环境会继承系统安装的 Python 包，`import pyatspi`、`import cv2`、`import clang.cindex` 等在运行时都能正常引入。
+>
+> 如果用 `pip install youqu-ai` 安装，则默认能访问系统包，无需此参数。
+>
+> 验证：`youqu doctor` 应全部显示 `[OK]`。
+
+
 ### 创建项目
 
 您可以在任意目录下，使用 `youqu-startproject` 命令创建一个项目：

@@ -48,6 +48,15 @@ class _Doctor:
             sys.exit(1)
         else:
             print(f"{self._checked} checked, all OK")
+        if self._in_venv:
+            env_type = "pipx" if "pipx" in sys.prefix else "virtualenv"
+            print()
+            print(f"  \033[33m⚠ youqu is running in an isolated {env_type} environment.\033[0m")
+            print(f"     Some system-level packages may not be visible at runtime.")
+            if env_type == "pipx":
+                print(f"     Fix: pipx install --system-site-packages --force youqu-ai")
+            else:
+                print(f"     Fix: recreate venv with --system-site-packages, or use bash env.sh")
 
     # ── sudo ──────────────────────────────────────────────────────────
 
@@ -80,6 +89,35 @@ class _Doctor:
             text=True,
             capture_output=True,
         )
+
+    # ── venv/pipx awareness ─────────────────────────────────────────
+
+    @property
+    def _in_venv(self):
+        """True when running inside a virtual/isolated Python environment."""
+        return sys.prefix != sys.base_prefix
+
+    @property
+    def _base_python(self):
+        """Path to the base (non-venv) Python interpreter."""
+        for candidate in (
+            os.path.join(sys.base_prefix, "bin", "python3"),
+            shutil.which("python3") or "",
+        ):
+            if candidate and os.path.isfile(candidate):
+                return candidate
+        return sys.executable
+
+    def _system_has_import(self, module_name):
+        """Check if the base/system Python (outside isolated env) has a module."""
+        try:
+            r = subprocess.run(
+                [self._base_python, "-c", f"import {module_name}"],
+                capture_output=True, text=True, timeout=10,
+            )
+            return r.returncode == 0
+        except Exception:
+            return False
 
     # ── checks ────────────────────────────────────────────────────────
 
@@ -119,22 +157,10 @@ class _Doctor:
         if importlib.util.find_spec("pyatspi"):
             self._ok("pyatspi")
             return
-        self._fail("pyatspi missing — fixing")
-
-        # Strategy 1: apt install (may be blocked by gir1.2-atspi-2.0 Breaks)
-        result = self._sudo("apt", "install", "-y", "python3-pyatspi")
-        if result.returncode == 0:
-            self._fixed_msg("apt install python3-pyatspi")
+        if self._in_venv and self._system_has_import("pyatspi"):
+            self._ok("pyatspi (system-level, not visible from isolated env)")
             return
-
-        stderr = result.stderr
-        if "破坏" in stderr or "Breaks" in stderr or "未满足" in stderr:
-            # Strategy 2: download + extract to site-packages
-            if self._install_pyatspi_from_deb():
-                self._fixed_msg("apt download + extract python3-pyatspi")
-                return
-
-        print(f"       all strategies failed: {stderr.strip()[-200:]}")
+        self._fail("pyatspi missing — fixing")
 
     def _install_pyatspi_from_deb(self):
         import sysconfig
@@ -210,12 +236,20 @@ class _Doctor:
             return
         except (ImportError, ValueError):
             pass
+        if self._in_venv and self._system_has_import("gi"):
+            # Also verify the typelib is available from system Python
+            try:
+                r = subprocess.run(
+                    [self._base_python, "-c",
+                     "import gi; gi.require_version('Atspi', '2.0')"],
+                    capture_output=True, text=True, timeout=10,
+                )
+                if r.returncode == 0:
+                    self._ok("gir1.2-atspi-2.0 (system-level, not visible from isolated env)")
+                    return
+            except Exception:
+                pass
         self._fail("gir1.2-atspi-2.0 missing — fixing")
-        result = self._sudo("apt", "install", "-y", "gir1.2-atspi-2.0")
-        if result.returncode == 0:
-            self._fixed_msg("apt install gir1.2-atspi-2.0")
-        else:
-            print(f"       apt install failed: {result.stderr.strip()[-200:]}")
 
     # ── scrot ─────────────────────────────────────────────────────────
 
@@ -236,21 +270,10 @@ class _Doctor:
         if importlib.util.find_spec("cv2"):
             self._ok("python3-opencv")
             return
-        self._fail("python3-opencv missing — fixing")
-        result = self._sudo("apt", "install", "-y", "python3-opencv")
-        if result.returncode == 0:
-            self._fixed_msg("apt install python3-opencv")
+        if self._in_venv and self._system_has_import("cv2"):
+            self._ok("python3-opencv (system-level, not visible from isolated env)")
             return
-        # Fallback: pip install
-        result = subprocess.run(
-            [sys.executable, "-m", "pip", "install", "opencv-python", "--break-system-packages"],
-            capture_output=True,
-            text=True,
-        )
-        if result.returncode == 0:
-            self._fixed_msg("pip install opencv-python")
-        else:
-            print(f"       install failed: {result.stderr.strip()[-200:]}")
+        self._fail("python3-opencv missing — fixing")
 
     # ── DISPLAY ───────────────────────────────────────────────────────
 
@@ -307,27 +330,10 @@ class _Doctor:
             return
         except ImportError:
             pass
+        if self._in_venv and self._system_has_import("clang.cindex"):
+            self._ok("libclang Python bindings (system-level, not visible from isolated env)")
+            return
         self._fail("libclang Python bindings missing — fixing")
-
-        # Strategy 1: apt install python3-clang-18 libclang-18-dev
-        result = self._sudo("apt", "install", "-y", "python3-clang-18", "libclang-18-dev")
-        if result.returncode == 0:
-            self._fixed_msg("apt install python3-clang-18 libclang-18-dev")
-            return
-
-        # Strategy 2: apt install python3-clang-17 libclang-17-dev
-        result = self._sudo("apt", "install", "-y", "python3-clang-17", "libclang-17-dev")
-        if result.returncode == 0:
-            self._fixed_msg("apt install python3-clang-17 libclang-17-dev")
-            return
-
-        # Strategy 3: apt install python3-clang libclang-dev
-        result = self._sudo("apt", "install", "-y", "python3-clang", "libclang-dev")
-        if result.returncode == 0:
-            self._fixed_msg("apt install python3-clang libclang-dev")
-            return
-
-        print(f"       all install strategies failed: {result.stderr.strip()[-200:]}")
 
     # ── java ──────────────────────────────────────────────────────────
 
