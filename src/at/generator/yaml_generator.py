@@ -153,14 +153,14 @@ def _normalize_key(key: str | None) -> str | None:
 def _step_to_action_fallback(step: CaseStep) -> SuiteActionStep:
     action_name = STEP_TYPE_MAP.get(step.step_type.value, "element_action")
 
-    if step.element_hint == ElementHint.dtk_main_menu and step.items:
-        return SuiteActionStep(action="dtk_main_menu", items=step.items)
+    if step.element_hint in (ElementHint.dtk_main_menu, ElementHint.dtk_context_menu):
+        from src.at.generator.action_rules import classify_menu_type
 
-    if step.element_hint == ElementHint.dtk_context_menu and step.items:
-        return SuiteActionStep(
-            action="dtk_context_menu",
-            items=step.items,
-        )
+        menu_type = classify_menu_type(step.description)
+        if step.items:
+            if menu_type == "dtk_main_menu":
+                return SuiteActionStep(action="dtk_main_menu", items=step.items)
+            return SuiteActionStep(action="dtk_context_menu", items=step.items)
 
     if step.element_hint == ElementHint.titlebar:
         return SuiteActionStep(action="element_action", do="click")

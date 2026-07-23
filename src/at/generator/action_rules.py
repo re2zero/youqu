@@ -6,6 +6,9 @@
 
 Given a candidate node's role, the system auto-generates the action type
 and default wait. AI does not need to decide these.
+
+For menu items, a binary rule classifies main menu vs context menu
+based on description context (not role alone).
 """
 
 from __future__ import annotations
@@ -14,14 +17,14 @@ from typing import Any
 
 ROLE_ACTION_MAP: dict[str, dict[str, Any]] = {
     "menu item": {
-        "action": "dtk_main_menu",
-        "wait": 0.5,
-        "requires": "dtk_main_menu",
+        "action": "element_action",
+        "wait": 0.3,
+        "do": "click",
     },
     "menu": {
-        "action": "dtk_context_menu",
-        "wait": 0.5,
-        "requires": "dtk_context_menu",
+        "action": "element_action",
+        "wait": 0.3,
+        "do": "click",
     },
     "button": {
         "action": "element_action",
@@ -113,10 +116,61 @@ ROLE_KEYWORDS: dict[str, list[str]] = {
     "link": ["链接", "link"],
 }
 
+# Keywords for binary menu classification
+_CONTEXT_MENU_KEYWORDS = frozenset(
+    {"右键", "右击", "context menu", "右键菜单", "contextmenu", "right-click", "right click"}
+)
+_MAIN_MENU_KEYWORDS = frozenset(
+    {"主菜单", "标题栏菜单", "menu bar", "menubar", "titlebar menu", "标题栏"}
+)
+
+
+def classify_menu_type(description: str, node: dict | None = None) -> str:
+    """Classify a menu interaction as main menu or context menu.
+
+    Binary rule based on description context and node location:
+    - Description contains right-click keywords → dtk_context_menu
+    - Description contains main-menu keywords → dtk_main_menu
+    - Node in titlebar region → dtk_main_menu
+    - Default fallback → dtk_context_menu (more general)
+
+    Returns "dtk_main_menu" or "dtk_context_menu".
+    """
+    desc_lower = description.lower() if description else ""
+
+    if any(kw in desc_lower for kw in _CONTEXT_MENU_KEYWORDS):
+        return "dtk_context_menu"
+
+    if any(kw in desc_lower for kw in _MAIN_MENU_KEYWORDS):
+        return "dtk_main_menu"
+
+    if node:
+        parent_role = (node.get("role") or "").lower()
+        comment = (node.get("comment") or "").lower()
+        if "titlebar" in parent_role or "titlebar" in comment or "menu bar" in parent_role:
+            return "dtk_main_menu"
+        if "popup" in parent_role or "context" in comment:
+            return "dtk_context_menu"
+
+    return "dtk_context_menu"
+
 
 def get_action_for_role(role: str) -> dict[str, Any]:
     """Get action config for a given AT-SPI role."""
     return ROLE_ACTION_MAP.get(role, DEFAULT_ACTION).copy()
+
+
+def get_menu_action(description: str, node: dict | None = None) -> dict[str, Any]:
+    """Get action config for a menu item, using binary classification.
+
+    Returns either dtk_main_menu or dtk_context_menu config with requires field.
+    """
+    menu_type = classify_menu_type(description, node)
+    return {
+        "action": menu_type,
+        "wait": 0.5,
+        "requires": menu_type,
+    }
 
 
 def guess_role_from_description(description: str) -> str | None:

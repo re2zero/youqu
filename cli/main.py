@@ -253,12 +253,33 @@ def main():
         action="store_true",
         help="GUI mode: PyQt6 floating widget with event log",
     )
+    p_at_record.add_argument(
+        "--module",
+        default="",
+        help="Module slug from plan.yaml — prints recording guide before recording",
+    )
+    p_at_record.add_argument(
+        "--plan",
+        default="tests/at/plan.yaml",
+        help="Path to plan.yaml (used with --module)",
+    )
 
     p_at_merge = at_sub.add_parser("merge", help="Layered merge: scan + record → at-tree.yaml")
     p_at_merge.add_argument("--app", default="", help="Application name")
     p_at_merge.add_argument("--scan", default="", help="Scan output directory (scanned_ok.yaml)")
     p_at_merge.add_argument("--record", required=True, help="Record output directory")
     p_at_merge.add_argument("--output", default="tests/at", help="Output directory")
+    p_at_merge.add_argument(
+        "--no-clean",
+        action="store_true",
+        help="Skip record session cleaning (keep invalid events)",
+    )
+
+    p_at_plan = at_sub.add_parser("plan", help="Generate module recording plan from cases_raw + docs")
+    p_at_plan.add_argument("--cases", required=True, help="Path to cases_raw.yaml")
+    p_at_plan.add_argument("--docs", default="", help="Docs directory (from youqu at docs)")
+    p_at_plan.add_argument("--app", default="", help="Application name")
+    p_at_plan.add_argument("--output", default="tests/at", help="Output directory")
 
     p_at_parse = at_sub.add_parser(
         "parse", help="Parse xlsx into cases.yaml (format conversion only)"
@@ -451,6 +472,7 @@ def main():
             cmd_map,
             cmd_merge,
             cmd_parse,
+            cmd_plan,
             cmd_precandidate,
             cmd_record,
             cmd_run,
@@ -467,6 +489,7 @@ def main():
             "dump": cmd_dump,
             "record": cmd_record,
             "merge": cmd_merge,
+            "plan": cmd_plan,
             "parse": cmd_parse,
             "tree-info": cmd_tree_info,
             "map": cmd_map,
@@ -484,7 +507,7 @@ def main():
             handler(args)
         else:
             print(
-                "Usage: youqu at {scan|dump|record|merge|parse|tree-info|map|generate|run|validate|split|docs|precandidate|smoke|verify}"
+                "Usage: youqu at {scan|dump|record|merge|plan|parse|tree-info|map|generate|run|validate|split|docs|precandidate|smoke|verify}"
             )
             sys.exit(1)
     else:

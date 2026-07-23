@@ -184,15 +184,13 @@ _X_ButtonRelease = 5
 class X11RecordListener(InputEventListener):
     """X11 passive monitoring via XRecord extension.
 
-    Uses two X connections: one for control (creating/disabling context),
-    one for data (receiving intercepted events).  No grab is performed,
-    so user input flows to focused windows normally.
+    Uses a single X connection for both control and data.
+    No grab is performed, so user input flows to focused windows normally.
     """
 
     def __init__(self, on_mouse: MouseCallback, on_key: KeyCallback) -> None:
         super().__init__(on_mouse, on_key)
-        self._ctrl_display: Any = None
-        self._data_display: Any = None
+        self._display: Any = None
         self._context: Any = None
         self._byte_order: str = "="  # will detect from display
 
@@ -206,27 +204,21 @@ class X11RecordListener(InputEventListener):
             return False
 
         try:
-            self._ctrl_display = Display()
-            self._data_display = Display()
+            self._display = Display()
         except Exception as e:
             logger.warning("Cannot open X display: %s", e)
             return False
 
         try:
-            if not self._data_display.has_extension("RECORD"):
+            if not self._display.has_extension("RECORD"):
                 logger.warning("XRecord extension not available on this X server")
-                self._ctrl_display.close()
-                self._data_display.close()
+                self._display.close()
                 return False
         except Exception as e:
             logger.warning("XRecord extension check failed: %s", e)
-            self._ctrl_display.close()
-            self._data_display.close()
+            self._display.close()
             return False
 
-        # Determine byte order: little-endian or big-endian
-        # X protocol uses the byte order specified by the client connection
-        # python-xlib uses the native byte order for the data
         import sys
 
         if sys.byteorder == "little":
@@ -234,20 +226,35 @@ class X11RecordListener(InputEventListener):
         else:
             self._byte_order = ">"
 
+        # Build Record_Range with device_events covering KeyPress..ButtonRelease.
+        # python-xlib's Struct.to_binary expects flat tuples matching structvalues per field.
+        # Record_Range fields: core_requests(R8=2), core_replies(R8=2),
+        # ext_requests(ExtRange=4), ext_replies(ExtRange=4),
+        # delivered_events(R8=2), device_events(R8=2), errors(R8=2),
+        # client_started(Bool=1), client_died(Bool=1)
+        z = 0
+        range_spec = (
+            (z, z),  # core_requests
+            (z, z),  # core_replies
+            (z, z, z, z),  # ext_requests (maj_range8 + min_range16)
+            (z, z, z, z),  # ext_replies
+            (z, z),  # delivered_events
+            (X.KeyPress, X.ButtonRelease),  # device_events: capture all input events
+            (z, z),  # errors
+            False,  # client_started
+            False,  # client_died
+        )
+
         try:
             self._context = record.create_context(
-                self._ctrl_display,
-                record.AllClients,
-                record.CurrentTime,
-                [
-                    (record.KeyPress, record.KeyRelease),
-                    (record.ButtonPress, record.ButtonRelease),
-                ],
+                self._display,
+                0,  # datum_flags: no element header
+                [record.AllClients],
+                [range_spec],
             )
         except Exception as e:
             logger.warning("Failed to create XRecord context: %s", e)
-            self._ctrl_display.close()
-            self._data_display.close()
+            self._display.close()
             return False
 
         self._running = True
@@ -260,7 +267,7 @@ class X11RecordListener(InputEventListener):
         from Xlib.ext import record
 
         try:
-            record.enable_context(self._data_display, self._context, self._on_record_data)
+            record.enable_context(self._display, self._context, self._on_record_data)
         except Exception as e:
             if self._running:
                 logger.error("XRecord loop error: %s", e)
@@ -278,13 +285,26 @@ class X11RecordListener(InputEventListener):
         else:
             raw = bytes(data)
 
-        # Each intercepted event is 32 bytes on the wire
-        # struct format: byte order + type(i), detail(B), pad(3B), seq(H), pad(2B),
-        #                time(I), root(I), event(I), child(I), rootx(i), rooty(i),
-        #                eventx(i), eventy(i), state(H), same_screen(B), pad(B)
-        fmt = self._byte_order + "iB3xH2xIIIIiiiiiHBB"
+        # X11 wire format for KeyPress/KeyRelease/ButtonPress/ButtonRelease:
+        # Each record is exactly 32 bytes:
+        #   [0]  type      BYTE   (1)
+        #   [1]  detail    BYTE   (1)  keycode or button number
+        #   [2]  sequence  CARD16 (2)
+        #   [4]  time      CARD32 (4)
+        #   [8]  root      CARD32 (4)
+        #   [12] event     CARD32 (4)
+        #   [16] child     CARD32 (4)
+        #   [20] rootX     INT16  (2)
+        #   [22] rootY     INT16  (2)
+        #   [24] eventX    INT16  (2)
+        #   [26] eventY    INT16  (2)
+        #   [28] state     CARD16 (2)
+        #   [30] sameScreen BOOL  (1)
+        #   [31] pad       BYTE   (1)
+        fmt = self._byte_order + "BBHIIIIhhhhHBx"
         rec_size = struct.calcsize(fmt)
-        if rec_size == 0:
+        if rec_size != 32:
+            logger.error("XRecord record size mismatch: %d != 32", rec_size)
             return
 
         offset = 0
@@ -298,13 +318,11 @@ class X11RecordListener(InputEventListener):
 
             event_type = fields[0]
             detail = fields[1]
-            time_val = fields[4]
             root_x = fields[7]
             root_y = fields[8]
             state = fields[11]
 
             if event_type == _X_KeyPress:
-                # detail = keycode; convert to keysym using the data display
                 keysym = self._keycode_to_keysym(detail, state)
                 key_name = keysym_to_name(keysym)
                 mod = is_modifier(keysym)
@@ -315,23 +333,21 @@ class X11RecordListener(InputEventListener):
                     logger.debug("key callback error: %s", e)
 
             elif event_type == _X_ButtonPress:
-                # detail = button number (1=left, 2=middle, 3=right, ...)
                 try:
                     self.on_mouse(root_x, root_y, detail)
                 except Exception as e:
                     logger.debug("mouse callback error: %s", e)
 
     def _keycode_to_keysym(self, keycode: int, state: int) -> int:
-        """Convert keycode + modifier state to keysym via the data display."""
-        if self._data_display is None:
+        """Convert keycode + modifier state to keysym via the display."""
+        if self._display is None:
             return 0
         try:
-            # state bit 0 = Shift, bit 1 = CapsLock, bit 4 = Alt/Mod1
             shift = bool(state & 0x01)
             index = 1 if shift else 0
-            keysym = self._data_display.keycode_to_keysym(keycode, index)
+            keysym = self._display.keycode_to_keysym(keycode, index)
             if keysym == 0:
-                keysym = self._data_display.keycode_to_keysym(keycode, 0)
+                keysym = self._display.keycode_to_keysym(keycode, 0)
             return keysym or 0
         except Exception:
             return 0
@@ -339,22 +355,20 @@ class X11RecordListener(InputEventListener):
     def stop(self) -> None:
         self._running = False
         try:
-            if self._context is not None and self._ctrl_display is not None:
+            if self._context is not None and self._display is not None:
                 from Xlib.ext import record
 
-                record.disable_context(self._ctrl_display, self._context)
-                record.free_context(self._ctrl_display, self._context)
+                record.disable_context(self._display, self._context)
+                record.free_context(self._display, self._context)
         except Exception as e:
             logger.debug("XRecord cleanup error: %s", e)
         try:
-            if self._ctrl_display:
-                self._ctrl_display.close()
-            if self._data_display:
+            if self._display:
+                self._display.close()
                 self._data_display.close()
         except Exception:
             pass
-        self._ctrl_display = None
-        self._data_display = None
+        self._display = None
         self._context = None
 
 

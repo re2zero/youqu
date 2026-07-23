@@ -192,12 +192,36 @@ def cmd_record(args):
     record_session.yaml + states/*.yaml.
     """
     try:
+        import sys
+
         from src.at.scanner.recorder import RecordSession, qt_available
 
         gui_mode = getattr(args, "gui", False)
         if gui_mode and not qt_available():
             print("PyQt6 not installed — falling back to CLI mode")
             gui_mode = False
+
+        module_slug = getattr(args, "module", "") or ""
+
+        if module_slug:
+            plan_path = getattr(args, "plan", "") or "tests/at/plan.yaml"
+            try:
+                from src.at.generator.plan_generator import get_module_guide
+
+                guide = get_module_guide(plan_path, module_slug)
+                if guide:
+                    print(f"\n[RECORD] Module: {module_slug}", file=sys.stderr)
+                    print(f"[RECORD] Recording guide:\n{guide}", file=sys.stderr)
+                    print(file=sys.stderr)
+                else:
+                    print(
+                        f"\n[RECORD] Module '{module_slug}' not found in {plan_path}",
+                        file=sys.stderr,
+                    )
+            except FileNotFoundError:
+                print(f"\n[RECORD] Plan file not found: {plan_path}", file=sys.stderr)
+            except Exception as e:
+                print(f"[RECORD] Could not load plan: {e}", file=sys.stderr)
 
         session = RecordSession(
             app_name=args.app,
@@ -209,6 +233,23 @@ def cmd_record(args):
     except ImportError as e:
         print(f"Error: {e}")
         print("Install dependencies: pip install pyatspi2 python-xlib")
+    except Exception as e:
+        print(f"Error: {e}")
+
+
+def cmd_plan(args):
+    """Generate module-by-module recording plan from cases_raw + docs."""
+    try:
+        from src.at.generator.plan_generator import generate_plan
+
+        generate_plan(
+            cases_path=args.cases,
+            docs_dir=getattr(args, "docs", ""),
+            output_dir=args.output,
+            app_name=getattr(args, "app", ""),
+        )
+    except ImportError as e:
+        print(f"Error: {e}")
     except Exception as e:
         print(f"Error: {e}")
 
@@ -266,7 +307,9 @@ def cmd_merge(args):
         else:
             print("  No record_session.yaml found — using old-style state snapshots")
 
-        merged, transient = layered_merge(scan_classes, record_dir)
+        merged, transient = layered_merge(
+            scan_classes, record_dir, clean=not getattr(args, "no_clean", False)
+        )
 
         final_path = output / "at-tree.yaml"
         write_at_tree_yaml(

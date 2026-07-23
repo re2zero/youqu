@@ -43,13 +43,22 @@ def _state_names(obj: Any) -> set[str]:
         return set()
 
 
+_CONTAINER_ROLES = frozenset({"desktop frame", "application", "filler"})
+
+
 def _is_visible(obj: Any) -> bool:
     """Check whether *obj* is visible.
 
-    Requires the ``visible`` state.  The ``showing`` state means the
-    element is actually painted on screen, but some toolkits omit it
-    even for visible elements, so we accept ``visible`` alone.
+    Container roles (desktop frame, application) are structural elements
+    that often have empty state sets — always treat them as visible so
+    we can recurse into their children.
     """
+    try:
+        role_name = obj.get_role_name() or ""
+    except Exception:
+        role_name = ""
+    if role_name in _CONTAINER_ROLES:
+        return True
     names = _state_names(obj)
     return "visible" in names
 
@@ -111,44 +120,31 @@ def _extract_hit_node(obj: Any) -> dict[str, Any]:
 
 
 def hit_test(x: int, y: int, root: Any) -> Optional[dict[str, Any]]:
-    """Recursively find the deepest visible AT-SPI element at *(x, y)*.
-
-    Parameters
-    ----------
-    x, y
-        Screen coordinates (desktop coordinate space).
-    root
-        The AT-SPI ``Accessible`` to start searching from
-        (typically ``pyatspi.Registry.getDesktop(0)``).
-
-    Returns
-    -------
-    dict or None
-        A node dict matching the dump schema, or ``None`` when
-        no visible element at that coordinate passes the
-        ``_SKIP_ROLES`` filter.
-    """
+    """Recursively find the deepest visible AT-SPI element at *(x, y)*."""
     if root is None:
         return None
 
-    # Filter invisible elements
     if not _is_visible(root):
         return None
 
-    # Check coordinate containment
     ext = _get_extents(root)
-    if ext is None or not _contains(ext, x, y):
-        return None
-
-    # Skip noise roles (scroll bar, separator, …)
     try:
         role_name = root.get_role_name() or ""
     except Exception:
         role_name = ""
-    if role_name in _SKIP_ROLES:
+    is_container = role_name in _CONTAINER_ROLES
+
+    if ext is None:
+        if not is_container:
+            return None
+    elif ext[2] == 0 or ext[3] == 0:
+        if not is_container:
+            return None
+    elif not _contains(ext, x, y):
         return None
 
-    # Recurse into children — first match wins (deepest)
+    # Recurse into children even for skip-role nodes (e.g. "filler" containers
+    # hold real UI elements; skipping them would miss all descendants).
     try:
         child_count = root.get_child_count()
     except Exception:
@@ -165,7 +161,10 @@ def hit_test(x: int, y: int, root: Any) -> Optional[dict[str, Any]]:
         if result is not None:
             return result
 
-    # Leaf node — extract and return
+    # Only return this node as result if it's not a skip-role.
+    if role_name in _SKIP_ROLES:
+        return None
+
     return _extract_hit_node(root)
 
 
@@ -197,11 +196,13 @@ class ExtentsCache:
             role_name = node.get_role_name() or ""
         except Exception:
             role_name = ""
-        if role_name in _SKIP_ROLES:
-            return
-        ext = _get_extents(node)
-        if ext is not None and ext[2] > 0 and ext[3] > 0:
-            self._entries.append((ext, node))
+        is_skip = role_name in _SKIP_ROLES
+        if not is_skip:
+            ext = _get_extents(node)
+            if ext is not None and ext[2] > 0 and ext[3] > 0:
+                self._entries.append((ext, node))
+        # Always walk children — skip-role containers (e.g. "filler")
+        # hold real UI elements that must be discovered.
         try:
             count = node.get_child_count()
         except Exception:

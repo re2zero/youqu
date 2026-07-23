@@ -17,7 +17,11 @@ from typing import Any
 
 import yaml
 
-from src.at.generator.action_rules import get_action_for_role, guess_role_from_description
+from src.at.generator.action_rules import (
+    get_action_for_role,
+    get_menu_action,
+    guess_role_from_description,
+)
 
 TOP_K = 5
 HIGH_CONFIDENCE_THRESHOLD = 2.0
@@ -129,7 +133,11 @@ def _find_candidates(
 
     candidates = []
     for score, node in scored[:top_k]:
-        action_config = get_action_for_role(node.get("role", ""))
+        node_role = node.get("role", "")
+        if node_role in ("menu item", "menu"):
+            action_config = get_menu_action(description, node)
+        else:
+            action_config = get_action_for_role(node_role)
         candidate = {
             "id": node["id"],
             "name": node.get("name", ""),

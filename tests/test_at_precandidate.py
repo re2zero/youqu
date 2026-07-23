@@ -22,7 +22,12 @@ if stub is not None and getattr(stub, "__spec__", None) is None:
     sys.modules["src"].__package__ = "src"
     sys.modules["src"].__file__ = str(_src_root / "__init__.py")
 
-from src.at.generator.action_rules import get_action_for_role, guess_role_from_description
+from src.at.generator.action_rules import (
+    classify_menu_type,
+    get_action_for_role,
+    get_menu_action,
+    guess_role_from_description,
+)
 from src.at.generator.precandidate import (
     _build_index,
     _find_candidates,
@@ -45,6 +50,32 @@ def test_get_action_for_button():
 
 def test_get_action_for_menu_item():
     action = get_action_for_role("menu item")
+    assert action["action"] == "element_action"
+    assert action["do"] == "click"
+
+
+def test_classify_menu_type_context():
+    assert classify_menu_type("右键菜单选择复制") == "dtk_context_menu"
+    assert classify_menu_type("right-click the workspace") == "dtk_context_menu"
+
+
+def test_classify_menu_type_main():
+    assert classify_menu_type("点击标题栏菜单设置") == "dtk_main_menu"
+    assert classify_menu_type("open the menu bar") == "dtk_main_menu"
+
+
+def test_classify_menu_type_default():
+    assert classify_menu_type("选择菜单项") == "dtk_context_menu"
+
+
+def test_get_menu_action_context():
+    action = get_menu_action("右键点击工作区")
+    assert action["action"] == "dtk_context_menu"
+    assert action["requires"] == "dtk_context_menu"
+
+
+def test_get_menu_action_main():
+    action = get_menu_action("点击主菜单设置")
     assert action["action"] == "dtk_main_menu"
     assert action["requires"] == "dtk_main_menu"
 

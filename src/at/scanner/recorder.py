@@ -159,6 +159,15 @@ class RecordSession:
         self._type_text_element: Optional[dict] = None
         self._type_text_last_time = 0.0
 
+        # Focus event deduplication state
+        self._last_focus_key: str = ""
+        self._last_focus_time: float = 0.0
+        self._focus_dedup_window: float = 0.5  # seconds
+
+        # Right-click context tracking for menu detection
+        self._pending_right_click: bool = False
+        self._right_click_time: float = 0.0
+
         # AT-SPI event registration state
         self._atspi_registered = False
         self._running = False
@@ -433,6 +442,19 @@ class RecordSession:
         except Exception:
             return
 
+        # Deduplicate: skip if same element focused within dedup window
+        focus_key = (
+            f"{element.get('role', '')}|{element.get('name', '')}|{element.get('object_name', '')}"
+        )
+        now = time.monotonic()
+        if (
+            focus_key == self._last_focus_key
+            and (now - self._last_focus_time) < self._focus_dedup_window
+        ):
+            return
+        self._last_focus_key = focus_key
+        self._last_focus_time = now
+
         evt = {
             "type": "focus",
             "element": element,
@@ -462,15 +484,29 @@ class RecordSession:
         is_main_app = app_name == self.app_name
 
         if "activate" in event_type:
-            # window:activate → new segment (auto)
+            # window:activate → new segment only if genuinely different context
             label = element.get("name", "") or app_name or "unnamed"
-            trigger = {
-                "type": "window_activate",
-                "app": app_name,
-                "is_main_app": is_main_app,
-                "element": element,
-            }
-            self._new_segment(label, trigger)
+
+            should_new_segment = False
+            if self.current_segment is None:
+                should_new_segment = True
+            elif is_main_app:
+                # Same main app re-activating (e.g. after menu close, titlebar
+                # focus shift) — never split into a new segment.
+                should_new_segment = False
+            elif not is_main_app and self.current_segment.trigger:
+                prev_app = self.current_segment.trigger.get("app", "")
+                if prev_app != app_name:
+                    should_new_segment = True
+
+            if should_new_segment:
+                trigger = {
+                    "type": "window_activate",
+                    "app": app_name,
+                    "is_main_app": is_main_app,
+                    "element": element,
+                }
+                self._new_segment(label, trigger)
 
             evt = {
                 "type": "window_activate",
@@ -542,14 +578,49 @@ class RecordSession:
             parent_role = ""
             parent_element = {}
 
-        # Detect menu open/close
+        # Detect menu open/close — check parent role AND child roles
+        # Parent roles seen in practice: "static", "section", "frame", etc.
+        # So we also check if children are "menu item" elements
+        is_menu = False
+        is_context_menu = False
+
+        # Check parent role for menu-like containers
         menu_roles = {"menu", "popup menu", "menu bar", "list", "tree"}
-        if parent_role in menu_roles or "menu" in parent_role:
+        if parent_role in menu_roles or "menu" in parent_role or "popup" in parent_role:
+            is_menu = True
+
+        # Also check children for menu items (handles non-standard parent roles)
+        if not is_menu and is_add:
+            try:
+                child_count = event.source.get_child_count()
+                if child_count > 0:
+                    for i in range(min(child_count, 5)):
+                        child = event.source.get_child_at_index(i)
+                        if child is None:
+                            continue
+                        child_role = child.get_role_name() or ""
+                        if child_role == "menu item" or "menu" in child_role:
+                            is_menu = True
+                            break
+            except Exception:
+                pass
+
+        # Check if this menu appeared after a right-click
+        if is_menu and self._pending_right_click:
+            now = time.monotonic()
+            if (now - self._right_click_time) < 2.0:  # within 2 seconds
+                is_context_menu = True
+            self._pending_right_click = False
+
+        if is_menu:
             if is_add:
                 # Menu open — dump subtree
-                state_path = self._dump_accessible_subtree(
-                    event.source, f"{self.state_index:02d}_menu_open"
+                state_name = (
+                    f"{self.state_index:02d}_context_menu"
+                    if is_context_menu
+                    else f"{self.state_index:02d}_menu_open"
                 )
+                state_path = self._dump_accessible_subtree(event.source, state_name)
                 if state_path:
                     self.state_index += 1
                     with self._lock:
@@ -559,17 +630,19 @@ class RecordSession:
                 # Extract menu items
                 menu_items = self._extract_menu_items(event.source)
                 evt = {
-                    "type": "menu_open",
+                    "type": "context_menu_open" if is_context_menu else "menu_open",
                     "at_tree": state_path,
                     "menu_items": menu_items,
+                    "is_context_menu": is_context_menu,
                 }
                 with self._lock:
                     if self.current_segment:
                         self.current_segment.events.append(evt)
                 item_names = [m.get("name", "") for m in menu_items[:5]]
                 suffix = "..." if len(menu_items) > 5 else ""
+                tag = "CTX_MENU" if is_context_menu else "MENU_OPEN"
                 self._print_event(
-                    "MENU_OPEN",
+                    tag,
                     f"{len(menu_items)} items: [{', '.join(item_names)}{suffix}]",
                 )
             elif is_remove:
@@ -611,23 +684,30 @@ class RecordSession:
         """Handle mouse button press via hit-test."""
         element = None
         try:
-            desktop = pyatspi.Registry.getDesktop(0)
             element = self._extents_cache.lookup(x, y)
             if element is None:
-                element = hit_test(x, y, desktop)
+                app_root = self._find_app_root()
+                if app_root is not None:
+                    element = hit_test(x, y, app_root)
         except Exception as e:
             logger.debug("hit_test error: %s", e)
 
         button_name = {1: "left", 2: "middle", 3: "right"}.get(button, f"btn{button}")
+
+        # Track right-click for context menu detection
+        if button == 3:
+            self._pending_right_click = True
+            self._right_click_time = time.monotonic()
+
+        # Skip scroll wheel events (buttons 4/5)
+        if button in (4, 5):
+            return
 
         # Determine event type
         if button == 3:
             evt_type = "right_click"
         elif button == 2:
             evt_type = "middle_click"
-        elif button == 1:
-            # Check for double-click (within 500ms of previous click)
-            evt_type = "click"  # simplified; double-click detection could be added
         else:
             evt_type = "click"
 
@@ -820,12 +900,31 @@ class RecordSession:
     # Extents cache
     # ------------------------------------------------------------------
 
-    def _rebuild_extents_cache(self) -> None:
-        """Rebuild the extents cache from the AT-SPI desktop root."""
+    def _find_app_root(self) -> Any:
+        """Find the AT-SPI application object for the recorded app."""
         try:
             desktop = pyatspi.Registry.getDesktop(0)
-            self._extents_cache.build(desktop)
-            logger.debug("Extents cache rebuilt: %d entries", len(self._extents_cache))
+            for i in range(desktop.get_child_count()):
+                app = desktop.get_child_at_index(i)
+                if app and app.get_name() == self.app_name:
+                    return app
+        except Exception as e:
+            logger.debug("find_app_root error: %s", e)
+        return None
+
+    def _rebuild_extents_cache(self) -> None:
+        """Rebuild the extents cache from the target app's subtree only."""
+        try:
+            app_root = self._find_app_root()
+            if app_root is not None:
+                self._extents_cache.build(app_root)
+                logger.debug(
+                    "Extents cache rebuilt: %d entries (app=%s)",
+                    len(self._extents_cache),
+                    self.app_name,
+                )
+            else:
+                logger.debug("App root not found for extents cache")
         except Exception as e:
             logger.debug("Extents cache rebuild error: %s", e)
 

@@ -817,14 +817,16 @@ def extract_transient(session_data: dict[str, Any]) -> list[dict[str, Any]]:
     """Extract transient contexts from a record session.
 
     Walks the session's segments and events, extracting:
-    - ``menu_open`` events → ``right_click_menu_NNN``
+    - ``menu_open`` events → ``main_menu_NNN``
+    - ``context_menu_open`` events → ``right_click_menu_NNN``
     - ``window_create`` events → ``child_window_NNN``
 
     Transient contexts store trigger condition, items (for menus),
     and snapshot path reference.  They are NOT mixed into the main tree.
     """
     contexts: list[dict[str, Any]] = []
-    menu_count = 0
+    ctx_menu_count = 0
+    main_menu_count = 0
     window_count = 0
 
     for segment in session_data.get("segments", []):
@@ -833,16 +835,29 @@ def extract_transient(session_data: dict[str, Any]) -> list[dict[str, Any]]:
         for event in segment.get("events", []):
             evt_type = event.get("type", "")
 
-            if evt_type == "menu_open":
+            if evt_type == "context_menu_open":
                 contexts.append(
                     {
-                        "id": f"right_click_menu_{menu_count:03d}",
+                        "id": f"right_click_menu_{ctx_menu_count:03d}",
                         "trigger": seg_trigger,
                         "items": event.get("menu_items", []),
                         "at_tree": event.get("at_tree", ""),
+                        "is_context_menu": True,
                     }
                 )
-                menu_count += 1
+                ctx_menu_count += 1
+
+            elif evt_type == "menu_open":
+                contexts.append(
+                    {
+                        "id": f"main_menu_{main_menu_count:03d}",
+                        "trigger": seg_trigger,
+                        "items": event.get("menu_items", []),
+                        "at_tree": event.get("at_tree", ""),
+                        "is_context_menu": False,
+                    }
+                )
+                main_menu_count += 1
 
             elif evt_type == "window_create":
                 contexts.append(
@@ -861,9 +876,71 @@ def extract_transient(session_data: dict[str, Any]) -> list[dict[str, Any]]:
     return contexts
 
 
+def clean_record_session(session_data: dict[str, Any]) -> dict[str, Any]:
+    """Filter invalid events from a record session.
+
+    Removes:
+    - click/right_click/middle_click events with empty element (hit_test failed)
+    - consecutive window_activate events with the same label (keep first only)
+    - empty segments (no events after cleaning)
+
+    Returns a cleaned *copy*; the original dict is not modified.
+    """
+    cleaned_data = dict(session_data)
+    cleaned_segments: list[dict[str, Any]] = []
+
+    for segment in session_data.get("segments", []):
+        original = segment.get("events") or []
+        cleaned: list[dict[str, Any]] = []
+
+        for evt in original:
+            evt_type = evt.get("type", "")
+
+            # Skip clicks with empty element (hit_test failed)
+            if evt_type in ("click", "right_click", "middle_click"):
+                if not evt.get("element"):
+                    continue
+
+            # Skip consecutive same-label window_activate (keep first)
+            if evt_type == "window_activate":
+                if cleaned and cleaned[-1].get("type") == "window_activate":
+                    prev_name = (
+                        cleaned[-1].get("element", {}).get("name", "")
+                    )
+                    cur_name = evt.get("element", {}).get("name", "")
+                    # Only deduplicate when both have meaningful names
+                    if prev_name and cur_name and prev_name == cur_name:
+                        continue
+
+            cleaned.append(evt)
+
+        if cleaned:
+            seg = dict(segment)
+            seg["events"] = cleaned
+            cleaned_segments.append(seg)
+
+    cleaned_data["segments"] = cleaned_segments
+
+    original_events = sum(
+        len(s.get("events") or []) for s in session_data.get("segments", [])
+    )
+    cleaned_events = sum(len(s["events"]) for s in cleaned_segments)
+    if original_events != cleaned_events:
+        logger.info(
+            "Cleaned record session: %d→%d events, %d→%d segments",
+            original_events,
+            cleaned_events,
+            len(session_data.get("segments", [])),
+            len(cleaned_segments),
+        )
+
+    return cleaned_data
+
+
 def layered_merge(
     scan_classes: list[dict],
     record_dir: str | Path,
+    clean: bool = True,
 ) -> tuple[list[dict], list[dict[str, Any]]]:
     """Full layered merge pipeline: persistent + transient + static injection.
 
@@ -873,6 +950,9 @@ def layered_merge(
         Static scan output (list of class dicts from clang_scanner).
     record_dir
         Directory containing ``record_session.yaml`` and ``states/*.yaml``.
+    clean
+        If True (default), filter invalid events (empty-element clicks,
+        consecutive same-label window_activate, empty segments) before merging.
 
     Returns
     -------
@@ -897,6 +977,10 @@ def layered_merge(
             base_tree = []
         merged = merge_trees(base_tree, scan_classes)
         return merged, []
+
+    # Clean invalid events before merging
+    if clean:
+        session = clean_record_session(session)
 
     # Build base tree from launch segment
     base_tree: list[dict] = []
