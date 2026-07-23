@@ -567,17 +567,21 @@ def _add_unmatched_static_nodes(
         for on in names:
             if not on:
                 continue
-            children.append(
-                {
-                    "id": "",
-                    "name": on,
-                    "role": "panel",
-                    "object_name": on,
-                    "accessible_id": "",
-                    "source": "static",
-                    "class_name": cn,
-                }
-            )
+            child_node = {
+                "id": "",
+                "name": on,
+                "role": "panel",
+                "object_name": on,
+                "accessible_id": "",
+                "source": "static",
+                "class_name": cn,
+            }
+            # NEW: Include action_texts for menu/dialog classes
+            if cls.get("action_texts"):
+                child_node["action_texts"] = cls["action_texts"]
+            if cls.get("translated_action_texts"):
+                child_node["translated_action_texts"] = cls["translated_action_texts"]
+            children.append(child_node)
         if not children:
             continue
         if len(children) == 1 and children[0]["name"] == cn:
@@ -593,6 +597,11 @@ def _add_unmatched_static_nodes(
                 "class_name": cn,
                 "children": children,
             }
+            # NEW: Include action_texts on parent for menu classes
+            if cls.get("action_texts"):
+                parent["action_texts"] = cls["action_texts"]
+            if cls.get("translated_action_texts"):
+                parent["translated_action_texts"] = cls["translated_action_texts"]
             runtime_nodes.append(parent)
 
 
@@ -619,6 +628,15 @@ def merge_trees(runtime_tree: list[dict], static_classes: list[dict]) -> list[di
                         node["object_name"] = cls["object_names"][0]
                     if cls.get("accessible_names"):
                         node["accessible_id"] = cls["accessible_names"][0]
+                    # NEW: Inject action_texts for menu/dialog contexts
+                    if cls.get("action_texts"):
+                        node["action_texts"] = cls["action_texts"]
+                    if cls.get("translated_action_texts"):
+                        node["translated_action_texts"] = cls["translated_action_texts"]
+                    # NEW: Mark .ui-sourced widgets
+                    if cls.get("ui_children"):
+                        node["ui_source"] = True
+                        node["ui_children"] = cls["ui_children"]
                     node["source"] = "static+runtime"
                     node["class_name"] = cls.get("class_name", "")
                     break

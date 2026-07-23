@@ -219,6 +219,16 @@ def main():
         default=None,
         help="Only scan source files under these subdirectories (e.g. src widgets)",
     )
+    p_at_scan.add_argument(
+        "--target-lang",
+        default="zh_CN",
+        help="Target language for translation lookup (default: zh_CN)",
+    )
+    p_at_scan.add_argument(
+        "--compile-commands",
+        default=None,
+        help="Path to compile_commands.json (auto-detected if not specified)",
+    )
 
     p_at_dump = at_sub.add_parser("dump", help="Dump AT-SPI tree")
     p_at_dump.add_argument("type", choices=["dtk"], help="App framework type")

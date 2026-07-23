@@ -53,20 +53,12 @@ def cmd_scan(args):
                     flush=True,
                 )
 
+
         def _file_done_cb(rel_path: str, classes: list, error):
             for cls in classes:
-                has_names = cls.get("object_names") or cls.get("accessible_names")
+                has_names = cls.get("object_names") or cls.get("accessible_names") or cls.get("action_texts")
                 target = ok_path if has_names else gaps_path
                 append_scan_entry(str(target), cls)
-
-        extra_args = ["-x", "c++", "-std=c++17", "-fPIC"]
-        extra_args.extend(_get_cxx_stdlib_flags())
-        extra_args.extend(_get_qt_dtk_include_flags())
-        n_workers = min(os.cpu_count() or 4, 8)
-
-        scan_pool = multiprocessing.Pool(
-            processes=n_workers, initializer=_worker_init, initargs=(extra_args,)
-        )
 
         scan_holder = [None, None]
 
@@ -77,7 +69,8 @@ def cmd_scan(args):
                     progress_cb=_progress_cb,
                     file_done_cb=_file_done_cb,
                     include_dirs=getattr(args, "include_dirs", None),
-                    pool=scan_pool,
+                    target_lang=getattr(args, "target_lang", "zh_CN"),
+                    compile_commands=getattr(args, "compile_commands", None),
                 )
             except Exception as e:
                 scan_holder[1] = e
@@ -87,8 +80,6 @@ def cmd_scan(args):
         print(f"  Scanning source: {args.src} ...", file=sys.stderr, end="", flush=True)
 
         scan_thread.join()
-        scan_pool.close()
-        scan_pool.join()
         print(file=sys.stderr, flush=True)
 
         scan_result = scan_holder[0]
