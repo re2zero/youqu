@@ -23,65 +23,82 @@ logger = logging.getLogger(__name__)
 
 _DTK_WIDGET_CLASSES: frozenset[str] = frozenset(
     {
+        # Core widgets
         "DWidget",
         "DMainWindow",
+        "DWindow",
+        "DFrame",
+        # Dialogs
         "DAbstractDialog",
         "DDialog",
-        "DFloatingWidget",
+        "DDialogCloseButton",
+        "DAboutDialog",
+        "DInputDialog",
+        "DFeatureDisplayDialog",
+        # Buttons
         "DPushButton",
         "DToolButton",
         "DIconButton",
+        "DSwitchButton",
+        "DSuggestButton",
+        "DCommandLinkButton",
+        "DButtonBox",
+        "DFloatingButton",
+        # Input widgets
         "DLineEdit",
         "DTextEdit",
         "DComboBox",
         "DCheckBox",
         "DRadioButton",
         "DSlider",
+        "DSpinBox",
+        "DPasswordEdit",
+        "DSearchEdit",
+        "DFileChooserEdit",
+        # Display widgets
         "DLabel",
         "DTitlebar",
-        "DButtonBox",
-        "DSwitchButton",
         "DProgressBar",
         "DIndeterminateProgressBar",
         "DWaterProgress",
+        "DAlertControl",
+        # Navigation and containers
         "DTabBar",
         "DListView",
         "DTreeView",
-        "DStyledItemDelegate",
-        "DSuggestButton",
-        "DCommandLinkButton",
-        "DPasswordEdit",
-        "DSpinBox",
-        "DDialogCloseButton",
-        "DAlertControl",
-        "DFileChooserEdit",
-        "DFlowLayout",
         "DStackWidget",
-        "DShadowLine",
-        "DSearchEdit",
-        "DFloatingButton",
-        "DFrame",
-        "DWindow",
         "DDrawer",
-        "DSegmentedControl",
-        "DArrowRectangle",
-        "DToolTip",
+        "DFloatingWidget",
+        "DToolBox",
+        # Layout and separators
+        "DFlowLayout",
         "DHeaderLine",
+        "DShadowLine",
+        # Menu and toolbar (may not exist in all DTK versions)
         "DMenuBar",
         "DStatusBar",
-        "DToolBox",
-        # Menu and action classes (commonly used in DTK apps)
         "DMenu",
         "DAction",
         "DMenuItem",
-        # Settings and widget factory
+        # Settings
         "DSettings",
         "DSettingsWidget",
+        # Effects and decorations
+        "DArrowRectangle",
+        "DToolTip",
+        "DSegmentedControl",
+        "DClipEffectWidget",
         # Abstract base classes
         "DAbstractButton",
-        # Flyout and popup widgets
+        # Flyout and popup (may not exist in all DTK versions)
         "DFlyoutWidget",
         "DMessageBox",
+        # View item action (inherits from QAction)
+        "DViewItemAction",
+        # Additional DTK6 widgets
+        "DMessageManager",
+        "DHBoxWidget",
+        "DBoxWidget",
     }
 )
 
