@@ -275,11 +275,15 @@ def _find_calls_in_subtree(cursor: Any) -> list[Any]:
     }
 
     calls: list[Any] = []
-    if cursor.kind in (CursorKind.CALL_EXPR, CursorKind.CXX_NEW_EXPR):
-        calls.append(cursor)
-    if cursor.kind in _RECURSIVE_KINDS:
-        for child in cursor.get_children():
-            calls.extend(_find_calls_in_subtree(child))
+    try:
+        if cursor.kind in (CursorKind.CALL_EXPR, CursorKind.CXX_NEW_EXPR):
+            calls.append(cursor)
+        if cursor.kind in _RECURSIVE_KINDS:
+            for child in cursor.get_children():
+                calls.extend(_find_calls_in_subtree(child))
+    except Exception:
+        # Silently skip problematic nodes — partial results are better than crash
+        pass
     return calls
 def _find_string_literal(cursor: Any) -> str | None:
     """Find the first STRING_LITERAL in a cursor subtree, returning its value.
@@ -296,34 +300,37 @@ def _find_string_literal(cursor: Any) -> str | None:
     """
     from clang.cindex import CursorKind
 
-    # Direct string literal (check current node first)
-    if cursor.kind == CursorKind.STRING_LITERAL:
-        literal = cursor.spelling or ""
-        return literal.strip('"')
+    try:
+        # Direct string literal (check current node first)
+        if cursor.kind == CursorKind.STRING_LITERAL:
+            literal = cursor.spelling or ""
+            return literal.strip('"')
 
-    # Handle tr() / QStringLiteral() / QLatin1String() calls at this node
-    if cursor.kind == CursorKind.CALL_EXPR:
-        spelling = cursor.spelling or ""
+        # Handle tr() / QStringLiteral() / QLatin1String() calls at this node
+        if cursor.kind == CursorKind.CALL_EXPR:
+            spelling = cursor.spelling or ""
 
-        if spelling in ("tr", "QStringLiteral", "QLatin1String"):
-            # First argument is the string
-            args = list(cursor.get_arguments())
-            if args:
-                return _find_string_literal(args[0])
+            if spelling in ("tr", "QStringLiteral", "QLatin1String"):
+                # First argument is the string
+                args = list(cursor.get_arguments())
+                if args:
+                    return _find_string_literal(args[0])
 
-        if spelling == "translate":
-            # qApp->translate("context", "text") — second argument is the text
-            args = list(cursor.get_arguments())
-            if len(args) >= 2:
-                return _find_string_literal(args[1])
+            if spelling == "translate":
+                # qApp->translate("context", "text") — second argument is the text
+                args = list(cursor.get_arguments())
+                if len(args) >= 2:
+                    return _find_string_literal(args[1])
 
-    # Recurse into children for nested literals
-    for child in cursor.get_children():
-        result = _find_string_literal(child)
-        if result is not None:
-            return result
+        # Recurse into children for nested literals
+        for child in cursor.get_children():
+            result = _find_string_literal(child)
+            if result is not None:
+                return result
+    except Exception:
+        # Silently skip problematic nodes
+        pass
     return None
-
 
 def _get_object_name_from_expr(cursor: Any) -> str | None:
     """Try to extract objectName from an expression (e.g., member variable reference).
@@ -334,15 +341,19 @@ def _get_object_name_from_expr(cursor: Any) -> str | None:
     """
     from clang.cindex import CursorKind
 
-    if cursor.kind == CursorKind.DECL_REF_EXPR:
-        # Variable reference like m_closeTabAction
-        return cursor.spelling
+    try:
+        if cursor.kind == CursorKind.DECL_REF_EXPR:
+            # Variable reference like m_closeTabAction
+            return cursor.spelling
 
-    if cursor.kind == CursorKind.CXX_NEW_EXPR:
-        # new QAction(...) — check for chained ->setObjectName()
-        for child in cursor.get_children():
-            if child.kind == CursorKind.CALL_EXPR and child.spelling == "setObjectName":
-                return _find_string_literal(child)
+        if cursor.kind == CursorKind.CXX_NEW_EXPR:
+            # new QAction(...) — check for chained ->setObjectName()
+            for child in cursor.get_children():
+                if child.kind == CursorKind.CALL_EXPR and child.spelling == "setObjectName":
+                    return _find_string_literal(child)
+    except Exception:
+        # Silently skip problematic nodes
+        pass
 
     return None
 
@@ -358,7 +369,24 @@ def _extract_ui_classes(tu: Any, source_file: str) -> list[dict[str, Any]]:
     }
 
     method_info: dict[str, dict[str, Any]] = {}
-    all_nodes = list(tu.cursor.walk_preorder())
+
+    # Collect diagnostics for logging (non-fatal parse issues)
+    diag_count = len(list(tu.diagnostics)) if hasattr(tu, "diagnostics") else 0
+    if diag_count > 0:
+        logger.debug("File %s has %d diagnostics (non-fatal)", source_file, diag_count)
+
+    # Walk preorder with error recovery — partial results are better than nothing
+    all_nodes: list[Any] = []
+    try:
+        all_nodes = list(tu.cursor.walk_preorder())
+    except Exception as e:
+        logger.warning("walk_preorder failed for %s: %s — trying partial extraction", source_file, e)
+        # Fallback: try direct children only (may miss nested methods but better than empty)
+        try:
+            all_nodes = list(tu.cursor.get_children())
+        except Exception as e2:
+            logger.error("Fallback traversal also failed for %s: %s", source_file, e2)
+            return []
 
     def _get_class_name_from_node(node) -> str:
         """Get class name from a method/function node.
@@ -371,101 +399,108 @@ def _extract_ui_classes(tu: Any, source_file: str) -> list[dict[str, Any]]:
         if parent and parent.spelling:
             return parent.spelling
 
-        # Try qualified name (out-of-line: ClassName::method)
-        spelling = node.spelling or ""
-        if "::" in spelling:
-            return spelling.split("::")[0]
-
-        return ""
-
     for node in all_nodes:
-        if node.kind not in _METHOD_KINDS:
-            continue
-        loc_file = node.location.file.name if node.location.file else ""
-        src_stem = Path(source_file).stem
-        if not loc_file or Path(loc_file).stem != src_stem:
+        try:
+            if node.kind not in _METHOD_KINDS:
+                continue
+            loc_file = node.location.file.name if node.location.file else ""
+            src_stem = Path(source_file).stem
+            if not loc_file or Path(loc_file).stem != src_stem:
+                continue
+
+            class_name = _get_class_name_from_node(node)
+            if not class_name:
+                continue
+
+            if class_name not in method_info:
+                method_info[class_name] = {
+                    "object_names": set(),
+                    "accessible_names": set(),
+                    "dtk_instantiations": set(),
+                    "action_texts": set(),      # QAction text from tr() for AT-SPI name
+                    "menu_actions": set(),      # addAction relationships
+                }
+            info = method_info[class_name]
+            for call in _find_calls_in_subtree(node):
+                callee = call.spelling or ""
+                if callee in ("setObjectName", "setAccessibleName"):
+                    value = _find_string_literal(call)
+                    if value:
+                        if callee == "setObjectName":
+                            info["object_names"].add(value)
+                        else:
+                            info["accessible_names"].add(value)
+                # NEW: Utils::set_Object_Name(this) — objectName = class_name
+                elif callee == "set_Object_Name":
+                    args = list(call.get_arguments())
+                    if args:
+                        # Check if argument is 'this' (CXX_THIS_EXPR, possibly wrapped)
+                        is_this = False
+                        for child in args[0].walk_preorder():
+                            if child.kind == CursorKind.CXX_THIS_EXPR:
+                                is_this = True
+                                break
+                        if is_this:
+                            info["object_names"].add(class_name)
+                # NEW: QAction constructor — capture text for AT-SPI name
+                # Handle both direct CALL_EXPR and CXX_NEW_EXPR (new QAction(...))
+                elif callee == "QAction":
+                    args = list(call.get_arguments())
+                    if args:
+                        text = _find_string_literal(args[0])
+                        if text:
+                            info["action_texts"].add(text)
+                # NEW: addAction — capture menu-action relationships
+                elif callee == "addAction":
+                    args = list(call.get_arguments())
+                    if args:
+                        action_name = _get_object_name_from_expr(args[0])
+                        if action_name:
+                            info["menu_actions"].add(action_name)
+                elif callee in _DTK_WIDGET_CLASSES:
+                    info["dtk_instantiations"].add(callee)
+        except Exception as e:
+            # Per-node error recovery: skip problematic nodes, continue with others
+            logger.debug("Skipping node in %s: %s", source_file, e)
             continue
 
-        class_name = _get_class_name_from_node(node)
-        if not class_name:
-            continue
-
-        if class_name not in method_info:
-            method_info[class_name] = {
-                "object_names": [],
-                "accessible_names": [],
-                "dtk_instantiations": [],
-                "action_texts": [],      # QAction text from tr() for AT-SPI name
-                "menu_actions": [],      # addAction relationships
-            }
-        info = method_info[class_name]
-        for call in _find_calls_in_subtree(node):
-            callee = call.spelling or ""
-            if callee in ("setObjectName", "setAccessibleName"):
-                value = _find_string_literal(call)
-                if value:
-                    if callee == "setObjectName":
-                        info["object_names"].append(value)
-                    else:
-                        info["accessible_names"].append(value)
-            # NEW: Utils::set_Object_Name(this) — objectName = class_name
-            elif callee == "set_Object_Name":
-                args = list(call.get_arguments())
-                if args:
-                    # Check if argument is 'this' (CXX_THIS_EXPR, possibly wrapped)
-                    is_this = False
-                    for child in args[0].walk_preorder():
-                        if child.kind == CursorKind.CXX_THIS_EXPR:
-                            is_this = True
-                            break
-                    if is_this:
-                        info["object_names"].append(class_name)
-            # NEW: QAction constructor — capture text for AT-SPI name
-            # Handle both direct CALL_EXPR and CXX_NEW_EXPR (new QAction(...))
-            elif callee == "QAction":
-                args = list(call.get_arguments())
-                if args:
-                    text = _find_string_literal(args[0])
-                    if text:
-                        info["action_texts"].append(text)
-            # NEW: addAction — capture menu-action relationships
-            elif callee == "addAction":
-                args = list(call.get_arguments())
-                if args:
-                    action_name = _get_object_name_from_expr(args[0])
-                    if action_name:
-                        info["menu_actions"].append(action_name)
-            elif callee in _DTK_WIDGET_CLASSES:
-                info["dtk_instantiations"].append(callee)
-
+    # Collect class declarations with per-node error recovery
     classes: list[dict[str, Any]] = []
     for node in all_nodes:
-        if node.kind not in (CursorKind.CLASS_DECL, CursorKind.STRUCT_DECL):
-            continue
-        if not node.spelling:
-            continue
-        if node.spelling not in method_info:
-            continue
-        name = node.spelling
-        info = method_info[name]
+        try:
+            if node.kind not in (CursorKind.CLASS_DECL, CursorKind.STRUCT_DECL):
+                continue
+            if not node.spelling:
+                continue
+            if node.spelling not in method_info:
+                continue
+            name = node.spelling
+            info = method_info[name]
 
-        base_classes = []
-        for child in node.get_children():
-            if child.kind == CursorKind.CXX_BASE_SPECIFIER:
-                base_name = child.spelling or ""
-                base_classes.append(base_name)
+            base_classes = []
+            for child in node.get_children():
+                if child.kind == CursorKind.CXX_BASE_SPECIFIER:
+                    base_name = child.spelling or ""
+                    base_classes.append(base_name)
 
-        if base_classes or info["object_names"] or info["accessible_names"] or info["dtk_instantiations"] or info["action_texts"] or info["menu_actions"]:
-            is_ui_widget = any(base in _ALL_UI_CLASSES for base in base_classes)
-            classes.append(
-                {
-                    "class_name": name,
-                    "source_file": source_file,
-                    "base_classes": base_classes,
-                    "is_ui_widget": is_ui_widget,
-                    **info,
-                }
-            )
+            if base_classes or info["object_names"] or info["accessible_names"] or info["dtk_instantiations"] or info["action_texts"] or info["menu_actions"]:
+                is_ui_widget = any(base in _ALL_UI_CLASSES for base in base_classes)
+                classes.append(
+                    {
+                        "class_name": name,
+                        "source_file": source_file,
+                        "base_classes": base_classes,
+                        "is_ui_widget": is_ui_widget,
+                        "object_names": sorted(info["object_names"]),
+                        "accessible_names": sorted(info["accessible_names"]),
+                        "dtk_instantiations": sorted(info["dtk_instantiations"]),
+                        "action_texts": sorted(info["action_texts"]),
+                        "menu_actions": sorted(info["menu_actions"]),
+                    }
+                )
+        except Exception as e:
+            logger.debug("Skipping class node in %s: %s", source_file, e)
+            continue
 
     return classes
 
@@ -477,7 +512,11 @@ def _scan_file(
         tu = index.parse(file_path, args=extra_args)
         return _extract_ui_classes(tu, source_file), None
     except Exception as e:
-        return [], f"{type(e).__name__}: {e}"
+        err_msg = f"{type(e).__name__}: {e}"
+        # Classify known template/template-argument errors
+        if "template" in err_msg.lower() or "Unknown" in err_msg:
+            return [], f"template_parse_error: {err_msg}"
+        return [], err_msg
 
 
 def _worker_init(args: list[str]):
@@ -664,17 +703,20 @@ def scan_source_dir(
     results: list[dict[str, Any]] = []
     parsed = 0
     failed = 0
+    template_errors = 0
     done = 0
     if progress_cb:
         progress_cb(0, total, f"scanning {total} files with {n_workers} processes")
 
     def _consume(pool_obj):
-        nonlocal parsed, failed, done
+        nonlocal parsed, failed, template_errors, done
         for batch_results in pool_obj.imap_unordered(_worker_scan_batch, batches):
             for rel_path, classes, error in batch_results:
                 if error:
                     logger.warning("Failed to parse %s: %s", rel_path, error)
                     failed += 1
+                    if "template_parse_error" in error:
+                        template_errors += 1
                 else:
                     parsed += 1
                 results.extend(classes)
@@ -735,6 +777,7 @@ def scan_source_dir(
             "total_files": total,
             "parsed_files": parsed,
             "failed_files": failed,
+            "template_errors": template_errors,
             "ui_files": len(ui_results),
             "ts_files_loaded": len(ts_files),
             "compile_commands_used": file_flags is not None,

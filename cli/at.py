@@ -96,8 +96,13 @@ def cmd_scan(args):
             )
             n_gaps = len(scan_result.classes) - n_ok
             msg = f"  Scan done: {len(scan_result.classes)} UI classes in {stats['total_files']} files"
-            if stats["failed_files"]:
-                msg += f" ({stats['failed_files']} failed)"
+            failed = stats.get("failed_files", 0)
+            template_errs = stats.get("template_errors", 0)
+            if failed:
+                if template_errs > 0:
+                    msg += f" ({failed} failed, {template_errs} template errors)"
+                else:
+                    msg += f" ({failed} failed)"
             print(msg, file=sys.stderr, flush=True)
             print(f"  -> {ok_path} ({n_ok} with names)")
             if n_gaps > 0:

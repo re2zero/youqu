@@ -513,6 +513,9 @@ def _dedup_static_classes(static_classes: list[dict]) -> list[dict]:
     is_ui_widget=True.
     """
     by_name: dict[str, dict] = {}
+    # Fields that should be unioned (deduplicated) across entries
+    _UNION_FIELDS = ("object_names", "accessible_names", "action_texts", "translated_action_texts", "menu_actions", "dtk_instantiations")
+
     for cls in static_classes:
         cn = cls.get("class_name", "")
         if not cn:
@@ -521,14 +524,22 @@ def _dedup_static_classes(static_classes: list[dict]) -> list[dict]:
             by_name[cn] = dict(cls)
             continue
         existing = by_name[cn]
-        for on in cls.get("object_names", []):
-            if on and on not in existing.setdefault("object_names", []):
-                existing["object_names"].append(on)
-        for an in cls.get("accessible_names", []):
-            if an and an not in existing.setdefault("accessible_names", []):
-                existing["accessible_names"].append(an)
+        # Union list/set fields
+        for field in _UNION_FIELDS:
+            values = cls.get(field)
+            if not values:
+                continue
+            existing_set = existing.setdefault(field, [])
+            if isinstance(existing_set, set):
+                existing_set.update(values)
+            else:
+                for v in values:
+                    if v and v not in existing_set:
+                        existing_set.append(v)
+        # Prefer is_ui_widget=True if any entry says it's a UI widget
         if cls.get("is_ui_widget") and not existing.get("is_ui_widget"):
             existing["is_ui_widget"] = True
+        # Prefer more complete base_classes
         if cls.get("base_classes") and not existing.get("base_classes"):
             existing["base_classes"] = cls["base_classes"]
     return list(by_name.values())
