@@ -114,8 +114,9 @@ class TsTranslator:
             return
 
         # Find .ts files matching target language (e.g., *_zh_CN.ts)
+        # Use rglob to search subdirectories (e.g. application/translations/)
         pattern = f"*_{self.target_lang}.ts"
-        ts_files = list(self.translations_dir.glob(pattern))
+        ts_files = list(self.translations_dir.rglob(pattern))
 
         if not ts_files:
             logger.warning(
@@ -147,10 +148,24 @@ class TsTranslator:
         Returns:
             Translated text, or original source_text if not found.
         """
-        # Try with context first
+        # Try exact context match first
         key = (context, source_text)
         if key in self._index:
             return self._index[key]
+
+        # Namespace stripping: "dfmbase::RightValueWidget" → "RightValueWidget"
+        if context and "::" in context:
+            stripped = context.split("::")[-1]
+            key_stripped = (stripped, source_text)
+            if key_stripped in self._index:
+                return self._index[key_stripped]
+
+        # Reverse namespace match: stored context ends with "::" + our context
+        if context:
+            suffix = f"::{context}"
+            for (ctx, src), transl in self._index.items():
+                if src == source_text and ctx.endswith(suffix):
+                    return transl
 
         # Try without context (some entries may not have specific context)
         key_no_ctx = ("", source_text)

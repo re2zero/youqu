@@ -365,7 +365,6 @@ class X11RecordListener(InputEventListener):
         try:
             if self._display:
                 self._display.close()
-                self._data_display.close()
         except Exception:
             pass
         self._display = None

@@ -40,11 +40,19 @@ def _get_property(elem: ET.Element, name: str) -> str:
 
 
 def _extract_widgets(parent_elem: ET.Element) -> list[UiWidget]:
-    """Recursively extract widgets from a .ui element."""
-    widgets = []
+    """Extract all descendant widgets from a .ui element.
 
-    # Direct widget children (through layout items)
-    for widget in parent_elem.findall(".//widget"):
+    Uses ``iter()`` for single-pass traversal — no recursion needed,
+    each element is visited exactly once.  The parent element itself
+    is excluded (its info is captured separately by the caller).
+    """
+    widgets = []
+    seen_ids: set[int] = {id(parent_elem)}
+
+    for widget in parent_elem.iter("widget"):
+        if id(widget) in seen_ids:
+            continue
+        seen_ids.add(id(widget))
         w = UiWidget(
             class_name=widget.get("class", ""),
             name=widget.get("name", ""),
@@ -52,12 +60,10 @@ def _extract_widgets(parent_elem: ET.Element) -> list[UiWidget]:
             tool_tip=_get_property(widget, "toolTip"),
             accessible_name=_get_property(widget, "accessibleName"),
         )
-        # Recurse into layout items within this widget
-        w.children = _extract_widgets(widget)
         widgets.append(w)
 
     # Menu actions (for QMenuBar/QMenu)
-    for action in parent_elem.findall(".//action"):
+    for action in parent_elem.iter("action"):
         name = action.get("name", "")
         text = _get_property(action, "text")
         if name or text:

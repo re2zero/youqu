@@ -800,18 +800,41 @@ class RecordSession:
         self._type_text_element = None
 
     def _get_current_focus_element(self) -> Optional[dict]:
-        """Get the currently focused AT-SPI element (best-effort)."""
+        """Get the currently focused AT-SPI element (best-effort).
+
+        Finds the active application, then drills down to the deepest
+        focused descendant rather than returning the app-level element.
+        """
         try:
             desktop = pyatspi.Registry.getDesktop(0)
             for i in range(desktop.get_child_count()):
                 app = desktop.get_child_at_index(i)
                 if app is None:
                     continue
-                # Check if this app is active
-                state_set = app.getState()
                 states = _state_names(app)
                 if "active" in states or "focused" in states:
+                    focused = self._find_focused_descendant(app)
+                    if focused is not None:
+                        return _extract_element(focused)
                     return _extract_element(app)
+        except Exception:
+            pass
+        return None
+
+    def _find_focused_descendant(self, obj: Any, max_depth: int = 10) -> Any:
+        """Find the deepest focused descendant within max_depth levels."""
+        if max_depth <= 0:
+            return None
+        try:
+            child_count = obj.get_child_count()
+            for i in range(child_count):
+                child = obj.get_child_at_index(i)
+                if child is None:
+                    continue
+                child_states = _state_names(child)
+                if "focused" in child_states:
+                    deeper = self._find_focused_descendant(child, max_depth - 1)
+                    return deeper if deeper is not None else child
         except Exception:
             pass
         return None

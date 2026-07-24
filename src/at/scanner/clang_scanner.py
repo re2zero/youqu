@@ -169,7 +169,7 @@ def _is_available() -> bool:
 
 
 def _find_libclang_path() -> str | None:
-    for base in ("/usr/lib/llvm-17", "/usr/lib/llvm-18", "/usr/lib/llvm-19"):
+    for base in ("/usr/lib/llvm-19", "/usr/lib/llvm-18", "/usr/lib/llvm-17"):
         so = os.path.join(base, "lib", "libclang.so")
         if os.path.exists(so):
             return so
@@ -741,16 +741,12 @@ def scan_source_dir(
     # NEW: Load translation files and apply to action_texts
     from src.at.scanner.ts_translator import TsTranslator, find_ts_files
 
-    ts_files = find_ts_files(str(root.parent), target_lang) or find_ts_files(src_dir, target_lang)
+    ts_files = find_ts_files(src_dir, target_lang)
     translator = None
     if ts_files:
-        # Use parent directory for translations (common layout: project/translations/)
-        trans_dir = root.parent / "translations"
-        if not trans_dir.is_dir():
-            trans_dir = root / "translations"
-        if not trans_dir.is_dir():
-            trans_dir = root
-        translator = TsTranslator(str(trans_dir), target_lang)
+        # TsTranslator uses rglob, so pass the source root to find all
+        # .ts files in any subdirectory (e.g. application/translations/)
+        translator = TsTranslator(src_dir, target_lang)
 
     # Apply translations to action_texts
     if translator:

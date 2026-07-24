@@ -226,6 +226,16 @@ def cmd_record(args):
             launch_cmd=getattr(args, "launch", None),
         )
         session.start()
+
+        if module_slug:
+            plan_path = getattr(args, "plan", "") or "tests/at/plan.yaml"
+            try:
+                from src.at.generator.plan_generator import update_module_status
+
+                if update_module_status(plan_path, module_slug, "recorded"):
+                    print(f"\n[RECORD] Plan updated: {module_slug} → recorded", file=sys.stderr)
+            except Exception as e:
+                print(f"\n[RECORD] Could not update plan status: {e}", file=sys.stderr)
     except ImportError as e:
         print(f"Error: {e}")
         print("Install dependencies: pip install pyatspi2 python-xlib")
@@ -557,7 +567,7 @@ def cmd_dump(args):
 
 def cmd_parse(args):
     try:
-        from youqu.src.at.generator.case_parser import parse_to_cases
+        from src.at.generator.case_parser import parse_to_cases
 
         parse_to_cases(
             input_path=args.input,
@@ -570,7 +580,7 @@ def cmd_parse(args):
 
 def cmd_tree_info(args):
     try:
-        from youqu.src.at.generator.case_parser import compact_at_tree_to_file
+        from src.at.generator.case_parser import compact_at_tree_to_file
 
         fmt = getattr(args, "format", "yaml")
         compact_at_tree_to_file(
@@ -584,7 +594,7 @@ def cmd_tree_info(args):
 
 def cmd_map(args):
     try:
-        from youqu.src.at.generator.mapper import map_elements
+        from src.at.generator.mapper import map_elements
 
         map_elements(at_tree_path=args.at_tree, cases_path=args.cases, output_path=args.output)
     except ImportError:
@@ -593,7 +603,7 @@ def cmd_map(args):
 
 def cmd_generate(args):
     try:
-        from youqu.src.at.generator.yaml_generator import generate_yaml
+        from src.at.generator.yaml_generator import generate_yaml
 
         generate_yaml(
             cases_path=args.cases,
@@ -609,7 +619,7 @@ def cmd_generate(args):
 
 def cmd_run(args):
     try:
-        from youqu.src.at.executor.runner import run_tests
+        from src.at.executor.runner import run_tests
 
         run_tests(
             test_dir=args.testdir,
@@ -625,7 +635,7 @@ def cmd_run(args):
 
 def cmd_validate(args):
     try:
-        from youqu.src.at.validator.gates import (
+        from src.at.validator.gates import (
             run_all_gates,
             validate_gate1,
             validate_gate2,
