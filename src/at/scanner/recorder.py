@@ -46,7 +46,7 @@ from src.at.scanner.event_listener import (
     keysym_to_name,
 )
 from src.at.scanner.hit_test import ExtentsCache, _state_names, hit_test
-from src.at.scanner.merger import write_runtime_dump
+from src.at.scanner.merger import _SYSTEM_APPS, write_runtime_dump
 
 logger = logging.getLogger(__name__)
 
@@ -442,6 +442,10 @@ class RecordSession:
         except Exception:
             return
 
+        # Skip focus events from unrelated apps (reduces noise)
+        if not is_main_app:
+            return
+
         # Deduplicate: skip if same element focused within dedup window
         focus_key = (
             f"{element.get('role', '')}|{element.get('name', '')}|{element.get('object_name', '')}"
@@ -482,6 +486,13 @@ class RecordSession:
             app_name = ""
 
         is_main_app = app_name == self.app_name
+
+        # Skip window events from unrelated desktop apps (reduces noise).
+        # Child windows/dialogs of the target app may have a different app
+        # name (e.g. Qt modal dialogs), so we only skip known system apps.
+        if app_name and not is_main_app:
+            if app_name.lower() in _SYSTEM_APPS:
+                return
 
         if "activate" in event_type:
             # window:activate → new segment only if genuinely different context
@@ -570,6 +581,14 @@ class RecordSession:
         is_remove = "remove" in event_type
         if not is_add and not is_remove:
             return
+
+        # Skip children-changed from unrelated apps
+        try:
+            app_name = _get_app_name(event.source)
+            if app_name and app_name != self.app_name:
+                return
+        except Exception:
+            pass
 
         try:
             parent_element = _extract_element(event.source)
@@ -1072,18 +1091,38 @@ def qt_available() -> bool:
     return QApplication is not None
 
 
-class EventRecorderWidget(QWidget):  # type: ignore[misc]
+class _SignalStub:
+    """No-op stub for pyqtSignal when PyQt6 is unavailable."""
+
+    def __call__(self):
+        return self
+
+    def connect(self, _fn):
+        pass
+
+    def emit(self):
+        pass
+
+
+class _WidgetStub:
+    """Stub base when PyQt6 is unavailable — prevents import crash."""
+    pass
+
+
+class EventRecorderWidget(QWidget if QWidget is not None else _WidgetStub):  # type: ignore[misc]
     """Floating widget for GUI recording mode.
 
     Shows a scrollable event log and Start/Stop/New Segment buttons.
     """
 
-    stop_requested = pyqtSignal()
+    stop_requested = pyqtSignal() if pyqtSignal is not None else _SignalStub()
 
     _WFLAGS = (
         Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint
-    )
-    _WFLAGS_WAYLAND = Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint
+    ) if Qt is not None else 0
+    _WFLAGS_WAYLAND = (
+        Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint
+    ) if Qt is not None else 0
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)

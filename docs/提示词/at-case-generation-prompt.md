@@ -1,3 +1,15 @@
+---
+description: >
+  Use when generating AT-SPI test suites from xlsx/csv test case documents for a Linux desktop application. Triggers: AT用例生成, at-case generation, AT suite generation, AT-SPI suite YAML, at-tree用例, 桌面应用AT测试, AT自动化用例, youqu at parse, youqu at generate, youqu at tree-info.
+mode: primary
+permission:
+  read: allow
+  write: allow
+  edit: allow
+  bash: allow
+  glob: allow
+  grep: allow
+---
 
 # AT Case Generation Agent
 
@@ -35,7 +47,10 @@
 本管线采用**按模块分片、逐模块录制-验证**的工作流：先解析全部用例和帮助手册生成模块计划，
 然后对每个模块单独录制 → 合并 → 映射 → 生成 → 验证，验证通过后才继续下一个模块。
 
-### Step 0: 解析 + 文档 + 计划
+### Step 0: 解析 + 文档 + 计划（**必须执行，不可跳过**）
+
+**强制要求**：必须先完成 Step 0 的全部三个子步骤，生成 `plan.yaml` 后，才能进入后续步骤。
+**禁止**：在 `plan.yaml` 不存在时直接执行 scan/record/generate。
 
 ```bash
 # 0a: 解析 xlsx → cases_raw.yaml
@@ -44,15 +59,19 @@ youqu at parse --input <xlsx> --output tests/at/cases_raw.yaml
 # 0b: 导入帮助手册（按 ## 章节切分）
 youqu at docs --app <app_id> --output tests/at/
 
-# 0c: 生成模块计划
+# 0c: 生成模块计划（**必须执行**）
 youqu at plan --cases tests/at/cases_raw.yaml --docs tests/at/docs/ --app <app> --output tests/at/
 ```
+
+**验证**：执行完 Step 0 后，确认 `tests/at/plan.yaml` 存在且包含 `modules` 列表。
 
 产出：
 - `cases_raw.yaml` — 全量用例（格式转换后的原始数据）
 - `docs/modules/<slug>.md` — 帮助手册章节
 - `plan.yaml` — 模块列表 + 录制指引 + 状态跟踪 (pending→recording→mapped→verified→failed)
 - `plan.md` — 人可读的录制操作指引
+
+**注意**：如果 cases_raw.yaml 中的用例没有 `module` 字段，`plan.yaml` 会将所有用例归入一个模块（slug=misc）。此时仍需基于 plan.yaml 继续流程，只是只有一个模块。
 
 ### Step 1: 源码扫描（AI 可执行，headless 可用）
 
@@ -63,9 +82,15 @@ youqu at scan --src <project_root> --app <app> --output tests/at/scan/
 
 ---
 
-### 模块循环
+### 模块循环（**基于 plan.yaml 执行，不可跳过**）
 
-**对 `plan.yaml` 中的每个模块（status=pending），执行 Step 2 ~ Step 12：**
+**强制要求**：
+- 读取 `tests/at/plan.yaml`，获取 `modules` 列表
+- 对每个 `status=pending` 的模块，**依次**执行 Step 2 ~ Step 12
+- 每个模块验证通过（Step 12 通过率 ≥80%）后，更新 plan.yaml 中该模块状态为 `verified`，再进入下一个模块
+- **禁止**：不读取 plan.yaml 就执行 record/generate；禁止并行处理多个模块
+
+如果 `plan.yaml` 不存在或 `modules` 为空，**停止并报告错误**，不要继续。
 
 ---
 

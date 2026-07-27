@@ -10,7 +10,7 @@ import yaml
 
 logger = logging.getLogger(__name__)
 
-_NOISE_NAME_RE = re.compile(r"^(Form_|qt_\w+$|\d+$|DMainWindow|DTitlebar)")
+_NOISE_NAME_RE = re.compile(r"^(Form_|qt_\w+$|\d+$)")
 
 _INTERACTIVE_ROLES = frozenset(
     {
@@ -224,7 +224,12 @@ def validate_gate2(suite_cases_path: str, at_tree_annotated_path: str = "") -> d
 
         at_refs = annotation.get("AT元素引用", "")
         if at_refs and tree_names is not None:
-            for ref in [r.strip() for r in at_refs.split(",")]:
+            # Handle both string (comma-separated) and list formats
+            if isinstance(at_refs, list):
+                ref_list = [str(r).strip() for r in at_refs if r]
+            else:
+                ref_list = [r.strip() for r in str(at_refs).split(",")]
+            for ref in ref_list:
                 if ref and ref not in tree_names:
                     report["errors"].append(
                         f"[{sid}] AT元素引用 '{ref}' not found in annotated tree"
@@ -527,15 +532,18 @@ def validate_gate5(cases_mapped_path: str, at_tree_annotated_path: str = "") -> 
                 "mouse_right_click",
                 "mouse_double_click",
                 "assert_element",
+                "dtk_context_menu",
             ):
                 selector = step.get("selector") or {}
                 has_name = bool(selector.get("name"))
                 has_accessible = bool(selector.get("accessible_id"))
+                has_parent = bool(selector.get("parent"))
                 has_xy = step.get("x") is not None and step.get("y") is not None
-                if not has_name and not has_accessible and not has_xy and not step.get("ref"):
+                has_ref = bool(step.get("ref"))
+                if not has_name and not has_accessible and not has_parent and not has_xy and not has_ref:
                     report["errors"].append(
-                        f"[{sid}] step {i}: {action} selector缺 name 和 accessible_id "
-                        f"(会导致运行时 ElementNotFound)"
+                        f"[{sid}] step {i}: {action} selector缺 name/accessible_id/parent "
+                        f"且无 x/y 坐标 (会导致运行时 ElementNotFound)"
                     )
                     report["passed"] = False
 

@@ -35,8 +35,6 @@ _NOISE_NAME_PATTERNS: list[re.Pattern] = [
     re.compile(r"^Form_"),
     re.compile(r"^qt_"),
     re.compile(r"^\d+$"),
-    re.compile(r"^DMainWindow$"),
-    re.compile(r"^DTitlebar"),
 ]
 
 _INTERACTIVE_ROLES: frozenset[str] = frozenset(
@@ -798,10 +796,26 @@ def _merge_persistent_state(
             base_nodes.append(new_node)
 
 
+_SYSTEM_APPS: frozenset[str] = frozenset(
+    {
+        "dde-control-center",
+        "dde-file-manager",
+        "uos-ai-assistant",
+        "cpis-panel-service",
+        "cpis-engine-service",
+        "vscode",
+        "code",
+        "google-chrome",
+        "firefox",
+    }
+)
+
+
 def merge_persistent(
     base_tree: list[dict],
     session_data: dict[str, Any],
     record_dir: str | Path,
+    target_app: str = "",
 ) -> list[dict]:
     """Merge persistent-layer snapshots (launch + window:activate) into base.
 
@@ -809,6 +823,11 @@ def merge_persistent(
     are deduplicated by parent-chain path.  Transient snapshots
     (menu_open, window_create) are skipped — they go to the
     transient layer.
+
+    When *target_app* is provided, segments from known system apps
+    are skipped to avoid polluting the tree with desktop noise.
+    Child windows/dialogs of the target app that have a different
+    AT-SPI app name are preserved.
     """
     result = [dict(n) for n in base_tree]
     for node in result:
@@ -824,6 +843,14 @@ def merge_persistent(
         # Only persistent snapshots: launch + window_activate
         if trigger_type not in ("launch", "window_activate"):
             continue
+
+        # Skip segments from known system apps when target_app is set.
+        # Don't skip unknown apps — they might be child dialogs of the
+        # target app with a different AT-SPI application name.
+        if target_app:
+            seg_app = trigger.get("app", "")
+            if seg_app and seg_app.lower() in _SYSTEM_APPS:
+                continue
 
         state_label = segment.get("label", trigger_type)
 
@@ -842,7 +869,9 @@ def merge_persistent(
     return result
 
 
-def extract_transient(session_data: dict[str, Any]) -> list[dict[str, Any]]:
+def extract_transient(
+    session_data: dict[str, Any], target_app: str = ""
+) -> list[dict[str, Any]]:
     """Extract transient contexts from a record session.
 
     Walks the session's segments and events, extracting:
@@ -852,6 +881,8 @@ def extract_transient(session_data: dict[str, Any]) -> list[dict[str, Any]]:
 
     Transient contexts store trigger condition, items (for menus),
     and snapshot path reference.  They are NOT mixed into the main tree.
+
+    When *target_app* is provided, events from unrelated apps are skipped.
     """
     contexts: list[dict[str, Any]] = []
     ctx_menu_count = 0
@@ -860,6 +891,13 @@ def extract_transient(session_data: dict[str, Any]) -> list[dict[str, Any]]:
 
     for segment in session_data.get("segments", []):
         seg_trigger = segment.get("trigger") or {}
+
+        # Skip segments from known system apps when target_app is set.
+        # Don't skip unknown apps — they might be child dialogs.
+        if target_app:
+            seg_app = seg_trigger.get("app", "")
+            if seg_app and seg_app.lower() in _SYSTEM_APPS:
+                continue
 
         for event in segment.get("events", []):
             evt_type = event.get("type", "")
@@ -970,6 +1008,7 @@ def layered_merge(
     scan_classes: list[dict],
     record_dir: str | Path,
     clean: bool = True,
+    target_app: str = "",
 ) -> tuple[list[dict], list[dict[str, Any]]]:
     """Full layered merge pipeline: persistent + transient + static injection.
 
@@ -982,6 +1021,8 @@ def layered_merge(
     clean
         If True (default), filter invalid events (empty-element clicks,
         consecutive same-label window_activate, empty segments) before merging.
+    target_app
+        When provided, segments/events from unrelated apps are filtered out.
 
     Returns
     -------
@@ -1024,10 +1065,10 @@ def layered_merge(
             break
 
     # Merge persistent snapshots (launch + window_activate)
-    base_tree = merge_persistent(base_tree, session, record_dir)
+    base_tree = merge_persistent(base_tree, session, record_dir, target_app=target_app)
 
     # Extract transient contexts
-    transient = extract_transient(session)
+    transient = extract_transient(session, target_app=target_app)
 
     # Inject static scan info
     merged = merge_trees(base_tree, scan_classes)

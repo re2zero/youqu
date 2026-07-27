@@ -36,6 +36,7 @@ class _Doctor:
         self._check_xauthority()
         self._check_accessibility()
         self._check_libclang()
+        self._check_pyqt6()
         self._check_java()
         self._check_skills()
 
@@ -334,6 +335,27 @@ class _Doctor:
             self._ok("libclang Python bindings (system-level, not visible from isolated env)")
             return
         self._fail("libclang Python bindings missing — fixing")
+
+    # ── PyQt6 (optional: AT record GUI mode) ─────────────────────────
+
+    def _check_pyqt6(self):
+        if importlib.util.find_spec("PyQt6"):
+            self._ok("PyQt6 (AT record GUI mode)")
+            return
+        if self._in_venv and self._system_has_import("PyQt6"):
+            self._ok("PyQt6 (system-level, not visible from isolated env)")
+            return
+        self._fail("PyQt6 missing (optional: AT record --gui mode) — fixing")
+        result = subprocess.run(
+            [sys.executable, "-m", "pip", "install", "PyQt6"],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode == 0 and importlib.util.find_spec("PyQt6"):
+            self._fixed_msg("pip install PyQt6")
+        else:
+            print(f"       pip install failed: {result.stderr.strip()[-200:]}")
+            print("       install manually: pip install PyQt6")
 
     # ── java ──────────────────────────────────────────────────────────
 

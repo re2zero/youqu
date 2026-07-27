@@ -156,21 +156,26 @@ def run_tests(
     results: list[dict] = []
 
     for suite_path in suite_files:
-        _log.info("running suite: %s", suite_path)
+        suite_name = suite_path.stem
+        print(f"  [{suite_name}] running ...", flush=True)
         r = _load_and_run_suite(
             suite_path,
             spec_ids=spec_ids,
             tags=tags,
             skip_env_check=skip_env_check,
         )
-        results.append(r)
         if r["status"] == "ok":
+            for spec in r.get("specs", []):
+                icon = "✓" if spec["status"] == "passed" else ("✗" if spec["status"] == "failed" else "○")
+                detail = f" — {spec['error']}" if spec.get("error") else ""
+                print(f"    {icon} {spec['id']}: {spec['name']}{detail}", flush=True)
             total_passed += r["passed"]
             total_failed += r["failed"]
             total_skipped += r["skipped"]
         else:
-            _log.error("suite %s error: %s", suite_path, r.get("error"))
+            print(f"    ✗ ERROR: {r.get('error', 'unknown')}", flush=True)
             total_failed += 1
+        results.append(r)
 
     _print_summary(results)
     return 1 if total_failed > 0 else 0
@@ -194,16 +199,6 @@ def _print_summary(results: list[dict]) -> None:
         f"Specs:  {total_specs_passed} passed, {total_specs_failed} failed, {total_specs_skipped} skipped"
     )
     print(f"{'=' * 60}")
-
-    for r in results:
-        status_icon = "✓" if r["status"] == "ok" and r.get("failed", 0) == 0 else "✗"
-        print(f"  {status_icon} {r['suite']}")
-        for spec in r.get("specs", []):
-            icon = (
-                "✓" if spec["status"] == "passed" else ("✗" if spec["status"] == "failed" else "○")
-            )
-            detail = f" ({spec['error']})" if spec.get("error") else ""
-            print(f"      {icon} {spec['id']}: {spec['name']}{detail}")
 
 
 # ---- L2: Module smoke test ----

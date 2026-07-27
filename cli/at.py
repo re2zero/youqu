@@ -314,7 +314,9 @@ def cmd_merge(args):
             print("  No record_session.yaml found — using old-style state snapshots")
 
         merged, transient = layered_merge(
-            scan_classes, record_dir, clean=not getattr(args, "no_clean", False)
+            scan_classes, record_dir,
+            clean=not getattr(args, "no_clean", False),
+            target_app=getattr(args, "app", ""),
         )
 
         final_path = output / "at-tree.yaml"
