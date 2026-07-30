@@ -95,6 +95,8 @@ def _is_noise_node(node: dict) -> bool:
         return True
     role = node.get("role", "")
     if role in _NOISE_LEAF_ROLES and not node.get("children"):
+        if node.get("object_name") or node.get("accessible_id"):
+            return False
         return True
     if _is_noise_name(node) and not node.get("children"):
         return True

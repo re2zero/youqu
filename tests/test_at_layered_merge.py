@@ -182,7 +182,7 @@ class TestExtractTransient:
         )
         contexts = extract_transient(session)
         assert len(contexts) == 1
-        assert contexts[0]["id"] == "right_click_menu_000"
+        assert contexts[0]["id"] == "main_menu_000"
         assert contexts[0]["trigger"]["type"] == "launch"
         assert len(contexts[0]["items"]) == 2
         assert contexts[0]["at_tree"] == "states/01_menu_open.yaml"
@@ -234,8 +234,8 @@ class TestExtractTransient:
         )
         contexts = extract_transient(session)
         assert len(contexts) == 3
-        assert contexts[0]["id"] == "right_click_menu_000"
-        assert contexts[1]["id"] == "right_click_menu_001"
+        assert contexts[0]["id"] == "main_menu_000"
+        assert contexts[1]["id"] == "main_menu_001"
         assert contexts[2]["id"] == "child_window_000"
 
     def test_no_transient_events(self):

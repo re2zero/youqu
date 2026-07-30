@@ -157,7 +157,7 @@ def test_step_to_action_menu_comb():
 
     step = CaseStep(
         step_type=StepType.navigate,
-        description="打开文件",
+        description="点击主菜单文件",
         element_hint=ElementHint.dtk_main_menu,
         items=["文件", "新建窗口"],
     )

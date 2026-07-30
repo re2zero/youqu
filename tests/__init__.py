@@ -97,12 +97,6 @@ _mcp_mod = _ilu.module_from_spec(_mcp_spec)
 sys.modules["src.mcp.server"] = _mcp_mod
 _mcp_spec.loader.exec_module(_mcp_mod)
 
-_jobs_path = _project_root / "src" / "mcp" / "jobs.py"
-_jobs_spec = _ilu.spec_from_file_location("src.mcp.jobs", str(_jobs_path))
-_jobs_mod = _ilu.module_from_spec(_jobs_spec)
-sys.modules["src.mcp.jobs"] = _jobs_mod
-_jobs_spec.loader.exec_module(_jobs_mod)
-
 _cli_pkg = _types.ModuleType("cli")
 _cli_pkg.__path__ = [str(_project_root / "cli")]
 _cli_pkg.__package__ = "cli"

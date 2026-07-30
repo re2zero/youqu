@@ -251,7 +251,7 @@ def test_find_candidates_menu_item_requires(tmp_path):
     index = _build_index(str(tree_path))
     candidates = _find_candidates("点击设置菜单项", index)
     assert len(candidates) == 1
-    assert candidates[0].get("requires") == "dtk_main_menu"
+    assert candidates[0].get("requires") == "dtk_context_menu"
 
 
 # ---- precandidate_from_cases integration ----
@@ -368,4 +368,4 @@ def test_precandidate_menu_item_has_requires(tmp_path):
     suite = yaml.safe_load(output_path.read_text(encoding="utf-8"))
     step = suite["cases"][0]["steps"][0]
     assert len(step["candidates"]) == 1
-    assert step["candidates"][0].get("requires") == "dtk_main_menu"
+    assert step["candidates"][0].get("requires") == "dtk_context_menu"
