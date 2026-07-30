@@ -3,7 +3,7 @@
 ## 1. 方案背景与目标
 
 ### 1.1 背景
-- 现有 YAML 用例生成依赖动态 MCP 或 `youqu inspect` 操作，存在不可靠性和状态依赖问题。
+- 现有 YAML 用例生成依赖动态 MCP 或 `youqu at record` 操作，存在不可靠性和状态依赖问题。
 - 动态捕获的 AT-SPI 树包含机器特定状态（如坐标、动态内容），影响用例跨机器可移植性。
 - 传统为每个 xlsx 用例生成独立 YAML 文件，导致应用启动/销毁（setup/teardown）开销巨大，且用例数量庞大难以维护。
 
@@ -85,7 +85,7 @@
 ### 4.5 `youqu at run` —— 执行 YAML 测试用例
 解析并运行 `tests/at/yaml/` 下的 YAML 测试用例，支持按 Test Suite 动态指定测试。
 - **命令示例**：`youqu at run [--testdir tests/at/yaml] [--suite <suite_name>]`
-- **说明**：使用现有的 `youqu run` 执行引擎，但默认或指定 `tests/at/yaml/` 目录。支持通过 `--suite` 参数运行特定的 Test Suite 批次测试。
+- **说明**：使用 `youqu at run --testdir <dir>` 执行引擎，执行 `tests/at/yaml/` 目录的 AT-SPI YAML 测试。支持通过 `--suite` 参数运行特定的 Test Suite 批次测试。
 
 ---
 

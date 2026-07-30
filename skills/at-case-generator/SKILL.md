@@ -21,11 +21,6 @@ this) are the AI.** Framework provides data tools; you provide understanding.
 - Need executable AT-SPI test suites from those documents
 - Input is a PR/issue/requirement and you want to generate cases directly
 
-## When NOT to Use
-
-- Standard YAML test cases → use `youqu-case-generator`
-- Run existing AT suites → use `youqu at run`
-
 ## Pipeline
 
 ```

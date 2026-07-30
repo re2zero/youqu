@@ -117,38 +117,44 @@ YouQu 支持 **YAML** 和 **Python** 两种方式编写测试用例，同一个 
 
 ```
 youqu-startproject my_project
-          |
-   cd my_project
-          |
-   +------+-------+
-   |              |
-YAML 路径      Python 路径
-声明式/AI友好   传统PO模式
-   |              |
-youqu make    youqu manage.py
-   <name>      startapp <name>
-   |              |
-autotest/yaml/ apps/autotest_xxx/
-├── elements   ├── widget/
-│   .yaml      ├── case/
-└── test_*.    └── ui.ini
-    yaml
-   |              |
-   +------+-------+
-          |
-youqu manage.py run
+           |
+    cd my_project
+           |
+    +------+-------+
+    |              |
+ YAML 路径      Python 路径
+ 声明式/AI友好   传统PO模式
+    |              |
+ youqu at      youqu manage.py
+ 生成/执行      startapp
+    |              |
+ tests/at/yaml/ apps/autotest_xxx/
+ ├── cases      ├── widget/
+ │   .yaml      ├── case/
+ └── at-tree    └── ui.ini
+     .yaml
+    |              |
+    +------+-------+
+           |
+ youqu at run
 ```
 
 #### YAML 路径（推荐 AI 用户）
 
 声明式、无需编写 Python 代码，AI 客户端可直接通过 MCP 工具获取 AT-SPI 元素树并生成 YAML 用例：
 
+使用 `youqu at` 管道生成并执行 YAML 用例：
 ```shell
-$ youqu make my_app                    # 生成 autotest/，默认 YAML 格式
-$ youqu make my_app --format all       # 同时生成 YAML + Python
+youqu at scan --src <dir> --app <id> --output <dir>
+youqu at record --app <id> [--launch <cmd>] [--gui]
+youqu at merge --record <dir> [--scan <dir>] --output <dir>
+youqu at parse --input <xlsx> --output <yaml>
+youqu at tree-info --at-tree <yaml> --output <yaml> --format yaml
+youqu at generate --cases <mapped> --output <dir> --app <app> --at-tree <tree>
+youqu at run --testdir <dir>
 ```
 
-YAML 用例将所有 UI 元素集中注册在 `autotest/yaml/elements.yaml`，测试用例通过 `ref` 引用元素，使用 `action` 声明操作、`assert` 声明断言。
+YAML 用例将所有 UI 元素集中注册在 `at-tree.yaml` 及生成的 suite YAML 中，测试用例通过 `selector` 引用元素，使用 `action` 声明操作、`assert` 声明断言。
 
 #### Python 路径（传统 PO 模式）
 
@@ -156,7 +162,6 @@ YAML 用例将所有 UI 元素集中注册在 `autotest/yaml/elements.yaml`，�
 
 ```shell
 $ youqu manage.py startapp autotest_deepin_some      # 创建 APP 工程（Python）
-$ youqu make my_app --format py                       # 或通过 make 生成
 ```
 
 自动创建的 APP 工程：
@@ -527,8 +532,6 @@ youqu web-spec index <spec_dir>
 $ youqu manage.py run
 ```
 
-> **autotest/ 项目**（通过 `youqu make` 生成的 YAML/Python 项目）也可以直接使用 `youqu run`，更轻量，无需 `manage.py`。
-
 在一些 CI 环境下使用命令行参数会更加方便：
 
 ```shell
@@ -551,12 +554,11 @@ $ youqu manage.py remote
 
 #### 生成报告
 
-测试执行后会生成 Allure 原始数据（`autotest/report/`），使用 `youqu report` 转为 HTML：
+测试执行后会生成 Allure 原始数据（`report/`），使用 Allure CLI 转为 HTML：
 
 ```shell
-$ youqu report                  # 生成 HTML 到 autotest/report/allure_html/
-$ youqu report --clean          # 清除旧报告后重新生成
-$ youqu report --serve          # 生成后启动 HTTP 服务，浏览器直接查看
+allure generate report/allure_results -o report/allure_html --clean
+allure open report/allure_html
 ```
 
 > 需要 Java 运行环境（`openjdk-11-jdk-headless`），`youqu doctor` 可自动安装。
@@ -725,13 +727,10 @@ cp -r $(python3 -c "import youqu; from pathlib import Path; print(Path(youqu.__f
 
 | 命令 | 用途 |
 |------|------|
-| `youqu run` | 执行 `autotest/` 下测试，自动查找 pytest.ini、生成 Allure 报告 |
-| `youqu run -k "keyword"` | 按关键词过滤执行 |
-| `youqu report` | 将 Allure 原始数据转为 HTML 报告，支持 `--serve` 浏览器查看 |
+| `youqu at <subcommand>` | AT-SPI YAML 测试管道 (scan/record/merge/parse/tree-info/split/docs/precandidate/validate/generate/run/smoke/verify) |
+| `youqu mcp` | 启动 MCP server (stdio/http) |
 | `youqu doctor` | 检查并自动修复环境依赖（pydantic、pyatspi、Java、AT-SPI、辅助功能等） |
-| `youqu inspect <app_path>` | 监控应用 AT-SPI 无障碍事件，输出 NDJSON 格式数据 |
-| `youqu index --rebuild` | 重建 YAML 用例索引，按模块/标签查询用例列表 |
-| `youqu make <name>` | 生成 `autotest/` 脚手架（支持 YAML / Python / both） |
+| `youqu startproject <name>` | 复制框架创建项目 |
 
 ---
 

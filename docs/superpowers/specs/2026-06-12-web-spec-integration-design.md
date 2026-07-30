@@ -2,7 +2,7 @@
 
 ## 背景
 
-YouQu 当前已经支持桌面自动化 YAML 用例：通过 `youqu make` 生成 `autotest/yaml`，通过 pytest plugin 收集 YAML 文件，再由 `src/yaml_test` 解析并执行。该链路面向 Linux 桌面自动化，核心依赖 AT-SPI、Dogtail、MouseKey、OCR、DBus、`elements.yaml` 等能力。
+YouQu 当前支持 AT-SPI YAML 测试用例：通过 `youqu at` 管道 (scan → record → merge → parse → tree-info → split → docs → precandidate → validate → generate → run) 生成并执行 YAML 用例。该链路面向 Linux 桌面自动化，核心依赖 AT-SPI、Dogtail、MouseKey、OCR、DBus、`at-tree.yaml` 等能力。
 
 另一个本地仓库 `uos-ai-test` 提供了一套面向 Web 项目的结构化 spec 执行能力，核心是 Playwright 确定性 runner：加载 YAML spec，解析 DOM locator，执行 Web action/assertion，并输出 JSON/HTML 报告和截图。
 
@@ -43,38 +43,30 @@ YouQu
 
 ## 当前桌面 YAML 集成方式
 
-当前桌面 YAML 链路如下：
+当前 AT-SPI YAML 链路如下：
 
 ```text
-youqu make
-  -> 生成 autotest/yaml
+youqu at scan/record/merge/generate
+  -> 生成 tests/at/yaml/*.suite.yaml
 
-youqu run
-  -> pytest
+youqu at run
+  -> 执行 AT-SPI YAML 测试
 
-pytest plugin
-  -> 读取 yaml_files
-  -> 注册 YAML collector
-
-collector
-  -> 收集 test_*.yaml
-
-parser
-  -> 解析 TestCase / ActionStep / AssertStep
-  -> 加载 elements.yaml
+parser + executor
+  -> 解析 SuiteSpec / ActionStep
+  -> 加载 at-tree.yaml
 
 executor
   -> setup / steps / teardown
   -> Dogtail / MouseKey / DBus / OCR / image / process
 
-index + MCP
-  -> yaml_list_tests
-  -> yaml_run_batch
-  -> yaml_get_status
-  -> yaml_cancel
+MCP tools
+  -> atspi_find_element
+  -> atspi_get_children_text
+  -> execute_yaml_suite
 ```
 
-这个链路可以视为 YouQu 的第一个 spec engine：`desktop_yaml engine`。
+这个链路可以视为 YouQu 的第一个 spec engine：`atspi_yaml engine`。
 
 它适合桌面自动化，但不适合直接承载 Web spec，原因是：
 
@@ -151,7 +143,7 @@ Web spec runner 只做确定性执行，不依赖 LLM 决定 PASS/FAIL。本次�
 
 ## CLI 接入
 
-第一阶段新增独立命令，避免改变现有 `youqu run` 行为：
+第一阶段新增独立命令，避免改变现有 `youqu at run` 行为：
 
 ```bash
 youqu web-spec run <spec_path>
@@ -172,8 +164,7 @@ youqu web-spec index <spec_dir>
 现有命令保持不变：
 
 ```bash
-youqu run              # 继续执行 autotest/ pytest 项目
-youqu index            # 继续管理当前 YAML 用例索引
+youqu at run           # 执行 AT-SPI YAML 测试项目
 ```
 
 后续如果需要统一入口，可以演进为：

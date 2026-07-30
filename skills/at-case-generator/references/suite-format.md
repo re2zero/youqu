@@ -188,7 +188,7 @@ Collects all steps with `needs_accessible_name: true`:
 
 ## Differences from Standard YAML
 
-| Aspect | Standard YAML (youqu-case-generator) | AT Suite (at-case-generator) |
+| Aspect | Standard YAML (legacy) | AT Suite (at-case-generator) |
 |--------|--------------------------------------|------------------------------|
 | Suite cases field | suites: | suites: |
 | Menu actions | main_menu_comb, context_menu_comb | dtk_main_menu, dtk_context_menu |

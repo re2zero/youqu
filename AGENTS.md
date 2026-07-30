@@ -29,8 +29,8 @@ PyPI 包名: `youqu-ai`。
 
 - **VLM 模块**: `src/vlm/` 提供视觉定位、VLM 断言、VLM Agent 执行能力。VLM 需要外部 OpenAI-compatible API server，例如 Ollama + Qwen2.5-VL；框架没有内置模型。
 - **MCP Server**: `src/mcp/` 暴露桌面自动化、YAML 用例、VLM/截图、命令查询等工具。MCP HTTP transport 依赖 `fastmcp-slim[server]`。
-- **多模态用例执行**: `cli/multica_report.py` 与 `skills/youqu-case-runner/SKILL.md` 支持从 issue/PR/Multica 上下文生成并执行 YAML 用例。
-- **用例生成 Skill**: `skills/youqu-case-generator/SKILL.md` 支持从需求/PR/问题描述生成可执行 YAML 用例。
+- **AT-SPI YAML 用例生成**: `skills/at-case-generator/SKILL.md` 提供完整的 AT-SPI YAML 测试自动化管道 (scan → record → merge → parse → tree-info → split → docs → precandidate → validate → generate → run → smoke/verify)。
+- **AT-SPI 步骤语义解析**: `skills/at-mapping-rules/SKILL.md` 提供步骤语义解析协议。
 - **设计文档**: `docs/prd/multica-integration.md` 记录 Multica 集成设计；`docs/youqu-mcp-vlm-evaluation.md` 记录 MCP/VLM 集成与评估。
 - **关键结合点**: `Src` 多继承基类、`DogtailUtils` 的 AT-SPI 树 API、`ButtonCenter` 坐标系统、`src/vlm/vlm_agent.py` 的 VLM 执行循环、`src/mcp/server.py` 的工具入口。
 
@@ -62,11 +62,10 @@ youqu/
 │   └── utils/              # 环境部署脚本
 ├── cli/                  # CLI 命令 (youqu console_scripts)
 │   ├── main.py            # argparse 路由入口
-│   ├── make.py            # youqu make 生成 autotest/ 骨架 (py/yaml/all)
-│   ├── run.py             # youqu run 执行逻辑
+│   ├── at.py              # youqu at AT-SPI YAML 测试管道
 │   ├── report.py          # youqu report 生成/查看 Allure 报告
 │   ├── index.py           # YAML 用例索引查询/重建
-│   └── multica_report.py # Multica 上下文生成并执行用例
+│   └── doctor.py          # 环境检查与修复
 ├── plugin/               # pytest 插件 (entry_points.pytest11)
 │   ├── __init__.py        # sys.path 注入 + 环境变量 + YAML collector
 │   └── entry_points.pytest11
@@ -88,19 +87,13 @@ youqu/
 
 ### CLI 命令 (pip install youqu-ai 后可用)
 ```bash
-youqu make <name> <fmt>                         # 生成 autotest/ 骨架 (py/yaml/all)
-youqu run                                       # 执行 autotest/ 下测试
-youqu run -k "keyword"                          # 关键词过滤 (透传 pytest)
-youqu run --alluredir=./report                  # 覆盖报告路径
 youqu mcp                                       # 启动 MCP server (stdio)
 youqu mcp --transport http --host 0.0.0.0 --port 8066  # HTTP 模式
-youqu report                                    # 生成/查看 Allure 报告
-youqu index                                     # YAML 用例索引查询/重建
 youqu doctor                                    # 环境检查与 skill 安装
-youqu startproject <name>                       # 复制框架创建项目；骨架生成用 youqu make
+youqu startproject <name>                       # 复制框架创建项目
 ```
 
-### 测试执行 (manage.py，传统流程)
+### AT-SPI YAML 测试管道 (youqu at)
 ```bash
 youqu manage.py run                           # 本地执行 (读取 globalconfig.ini 配置)
 youqu manage.py run -a apps/autotest_xxx       # 指定 APP 工程
@@ -142,7 +135,7 @@ twine upload dist/*                            # 发布到 PyPI
 不一致的用例会被框架自动 skip。例如: `test_music_001` 对应 `test_music_001.py`。
 
 ### APP 工程 PO 模式
-`youqu make <name> <py|yaml|all>` 会生成 `autotest/` 骨架；`youqu startproject <name>` 会复制整个框架创建项目。
+`youqu startproject <name>` 会复制整个框架创建项目。
 
 Python 用例工程遵循 Page Object 设计:
 ```

@@ -22,19 +22,9 @@ _INJECT_PATHS = (
 )
 
 
-def pytest_addoption(parser):
-    parser.addini(
-        "yaml_files",
-        "Directories under root to search for YAML test case files",
-        default=[],
-        type="args",
-    )
-
-
 def pytest_configure(config):
     _inject_paths()
     _setup_env()
-    _register_yaml_collector(config)
 
 
 def _inject_paths():
@@ -48,19 +38,4 @@ def _setup_env():
     os.environ.setdefault("DISPLAY", ":0")
     os.environ.setdefault(
         "XAUTHORITY", f"{os.path.expanduser('~')}/.Xauthority"
-    )
-
-
-def _register_yaml_collector(config):
-    """Register YAML test case collection hook if available."""
-    if not config.getini("yaml_files"):
-        return
-    try:
-        from src.yaml_test.collector import pytest_collect_file
-    except ImportError:
-        sys.stderr.write("[youqu] yaml_files configured but yaml_test not available\n")
-        return
-    config.pluginmanager.register(
-        type("_YamlCollectorPlugin", (), {"pytest_collect_file": staticmethod(pytest_collect_file)})(),
-        name="youqu-yaml",
     )

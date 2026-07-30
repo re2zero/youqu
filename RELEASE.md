@@ -722,9 +722,9 @@ New 🌟
 -  `--app` 参数后面新增支持 `autotest_xxx` 和 `apps/autotest_xxx` 两种写法，目前支持三种参数传入方式：
 
   ```shell
-  ~$: youqu run -a deepin-music
-  ~$: youqu run -a autotest_deepin_music
-  ~$: youqu run -a apps/autotest_deepin_music
+  ~$: youqu manage.py run -a deepin-music
+  ~$: youqu manage.py run -a autotest_deepin_music
+  ~$: youqu manage.py run -a apps/autotest_deepin_music
   ```
 
 ​		后两种入参方式可以很方便在输入命令的过程中使用补全。[@mikigo](https://github.com/mikigo)
@@ -790,7 +790,7 @@ New 🌟
 - 支持使用系统命令 `youqu` 执行用例；可将`python3 manage.py` 替换为 `youqu` ：
 
   ``` shell
-  youqu run -a deepin-music -k 001
+  youqu manage.py run -a deepin-music -k 001
   ```
 
 - `RPC` 服务 `IP` 地址修改为域名：http://youqu.uniontech.com，指定不同的端口；[@mikigo](https://github.com/mikigo)

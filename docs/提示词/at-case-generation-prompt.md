@@ -32,7 +32,6 @@ permission:
 
 ## 何时不用
 
-- 标准 YAML 测试用例 → 用 `youqu-case-generator` 技能
 - 运行已有 AT suite → 用 `youqu at run`
 
 ## 前置条件
