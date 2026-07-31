@@ -366,8 +366,9 @@ class TestGate4:
 
         (tmp_path / "empty.txt").write_text("hello")
         result = validate_gate4(str(tmp_path))
-        assert not result["passed"]
-        assert any("No .suite.yaml" in e for e in result["errors"])
+        # 全 unsupported 模块视为分类完成，Gate 4 PASS
+        assert result["passed"]
+        assert any("No .suite.yaml" in w for w in result["warnings"])
 
     def test_passes_with_valid_suite(self, tmp_path):
         from src.at.validator.gates import validate_gate4

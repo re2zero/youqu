@@ -92,6 +92,7 @@ def test_l1_action_role_match_passes(tmp_path):
         {
             "id": "s1",
             "status": "active",
+            "module": "test_module",
             "annotation": {"测试界面": "main", "测试功能": "test"},
             "steps": [
                 {

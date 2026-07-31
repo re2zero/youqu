@@ -246,7 +246,12 @@ def resolve_coordinates(attrs: dict, context: dict) -> tuple[int, int]:
             raise ElementNotFound(f"lookup error: {exc}, selector={attrs}") from exc
 
     if attrs.get("x") is not None and attrs.get("y") is not None:
-        logger.warning("coordinate fallback used (no AT-SPI locator matched): %s", attrs)
+        logger.warning(
+            "coordinate fallback used (no AT-SPI locator matched): %s. "
+            "This may cause test failures on different resolutions/layouts. "
+            "Consider using elements.yaml to define element coordinates.",
+            attrs
+        )
         return attrs.get("x"), attrs.get("y")
 
     raise ElementNotFound(f"no locator and no coordinates: {attrs}")
@@ -620,9 +625,19 @@ def handle_screenshot(step: SuiteActionStep, context: dict) -> None:
 def _attrs_to_expr(attrs: dict) -> str:
     if not attrs:
         return "$/"
+    # 优先使用 accessible_id
+    accessible_id = attrs.get("accessible_id")
+    if accessible_id:
+        return f"$//[@accessible-id='{accessible_id}']/"
+    # 支持 role+name 组合
     name = attrs.get("name", "")
+    role = attrs.get("role", "")
+    if name and role:
+        return f"$//{name}[@role='{role}']/"
     if name:
         return f"$//{name}/"
+    if role:
+        return f"$//[role='{role}']/"
     return "$/"
 
 

@@ -160,7 +160,7 @@ def _step_to_action_fallback(step: CaseStep) -> SuiteActionStep:
         if step.items:
             if menu_type == "dtk_main_menu":
                 return SuiteActionStep(action="dtk_main_menu", items=step.items)
-            return SuiteActionStep(action="dtk_context_menu", items=step.items)
+            return SuiteActionStep(action="dtk_context_menu", items=step.items, ref=step.element_ref, selector=step.selector)
 
     if step.element_hint == ElementHint.titlebar:
         return SuiteActionStep(action="element_action", do="click")
@@ -191,16 +191,25 @@ def _step_to_action_fallback(step: CaseStep) -> SuiteActionStep:
         return SuiteActionStep(
             action="assert_window",
             name_pattern=name_pattern,
+            app=step.text,
         )
 
     if step.element_hint == ElementHint.assert_element:
-        return SuiteActionStep(action="assert_element")
+        return SuiteActionStep(
+            action="assert_element",
+            ref=step.element_ref,
+            selector=step.selector,
+        )
 
     if step.element_hint == ElementHint.assert_window_count:
         return SuiteActionStep(action="assert_window_count", expected=1)
 
     if step.element_hint == ElementHint.assert_not_exists:
-        return SuiteActionStep(action="assert_not_exists")
+        return SuiteActionStep(
+            action="assert_not_exists",
+            ref=step.element_ref,
+            selector=step.selector,
+        )
 
     return SuiteActionStep(action=action_name, do="click")
 
@@ -389,6 +398,7 @@ def _build_suite_cases(suite: CaseSuite) -> list[SuiteCase]:
                 current = SuiteCase(
                     id=f"{suite.id}_s{case_counter}",
                     name=suite.name[:60],
+                    description=suite.description[:120] if suite.description else "",
                     steps=[],
                 )
             continue
@@ -401,6 +411,7 @@ def _build_suite_cases(suite: CaseSuite) -> list[SuiteCase]:
                 current = SuiteCase(
                     id=f"{suite.id}_s{case_counter}",
                     name=suite.name[:60],
+                    description=suite.description[:120] if suite.description else "",
                     steps=[],
                     assert_steps=[action_step],
                 )
@@ -411,6 +422,7 @@ def _build_suite_cases(suite: CaseSuite) -> list[SuiteCase]:
             current = SuiteCase(
                 id=f"{suite.id}_s{case_counter}",
                 name=suite.name[:60],
+                description=suite.description[:120] if suite.description else "",
                 steps=[action_step],
             )
         else:
@@ -553,9 +565,25 @@ def generate_yaml(
         for ms in module_suites:
             for step in ms.steps:
                 if step.action == "session_start" and step.command:
-                    session_cmd = step.command
+                    # 参数化绝对路径：将绝对路径命令转换为使用 launch.sh 或占位符
+                    cmd = step.command
+                    # 如果 command 包含绝对路径且包含文件名/图片路径，尝试参数化
+                    if cmd.startswith("/") and (" /" in cmd or cmd.endswith(".jpg") or cmd.endswith(".png") or cmd.endswith(".jpeg")):
+                        # 提取应用名和可能的文件参数
+                        parts = cmd.split()
+                        if len(parts) >= 2 and parts[0].endswith(resolved_app.split("/")[-1]) or parts[0].endswith(resolved_app):
+                            # 尝试将命令参数化为 launch.sh 格式
+                            file_arg = parts[1] if len(parts) > 1 else ""
+                            if file_arg and file_arg.startswith("/"):
+                                session_cmd = f"tests/at/launch.sh {resolved_app} {file_arg}"
+                            else:
+                                session_cmd = f"tests/at/launch.sh {resolved_app}"
+                        else:
+                            session_cmd = cmd
+                    else:
+                        session_cmd = cmd
                     break
-            if session_cmd != resolved_app:
+            if session_cmd != resolved_app and not session_cmd.startswith("tests/at/launch.sh"):
                 break
 
         suite_config = SuiteConfig(
