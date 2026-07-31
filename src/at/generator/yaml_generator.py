@@ -388,7 +388,7 @@ def _build_suite_cases(suite: CaseSuite) -> list[SuiteCase]:
                 case_counter += 1
                 current = SuiteCase(
                     id=f"{suite.id}_s{case_counter}",
-                    name=step.description[:60],
+                    name=suite.name[:60],
                     steps=[],
                 )
             continue
@@ -400,7 +400,7 @@ def _build_suite_cases(suite: CaseSuite) -> list[SuiteCase]:
                 case_counter += 1
                 current = SuiteCase(
                     id=f"{suite.id}_s{case_counter}",
-                    name=step.description[:60],
+                    name=suite.name[:60],
                     steps=[],
                     assert_steps=[action_step],
                 )
@@ -410,7 +410,7 @@ def _build_suite_cases(suite: CaseSuite) -> list[SuiteCase]:
             case_counter += 1
             current = SuiteCase(
                 id=f"{suite.id}_s{case_counter}",
-                name=step.description[:60],
+                name=suite.name[:60],
                 steps=[action_step],
             )
         else:
@@ -512,9 +512,15 @@ def generate_yaml(
             mappings_doc = ElementMappingsDoc.model_validate(mappings_data)
             elements.update(_extract_elements(mappings_doc))
 
-    elements_path = str(Path(output_dir) / "elements.yaml")
-    _write_yaml({"elements": elements}, elements_path)
-    print(f"Wrote {elements_path} ({len(elements)} elements)")
+    # 统计 active cases 数量
+    active_cases_count = sum(1 for s in cases_doc.cases if s.status not in ("skipped", "unsupported", "non_gui"))
+    
+    if active_cases_count > 0:
+        elements_path = str(Path(output_dir) / "elements.yaml")
+        _write_yaml({"elements": elements}, elements_path)
+        print(f"Wrote {elements_path} ({len(elements)} elements)")
+    else:
+        print("No active cases found, skipping elements.yaml generation")
 
     resolved_app = _resolve_app_name(app_name, at_tree_path)
 

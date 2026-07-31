@@ -128,6 +128,11 @@ python3 -m build                              # 构建 wheel
 twine upload dist/*                            # 发布到 PyPI
 ```
 
+### 单元测试
+```bash
+python -m pytest -c pytest-tests.ini tests/   # 运行单元测试 (tests/ 目录)
+```
+
 ## 关键约定
 
 ### 用例命名 (强制)
@@ -244,6 +249,54 @@ youqu at verify --suite find/find.suite.yaml --spec-id find_s0
 - MCP `keyboard_press_key` / `keyboard_hot_key` 会拦截危险快捷键组合。
 - MCP `screenshot_save` 固定输出到 `_PROJECT_ROOT / "report" / "vlm_evidence"`，不接受调用方传任意输出路径；`VLM_EVIDENCE_DIR` 只影响 VLM 内部配置，不控制 MCP 工具输出。
 - `src/__init__.py` 对 VLM 模块做可选导入 fallback；`Src.vlm` / `Src.vlm_agent` 是 lazy property，会检查 `VLMConfig().is_available()`。
+
+## Web Spec 自动化测试
+
+Web Spec 是基于 Playwright 的确定性 Web UI 测试能力，使用 YAML 描述页面入口、操作步骤和断言，不依赖 AI 推理执行。适合把稳定的 Web 页面流程沉淀为可重复运行的自动化用例。
+
+### 安装依赖
+
+```bash
+pip install -e ".[webui]"                     # 源码开发环境
+# 或
+pip install "youqu-ai[webui]"                 # 已安装 wheel 的环境
+playwright install chromium
+```
+
+### CLI 命令
+
+```bash
+youqu web-spec init web_spec.yaml             # 初始化配置文件
+youqu web-spec run examples/web_spec/specs    # 运行 spec 文件或目录
+youqu web-spec run examples/web_spec/specs --dry-run   # 只加载校验，不启动浏览器
+youqu web-spec list examples/web_spec/specs   # 列举用例
+youqu web-spec index examples/web_spec/specs  # 重建索引
+youqu web-spec suite examples/web_spec/smoke  # 运行 suite 目录
+youqu web-spec check examples/web_spec/specs  # 静态检查 spec 和 suite 质量
+```
+
+### Spec 文件结构
+
+最小 Web Spec YAML 示例：
+```yaml
+id: login-smoke
+title: 登录页冒烟测试
+module: 认证
+tags: [smoke]
+entry_page: /login
+steps:
+  - description: 检查登录按钮
+    assertions:
+      - type: visible
+        locator:
+          strategy: text
+          value: 登录
+          exact: true
+```
+
+支持的 locator 策略：`role`, `text`, `test_id`, `bem_css`, `css`。
+支持的 action：`click`, `fill`, `input_text`, `keyboard_type`, `press_key`, `hover`, `select_option`, `wait_for`, `scroll`, `right_click`, `dblclick`, `drag_to`, `upload_file`。
+支持的 assertion：`visible`, `not_visible`, `text_contains`, `text_equals`, `html_contains`, `html_equals`, `enabled`, `disabled`, `count`, `input_value_equals`, `input_value_contains`, `attribute_equals`, `attribute_contains`, `class_contains`, `url_equals`, `url_contains`, `text_sequence`。
 
 <!-- TRELLIS:START -->
 # Trellis Instructions

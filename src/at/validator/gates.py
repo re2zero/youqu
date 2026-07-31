@@ -311,6 +311,11 @@ def validate_gate3(cases_mapped_path: str, at_tree_annotated_path: str = "") -> 
         if status == "non_gui":
             continue
 
+        # 校验 module 字段
+        if "module" not in suite or not suite.get("module"):
+            report["errors"].append(f"[{sid}] missing required field: module")
+            report["passed"] = False
+
         annotation = suite.get("annotation") or {}
         for field in ("测试界面", "测试功能"):
             if not annotation.get(field):
@@ -413,8 +418,9 @@ def validate_gate4(generate_output_dir: str, at_tree_annotated_path: str = "") -
 
     suite_files = list(out_dir.rglob("*.suite.yaml"))
     if not suite_files:
-        report["errors"].append("No .suite.yaml files found in output directory")
-        report["passed"] = False
+        report["warnings"].append("No .suite.yaml files found (may be all unsupported modules)")
+        # 全 unsupported 模块视为分类完成，Gate 4 PASS
+        report["passed"] = True
         return report
 
     tree_names: set[str] | None = None

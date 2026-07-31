@@ -201,10 +201,11 @@ def cmd_record(args):
 
         if module_slug:
             plan_path = getattr(args, "plan", "") or "tests/at/plan.yaml"
+            plan_path_abs = str(Path(plan_path).resolve())
             try:
                 from src.at.generator.plan_generator import get_module_guide
 
-                guide = get_module_guide(plan_path, module_slug)
+                guide = get_module_guide(plan_path_abs, module_slug)
                 if guide:
                     print(f"\n[RECORD] Module: {module_slug}", file=sys.stderr)
                     print(f"[RECORD] Recording guide:\n{guide}", file=sys.stderr)
@@ -226,16 +227,21 @@ def cmd_record(args):
             launch_cmd=getattr(args, "launch", None),
         )
         session.start()
+        # 输出绝对路径
+        session_dir = Path(args.output).resolve()
+        print(f"\n[RECORD] Session saved: {session_dir}", file=sys.stderr)
 
         if module_slug:
             plan_path = getattr(args, "plan", "") or "tests/at/plan.yaml"
+            plan_path_abs = str(Path(plan_path).resolve())
             try:
                 from src.at.generator.plan_generator import update_module_status
 
-                if update_module_status(plan_path, module_slug, "recorded"):
+                if update_module_status(plan_path_abs, module_slug, "recorded"):
                     print(f"\n[RECORD] Plan updated: {module_slug} → recorded", file=sys.stderr)
             except Exception as e:
                 print(f"\n[RECORD] Could not update plan status: {e}", file=sys.stderr)
+                print("[RECORD] Note: recording succeeded, but plan update failed.", file=sys.stderr)
     except ImportError as e:
         print(f"Error: {e}")
         print("Install dependencies: pip install pyatspi2 python-xlib")
