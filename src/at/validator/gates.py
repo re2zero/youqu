@@ -308,13 +308,14 @@ def validate_gate3(cases_mapped_path: str, at_tree_annotated_path: str = "") -> 
     for suite in cases:
         sid = suite.get("id", "?")
         status = suite.get("status", "active")
-        if status == "non_gui":
-            continue
 
-        # 校验 module 字段
+        # 校验 module 字段（与生成器 CasesDoc 模型一致，所有 case 都需要）
         if "module" not in suite or not suite.get("module"):
             report["errors"].append(f"[{sid}] missing required field: module")
             report["passed"] = False
+
+        if status == "non_gui":
+            continue
 
         annotation = suite.get("annotation") or {}
         for field in ("测试界面", "测试功能"):
@@ -418,7 +419,18 @@ def validate_gate4(generate_output_dir: str, at_tree_annotated_path: str = "") -
 
     suite_files = list(out_dir.rglob("*.suite.yaml"))
     if not suite_files:
-        report["warnings"].append("No .suite.yaml files found (may be all unsupported modules)")
+        # 生成器对 active case 为 0 的模块会跳过 elements.yaml 输出；
+        # 若 elements.yaml 存在却无 suite 文件，说明有 active case 但生成失败，应 FAIL。
+        if (out_dir / "elements.yaml").exists():
+            report["errors"].append(
+                "No .suite.yaml files found but elements.yaml exists — "
+                "active cases present yet no suites generated"
+            )
+            report["passed"] = False
+            return report
+        report["warnings"].append(
+            "No .suite.yaml files found (all cases unsupported/non-gui)"
+        )
         # 全 unsupported 模块视为分类完成，Gate 4 PASS
         report["passed"] = True
         return report

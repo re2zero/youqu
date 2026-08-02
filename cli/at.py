@@ -189,6 +189,7 @@ def cmd_record(args):
     """
     try:
         import sys
+        from pathlib import Path
 
         from src.at.scanner.recorder import RecordSession, qt_available
 
