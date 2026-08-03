@@ -238,9 +238,11 @@ class AtMenuNavigator:
                 ok, err = self._navigate_by_events(target, exact)
             else:
                 ok, err = self._navigate_by_focus(target, exact)
-                if not ok and not err:
+                if not ok:
+                    # 焦点模式失败(如弹出菜单不在 dogtail 树中)时, 回退到
+                    # AT-SPI focus 事件模式(按键导航触发菜单项聚焦事件)
                     ok, err = self._navigate_by_events(target, exact)
-                elif not ok:
+                if not ok:
                     if not self._enumerate_and_navigate(target, exact):
                         raise AtMenuNotFoundError(err or f"menu item '{target}' not found")
 

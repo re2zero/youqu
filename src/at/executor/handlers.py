@@ -554,7 +554,13 @@ def handle_dtk_context_menu(step: SuiteActionStep, context: dict) -> None:
             items = [name]
 
     nav = AtMenuNavigator(context.get("app", ""))
-    nav.open_context_menu(x, y)
+    if attrs.get("popup") == "click":
+        # popup: click — 菜单由左键点击按钮弹出(如缩放箭头按钮), 非右键
+        mk = get_mk(context)
+        mk.click(x, y)
+        time.sleep(0.2)
+    else:
+        nav.open_context_menu(x, y)
     if items:
         try:
             nav.select(items)

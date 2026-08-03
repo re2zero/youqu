@@ -164,10 +164,24 @@ class DogtailUtils(MouseKey):
             name = node.group().replace("\\/", "/")[:-1]
         else:
             return None, []
+        # 解析 name[@role='xxx'] 后缀（youqu at 断言表达式格式）
+        role_name = None
+        match_role = re.match(r"^(.*?)\[@role='([^']*)'\]$", name)
+        if match_role:
+            name = match_role.group(1)
+            role_name = match_role.group(2)
+        # 纯 role 形式: [role='xxx']
+        match_role_only = re.match(r"^\[role='([^']*)'\]$", name)
+        if match_role_only:
+            name = None
+            role_name = match_role_only.group(1)
         if name == "*":
             element = element.children
         else:
-            element = element.findChildren(predicate.GenericPredicate(name), recursive=recursive)
+            element = element.findChildren(
+                predicate.GenericPredicate(name=name or None, roleName=role_name),
+                recursive=recursive,
+            )
         return node, element
 
     def __trace(self, element, result, expr):
