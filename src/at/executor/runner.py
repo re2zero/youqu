@@ -200,6 +200,16 @@ def _print_summary(results: list[dict]) -> None:
     )
     print(f"{'=' * 60}")
 
+    for r in results:
+        status_icon = "✓" if r["status"] == "ok" and r.get("failed", 0) == 0 else "✗"
+        print(f"  {status_icon} {r['suite']}")
+        for spec in r.get("specs", []):
+            icon = (
+                "✓" if spec["status"] == "passed" else ("✗" if spec["status"] == "failed" else "○")
+            )
+            detail = f" ({spec['error']})" if spec.get("error") else ""
+            print(f"      {icon} {spec['id']}: {spec['name']}{detail}")
+
 
 # ---- L2: Module smoke test ----
 
