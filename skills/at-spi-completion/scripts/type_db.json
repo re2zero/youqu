@@ -1,0 +1,4433 @@
+{
+  "classes": {
+    "ArrowButtonIcon": {
+      "bases": [
+        "QLabel"
+      ],
+      "category": "decorative",
+      "root": "QLabel"
+    },
+    "ColorButton": {
+      "bases": [
+        "DPushButton"
+      ],
+      "category": "interactive",
+      "root": ""
+    },
+    "ColorLabel": {
+      "bases": [
+        "DLabel"
+      ],
+      "category": "decorative",
+      "root": "QLabel"
+    },
+    "ColorSlider": {
+      "bases": [
+        "QSlider"
+      ],
+      "category": "interactive",
+      "root": "QAbstractSlider"
+    },
+    "DAboutDialog": {
+      "bases": [
+        "DDialog"
+      ],
+      "category": "decorative",
+      "root": "QDialog"
+    },
+    "DAboutDialogPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DAbstractDialog": {
+      "bases": [
+        "QDialog",
+        "Dtk::Core::DObject"
+      ],
+      "category": "decorative",
+      "root": "QDialog"
+    },
+    "DAbstractDialogPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DAbstractStackWidgetTransition": {
+      "bases": [
+        "QObject",
+        "Dtk::Core::DObject"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "DAbstractStackWidgetTransitionPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DAccessibilityChecker": {
+      "bases": [
+        "QObject",
+        "Core::DObject"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "DAccessibilityCheckerPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DAccessibleWidget": {
+      "bases": [
+        "QAccessibleWidget"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "DAlertControl": {
+      "bases": [
+        "QObject",
+        "Dtk::Core::DObject"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "DAlertControlPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DAnchorInfo": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DAnchorsBase": {
+      "bases": [
+        "QObject"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "DAnchorsBasePrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DAppHandler": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DApplication": {
+      "bases": [
+        "QApplication",
+        "Dtk::Core::DObject"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "DApplicationPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DArrowButton": {
+      "bases": [
+        "QLabel"
+      ],
+      "category": "decorative",
+      "root": "QLabel"
+    },
+    "DArrowLineDrawer": {
+      "bases": [
+        "DDrawer"
+      ],
+      "category": "decorative",
+      "root": "QFrame"
+    },
+    "DArrowLineDrawerPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DArrowRectangle": {
+      "bases": [
+        "QWidget",
+        "Dtk::Core::DObject"
+      ],
+      "category": "decorative",
+      "root": "QWidget"
+    },
+    "DArrowRectanglePrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DBackgroundGroup": {
+      "bases": [
+        "QWidget",
+        "Dtk::Core::DObject"
+      ],
+      "category": "decorative",
+      "root": "QWidget"
+    },
+    "DBackgroundGroupPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DBaseLine": {
+      "bases": [
+        "QLabel"
+      ],
+      "category": "decorative",
+      "root": "QLabel"
+    },
+    "DBlurEffectGroup": {
+      "bases": [
+        "Dtk::Core::DObject"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "DBlurEffectGroupPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DBlurEffectWidget": {
+      "bases": [
+        "QWidget",
+        "Dtk::Core::DObject"
+      ],
+      "category": "decorative",
+      "root": "QWidget"
+    },
+    "DBlurEffectWidgetPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DBlurEffectWithBorderWidget": {
+      "bases": [
+        "DBlurEffectWidget"
+      ],
+      "category": "decorative",
+      "root": "QWidget"
+    },
+    "DBlurEffectWithBorderWidgetPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DBounceAnimation": {
+      "bases": [
+        "QObject",
+        "Dtk::Core::DObject"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "DBounceAnimationPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DBoxWidget": {
+      "bases": [
+        "QFrame",
+        "Dtk::Core::DObject"
+      ],
+      "category": "decorative",
+      "root": "QFrame"
+    },
+    "DBoxWidgetPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DButtonBox": {
+      "bases": [
+        "QWidget",
+        "Core::DObject"
+      ],
+      "category": "interactive",
+      "root": "QWidget"
+    },
+    "DButtonBoxButton": {
+      "bases": [
+        "QAbstractButton",
+        "Core::DObject"
+      ],
+      "category": "interactive",
+      "root": "QAbstractButton"
+    },
+    "DButtonBoxButtonPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DButtonBoxPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DCalendarWidget": {
+      "bases": [
+        "QCalendarWidget"
+      ],
+      "category": "interactive",
+      "root": "QCalendarWidget"
+    },
+    "DCheckBox": {
+      "bases": [
+        "QCheckBox"
+      ],
+      "category": "interactive",
+      "root": "QAbstractButton"
+    },
+    "DCircleProgress": {
+      "bases": [
+        "QWidget",
+        "Dtk::Core::DObject"
+      ],
+      "category": "decorative",
+      "root": "QWidget"
+    },
+    "DCircleProgressPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DClipEffectWidget": {
+      "bases": [
+        "QWidget",
+        "Dtk::Core::DObject"
+      ],
+      "category": "decorative",
+      "root": "QWidget"
+    },
+    "DClipEffectWidgetPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DColorDialog": {
+      "bases": [
+        "QColorDialog"
+      ],
+      "category": "decorative",
+      "root": "QDialog"
+    },
+    "DColoredProgressBar": {
+      "bases": [
+        "QProgressBar",
+        "Dtk::Core::DObject"
+      ],
+      "category": "decorative",
+      "root": "QProgressBar"
+    },
+    "DColoredProgressBarPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DColumnView": {
+      "bases": [
+        "QColumnView"
+      ],
+      "category": "interactive",
+      "root": "QAbstractItemView"
+    },
+    "DComboBox": {
+      "bases": [
+        "QComboBox",
+        "Core::DObject"
+      ],
+      "category": "interactive",
+      "root": "QComboBox"
+    },
+    "DComboBoxOptions": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DComboBoxPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DCommandLinkButton": {
+      "bases": [
+        "QAbstractButton"
+      ],
+      "category": "interactive",
+      "root": "QAbstractButton"
+    },
+    "DCrumbEdit": {
+      "bases": [
+        "QTextEdit",
+        "Core::DObject"
+      ],
+      "category": "interactive",
+      "root": "QTextEdit"
+    },
+    "DCrumbEditPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DCrumbTextFormat": {
+      "bases": [
+        "QTextCharFormat"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "DDataWidgetMapper": {
+      "bases": [
+        "QDataWidgetMapper"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "DDateEdit": {
+      "bases": [
+        "QDateEdit"
+      ],
+      "category": "interactive",
+      "root": "QAbstractSpinBox"
+    },
+    "DDateTimeEdit": {
+      "bases": [
+        "QDateTimeEdit"
+      ],
+      "category": "interactive",
+      "root": "QAbstractSpinBox"
+    },
+    "DDciIcon": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DDesktopServices": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DDial": {
+      "bases": [
+        "QDial"
+      ],
+      "category": "interactive",
+      "root": "QAbstractSlider"
+    },
+    "DDialog": {
+      "bases": [
+        "DAbstractDialog"
+      ],
+      "category": "decorative",
+      "root": "QDialog"
+    },
+    "DDialogButtonBox": {
+      "bases": [
+        "QDialogButtonBox"
+      ],
+      "category": "interactive",
+      "root": "QDialogButtonBox"
+    },
+    "DDialogCloseButton": {
+      "bases": [
+        "DIconButton"
+      ],
+      "category": "interactive",
+      "root": "QAbstractButton"
+    },
+    "DDialogPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DDockWidget": {
+      "bases": [
+        "QDockWidget"
+      ],
+      "category": "decorative",
+      "root": "QWidget"
+    },
+    "DDoubleSpinBox": {
+      "bases": [
+        "QDoubleSpinBox",
+        "Dtk::Core::DObject"
+      ],
+      "category": "interactive",
+      "root": "QAbstractSpinBox"
+    },
+    "DDoubleSpinBoxPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DDrawer": {
+      "bases": [
+        "DFrame"
+      ],
+      "category": "decorative",
+      "root": "QFrame"
+    },
+    "DDrawerGroup": {
+      "bases": [
+        "QObject",
+        "Core::DObject"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "DDrawerGroupPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DDrawerPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DEnhancedWidget": {
+      "bases": [
+        "QObject"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "DEnhancedWidgetPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DErrorMessage": {
+      "bases": [
+        "QErrorMessage"
+      ],
+      "category": "decorative",
+      "root": "QDialog"
+    },
+    "DFeatureDisplayDialog": {
+      "bases": [
+        "DDialog"
+      ],
+      "category": "decorative",
+      "root": "QDialog"
+    },
+    "DFeatureDisplayDialogPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DFeatureItem": {
+      "bases": [
+        "QObject",
+        "Dtk::Core::DObject"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "DFeatureItemPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DFileChooserEdit": {
+      "bases": [
+        "DLineEdit"
+      ],
+      "category": "interactive",
+      "root": "QWidget"
+    },
+    "DFileChooserEditPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DFileDialog": {
+      "bases": [
+        "QFileDialog"
+      ],
+      "category": "decorative",
+      "root": "QDialog"
+    },
+    "DFileIconProvider": {
+      "bases": [
+        "QFileIconProvider",
+        "Dtk::Core::DObject"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "DFileIconProviderPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DFloatingButton": {
+      "bases": [
+        "DIconButton"
+      ],
+      "category": "interactive",
+      "root": "QAbstractButton"
+    },
+    "DFloatingMessage": {
+      "bases": [
+        "DFloatingWidget"
+      ],
+      "category": "decorative",
+      "root": "QWidget"
+    },
+    "DFloatingMessagePrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DFloatingWidget": {
+      "bases": [
+        "QWidget",
+        "Dtk::Core::DObject"
+      ],
+      "category": "decorative",
+      "root": "QWidget"
+    },
+    "DFloatingWidgetPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DFlowLayout": {
+      "bases": [
+        "QLayout",
+        "Dtk::Core::DObject"
+      ],
+      "category": "layout",
+      "root": "QLayout"
+    },
+    "DFlowLayoutPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DFocusFrame": {
+      "bases": [
+        "QFocusFrame"
+      ],
+      "category": "decorative",
+      "root": "QWidget"
+    },
+    "DFontComboBox": {
+      "bases": [
+        "DComboBox"
+      ],
+      "category": "interactive",
+      "root": "QComboBox"
+    },
+    "DFontComboBoxPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DFontDialog": {
+      "bases": [
+        "QFontDialog"
+      ],
+      "category": "decorative",
+      "root": "QDialog"
+    },
+    "DFontSizeManager": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DFontSizeManagerPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DFrame": {
+      "bases": [
+        "QFrame",
+        "Core::DObject"
+      ],
+      "category": "decorative",
+      "root": "QFrame"
+    },
+    "DFramePrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DGraphicsClipEffect": {
+      "bases": [
+        "QGraphicsEffect",
+        "Dtk::Core::DObject"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "DGraphicsClipEffectPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DGraphicsGlowEffect": {
+      "bases": [
+        "QGraphicsEffect"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "DGraphicsView": {
+      "bases": [
+        "QGraphicsView"
+      ],
+      "category": "decorative",
+      "root": "QGraphicsView"
+    },
+    "DGroupBox": {
+      "bases": [
+        "QGroupBox"
+      ],
+      "category": "interactive",
+      "root": "QGroupBox"
+    },
+    "DHBoxWidget": {
+      "bases": [
+        "DBoxWidget"
+      ],
+      "category": "decorative",
+      "root": "QFrame"
+    },
+    "DHeaderLine": {
+      "bases": [
+        "DBaseLine"
+      ],
+      "category": "decorative",
+      "root": "QLabel"
+    },
+    "DHeaderView": {
+      "bases": [
+        "QHeaderView"
+      ],
+      "category": "interactive",
+      "root": "QAbstractItemView"
+    },
+    "DHiDPIHelper": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DHorizontalLine": {
+      "bases": [
+        "QFrame"
+      ],
+      "category": "decorative",
+      "root": "QFrame"
+    },
+    "DIconButton": {
+      "bases": [
+        "QAbstractButton",
+        "Core::DObject"
+      ],
+      "category": "interactive",
+      "root": "QAbstractButton"
+    },
+    "DIconButtonPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DImageViewer": {
+      "bases": [
+        "DGraphicsView",
+        "Core::DObject"
+      ],
+      "category": "decorative",
+      "root": "QGraphicsView"
+    },
+    "DImageViewerPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DIndeterminateProgressbar": {
+      "bases": [
+        "QWidget",
+        "Dtk::Core::DObject"
+      ],
+      "category": "decorative",
+      "root": "QWidget"
+    },
+    "DIndeterminateProgressbarPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DInputDialog": {
+      "bases": [
+        "DDialog"
+      ],
+      "category": "decorative",
+      "root": "QDialog"
+    },
+    "DInputDialogPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DIpv4LineEdit": {
+      "bases": [
+        "QLineEdit",
+        "Core::DObject"
+      ],
+      "category": "interactive",
+      "root": "QLineEdit"
+    },
+    "DIpv4LineEditPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DKeySequenceEdit": {
+      "bases": [
+        "QLineEdit",
+        "Dtk::Core::DObject"
+      ],
+      "category": "interactive",
+      "root": "QLineEdit"
+    },
+    "DKeySequenceEditPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DLCDNumber": {
+      "bases": [
+        "QLCDNumber"
+      ],
+      "category": "decorative",
+      "root": "QFrame"
+    },
+    "DLabel": {
+      "bases": [
+        "QLabel",
+        "Dtk::Core::DObject"
+      ],
+      "category": "decorative",
+      "root": "QLabel"
+    },
+    "DLabelPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DLicenseDialog": {
+      "bases": [
+        "DAbstractDialog"
+      ],
+      "category": "decorative",
+      "root": "QDialog"
+    },
+    "DLicenseDialogPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DLineEdit": {
+      "bases": [
+        "QWidget",
+        "Dtk::Core::DObject"
+      ],
+      "category": "interactive",
+      "root": "QWidget"
+    },
+    "DLineEditOptions": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DLineEditPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DListView": {
+      "bases": [
+        "QListView",
+        "Dtk::Core::DObject"
+      ],
+      "category": "interactive",
+      "root": "QAbstractItemView"
+    },
+    "DListViewPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DListWidget": {
+      "bases": [
+        "QListWidget"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "DLoadingIndicator": {
+      "bases": [
+        "QGraphicsView",
+        "Dtk::Core::DObject"
+      ],
+      "category": "decorative",
+      "root": "QGraphicsView"
+    },
+    "DLoadingIndicatorPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DMDIArea": {
+      "bases": [
+        "QMDIArea"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "DMPRISControl": {
+      "bases": [
+        "QFrame",
+        "Dtk::Core::DObject"
+      ],
+      "category": "decorative",
+      "root": "QFrame"
+    },
+    "DMPRISControlPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DMainWindow": {
+      "bases": [
+        "QMainWindow",
+        "Dtk::Core::DObject"
+      ],
+      "category": "decorative",
+      "root": "QMainWindow"
+    },
+    "DMainWindowPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DMdiArea": {
+      "bases": [
+        "QMdiArea"
+      ],
+      "category": "interactive",
+      "root": "QAbstractScrollArea"
+    },
+    "DMdiSubWindow": {
+      "bases": [
+        "QMdiSubWindow"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "DMenu": {
+      "bases": [
+        "QMenu"
+      ],
+      "category": "interactive",
+      "root": "QMenu"
+    },
+    "DMenuBar": {
+      "bases": [
+        "QMenuBar"
+      ],
+      "category": "interactive",
+      "root": "QMenuBar"
+    },
+    "DMessageBox": {
+      "bases": [
+        "QMessageBox"
+      ],
+      "category": "decorative",
+      "root": "QDialog"
+    },
+    "DMessageManager": {
+      "bases": [
+        "QObject",
+        "Core::DObject"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "DMessageManagerPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DOpenGLWidget": {
+      "bases": [
+        "QOpenGLWidget"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "DPageIndicator": {
+      "bases": [
+        "QWidget",
+        "Dtk::Core::DObject"
+      ],
+      "category": "decorative",
+      "root": "QWidget"
+    },
+    "DPageIndicatorPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DPaletteHelper": {
+      "bases": [
+        "QObject",
+        "Core::DObject"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "DPaletteHelperPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DPasswordEdit": {
+      "bases": [
+        "DLineEdit"
+      ],
+      "category": "interactive",
+      "root": "QWidget"
+    },
+    "DPasswordEditPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DPictureSequenceView": {
+      "bases": [
+        "QGraphicsView",
+        "Dtk::Core::DObject"
+      ],
+      "category": "decorative",
+      "root": "QGraphicsView"
+    },
+    "DPictureSequenceViewPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DPlainTextEdit": {
+      "bases": [
+        "QPlainTextEdit"
+      ],
+      "category": "interactive",
+      "root": "QPlainTextEdit"
+    },
+    "DPlatformWindowHandle": {
+      "bases": [
+        "DPlatformHandle"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "DPrintPickColorWidget": {
+      "bases": [
+        "DWidget"
+      ],
+      "category": "decorative",
+      "root": "QWidget"
+    },
+    "DPrintPreviewColorModeInfo": {
+      "bases": [
+        "DPrintPreviewSettingInfo"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "DPrintPreviewCopiesInfo": {
+      "bases": [
+        "DPrintPreviewSettingInfo"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "DPrintPreviewDialog": {
+      "bases": [
+        "DDialog"
+      ],
+      "category": "decorative",
+      "root": "QDialog"
+    },
+    "DPrintPreviewDialogPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DPrintPreviewNUpPrintInfo": {
+      "bases": [
+        "DPrintPreviewSettingInfo"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "DPrintPreviewOrientationInfo": {
+      "bases": [
+        "DPrintPreviewSettingInfo"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "DPrintPreviewPageOrderInfo": {
+      "bases": [
+        "DPrintPreviewSettingInfo"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "DPrintPreviewPageRangeInfo": {
+      "bases": [
+        "DPrintPreviewSettingInfo"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "DPrintPreviewPaperMarginsInfo": {
+      "bases": [
+        "DPrintPreviewSettingInfo"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "DPrintPreviewPaperSizeInfo": {
+      "bases": [
+        "DPrintPreviewSettingInfo"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "DPrintPreviewPrintDuplexInfo": {
+      "bases": [
+        "DPrintPreviewSettingInfo"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "DPrintPreviewPrinterInfo": {
+      "bases": [
+        "DPrintPreviewSettingInfo"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "DPrintPreviewScalingInfo": {
+      "bases": [
+        "DPrintPreviewSettingInfo"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "DPrintPreviewSettingInfo": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DPrintPreviewSettingInterface": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DPrintPreviewWatermarkInfo": {
+      "bases": [
+        "DPrintPreviewSettingInfo"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "DPrintPreviewWidget": {
+      "bases": [
+        "DFrame"
+      ],
+      "category": "decorative",
+      "root": "QFrame"
+    },
+    "DPrintPreviewWidgetPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DPrinter": {
+      "bases": [
+        "QPrinter"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "DProgressBar": {
+      "bases": [
+        "QProgressBar",
+        "Core::DObject"
+      ],
+      "category": "decorative",
+      "root": "QProgressBar"
+    },
+    "DPushButton": {
+      "bases": [
+        "QPushButton"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "DQuickWidget": {
+      "bases": [
+        "QQuickWidget"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "DRadioButton": {
+      "bases": [
+        "QRadioButton"
+      ],
+      "category": "interactive",
+      "root": "QAbstractButton"
+    },
+    "DRubberBand": {
+      "bases": [
+        "QRubberBand"
+      ],
+      "category": "decorative",
+      "root": "QWidget"
+    },
+    "DScrollArea": {
+      "bases": [
+        "QScrollArea"
+      ],
+      "category": "interactive",
+      "root": "QScrollArea"
+    },
+    "DScrollBar": {
+      "bases": [
+        "QScrollBar"
+      ],
+      "category": "interactive",
+      "root": "QScrollBar"
+    },
+    "DSearchComboBox": {
+      "bases": [
+        "DComboBox"
+      ],
+      "category": "interactive",
+      "root": "QComboBox"
+    },
+    "DSearchComboBoxPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DSearchEdit": {
+      "bases": [
+        "DLineEdit"
+      ],
+      "category": "interactive",
+      "root": "QWidget"
+    },
+    "DSearchEditPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DSettingsDialog": {
+      "bases": [
+        "DAbstractDialog"
+      ],
+      "category": "decorative",
+      "root": "QDialog"
+    },
+    "DSettingsDialogPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DSettingsOption": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DSettingsWidgetFactory": {
+      "bases": [
+        "QObject"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "DSettingsWidgetFactoryPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DShadowLine": {
+      "bases": [
+        "QWidget",
+        "Core::DObject"
+      ],
+      "category": "decorative",
+      "root": "QWidget"
+    },
+    "DShadowLinePrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DShortcutEditLabel": {
+      "bases": [
+        "QLabel"
+      ],
+      "category": "interactive",
+      "root": "QLabel"
+    },
+    "DSidebarHelper": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DSimpleListItem": {
+      "bases": [
+        "QObject"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "DSimpleListView": {
+      "bases": [
+        "QWidget",
+        "Dtk::Core::DObject"
+      ],
+      "category": "interactive",
+      "root": "QWidget"
+    },
+    "DSimpleListViewPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DSizeGrip": {
+      "bases": [
+        "QSizeGrip"
+      ],
+      "category": "decorative",
+      "root": "QWidget"
+    },
+    "DSizeModeHelper": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DSlideStackWidgetTransition": {
+      "bases": [
+        "DAbstractStackWidgetTransition"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "DSlider": {
+      "bases": [
+        "QWidget",
+        "Dtk::Core::DObject"
+      ],
+      "category": "interactive",
+      "root": "QWidget"
+    },
+    "DSliderPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DSpinBox": {
+      "bases": [
+        "QSpinBox",
+        "Dtk::Core::DObject"
+      ],
+      "category": "interactive",
+      "root": "QAbstractSpinBox"
+    },
+    "DSpinBoxPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DSpinner": {
+      "bases": [
+        "QWidget",
+        "Dtk::Core::DObject"
+      ],
+      "category": "decorative",
+      "root": "QWidget"
+    },
+    "DSpinnerPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DSplitter": {
+      "bases": [
+        "QSplitter"
+      ],
+      "category": "interactive",
+      "root": "QSplitter"
+    },
+    "DStackWidget": {
+      "bases": [
+        "QWidget",
+        "Dtk::Core::DObject"
+      ],
+      "category": "decorative",
+      "root": "QWidget"
+    },
+    "DStackWidgetPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DStackedWidget": {
+      "bases": [
+        "QStackedWidget"
+      ],
+      "category": "interactive",
+      "root": "QStackedWidget"
+    },
+    "DStandardItem": {
+      "bases": [
+        "QStandardItem"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "DStatusBar": {
+      "bases": [
+        "QStatusBar"
+      ],
+      "category": "interactive",
+      "root": "QStatusBar"
+    },
+    "DStyle": {
+      "bases": [
+        "QCommonStyle"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "DStyleHelper": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DStyleOption": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DStyleOptionBackgroundGroup": {
+      "bases": [
+        "QStyleOption",
+        "DStyleOption"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "DStyleOptionButton": {
+      "bases": [
+        "QStyleOptionButton",
+        "DStyleOption"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "DStyleOptionButtonBoxButton": {
+      "bases": [
+        "DStyleOptionButton"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "DStyleOptionFloatingWidget": {
+      "bases": [
+        "QStyleOption",
+        "DStyleOption"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "DStyleOptionIcon": {
+      "bases": [
+        "QStyleOption",
+        "DStyleOption"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "DStyleOptionIconV2": {
+      "bases": [
+        "DStyleOptionIconV1"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "DStyleOptionLineEdit": {
+      "bases": [
+        "DStyleOption"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "DStyleOptionViewItem": {
+      "bases": [
+        "QStyleOptionViewItem",
+        "DStyleOption"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "DStylePainter": {
+      "bases": [
+        "QPainter"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "DStyledIconEngine": {
+      "bases": [
+        "QIconEngine"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "DStyledItemDelegate": {
+      "bases": [
+        "QStyledItemDelegate",
+        "Core::DObject"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "DStyledItemDelegatePrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DSuggestButton": {
+      "bases": [
+        "QPushButton",
+        "Dtk::Core::DObject"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "DSwitchButton": {
+      "bases": [
+        "QAbstractButton",
+        "Dtk::Core::DObject"
+      ],
+      "category": "interactive",
+      "root": "QAbstractButton"
+    },
+    "DSwitchButtonPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DSwitchHeaderLine": {
+      "bases": [
+        "DHeaderLine"
+      ],
+      "category": "decorative",
+      "root": "QLabel"
+    },
+    "DSwitchLineExpand": {
+      "bases": [
+        "DDrawer"
+      ],
+      "category": "decorative",
+      "root": "QFrame"
+    },
+    "DTabBar": {
+      "bases": [
+        "QWidget",
+        "DObject"
+      ],
+      "category": "interactive",
+      "root": "QWidget"
+    },
+    "DTabBarPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DTabWidget": {
+      "bases": [
+        "QTabWidget"
+      ],
+      "category": "interactive",
+      "root": "QTabWidget"
+    },
+    "DTableView": {
+      "bases": [
+        "QTableView"
+      ],
+      "category": "interactive",
+      "root": "QAbstractItemView"
+    },
+    "DTableWidget": {
+      "bases": [
+        "QTableWidget"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "DTabletWindowOptionButton": {
+      "bases": [
+        "DIconButton"
+      ],
+      "category": "interactive",
+      "root": "QAbstractButton"
+    },
+    "DTextBrowser": {
+      "bases": [
+        "QTextBrowser"
+      ],
+      "category": "interactive",
+      "root": "QTextEdit"
+    },
+    "DTextEdit": {
+      "bases": [
+        "QTextEdit",
+        "Core::DObject"
+      ],
+      "category": "interactive",
+      "root": "QTextEdit"
+    },
+    "DTextEditPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DTickEffect": {
+      "bases": [
+        "QGraphicsEffect",
+        "Dtk::Core::DObject"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "DTickEffectPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DTileRules": {
+      "bases": [
+        "QTileRules"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "DTimeEdit": {
+      "bases": [
+        "QTimeEdit"
+      ],
+      "category": "interactive",
+      "root": "QAbstractSpinBox"
+    },
+    "DTipLabel": {
+      "bases": [
+        "DLabel"
+      ],
+      "category": "decorative",
+      "root": "QLabel"
+    },
+    "DTipLabelPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DTitleBarSpacerInterface": {
+      "bases": [
+        "DTitlebarToolBaseInterface"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "DTitleBarToolInterface": {
+      "bases": [
+        "DTitlebarToolBaseInterface"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "DTitlebar": {
+      "bases": [
+        "QFrame",
+        "Dtk::Core::DObject"
+      ],
+      "category": "decorative",
+      "root": "QFrame"
+    },
+    "DTitlebarPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DTitlebarSettings": {
+      "bases": [
+        "Core::DObject"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "DTitlebarSettingsImpl": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DTitlebarSettingsPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DTitlebarToolBaseInterface": {
+      "bases": [
+        "QObject"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "DToolBar": {
+      "bases": [
+        "QToolBar"
+      ],
+      "category": "interactive",
+      "root": "QToolBar"
+    },
+    "DToolBox": {
+      "bases": [
+        "QToolBox"
+      ],
+      "category": "decorative",
+      "root": "QFrame"
+    },
+    "DToolButton": {
+      "bases": [
+        "QToolButton"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "DToolTip": {
+      "bases": [
+        "DTipLabel"
+      ],
+      "category": "decorative",
+      "root": "QLabel"
+    },
+    "DTreeView": {
+      "bases": [
+        "QTreeView"
+      ],
+      "category": "interactive",
+      "root": "QAbstractItemView"
+    },
+    "DTreeWidget": {
+      "bases": [
+        "QTreeWidget"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "DUndoView": {
+      "bases": [
+        "QUndoView"
+      ],
+      "category": "interactive",
+      "root": "QAbstractItemView"
+    },
+    "DVBoxWidget": {
+      "bases": [
+        "DBoxWidget"
+      ],
+      "category": "decorative",
+      "root": "QFrame"
+    },
+    "DVariantListModel": {
+      "bases": [
+        "QAbstractListModel"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "DVerticalLine": {
+      "bases": [
+        "QFrame"
+      ],
+      "category": "decorative",
+      "root": "QFrame"
+    },
+    "DViewItemAction": {
+      "bases": [
+        "QAction",
+        "Core::DObject"
+      ],
+      "category": "interactive",
+      "root": "QAction"
+    },
+    "DViewItemActionPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DWarningButton": {
+      "bases": [
+        "DPushButton"
+      ],
+      "category": "interactive",
+      "root": ""
+    },
+    "DWaterMarkHelper": {
+      "bases": [
+        "QObject",
+        "Dtk::Core::DObject"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "DWaterMarkHelperPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DWaterMarkWidget": {
+      "bases": [
+        "QWidget",
+        "Dtk::Core::DObject"
+      ],
+      "category": "decorative",
+      "root": "QWidget"
+    },
+    "DWaterMarkWidgetPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DWaterProgress": {
+      "bases": [
+        "QWidget",
+        "Dtk::Core::DObject"
+      ],
+      "category": "decorative",
+      "root": "QWidget"
+    },
+    "DWaterProgressPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DWebView": {
+      "bases": [
+        "QWebView"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "DWhatsThis": {
+      "bases": [
+        "QWhatsThis"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "DWidget": {
+      "bases": [
+        "QWidget"
+      ],
+      "category": "decorative",
+      "root": "QWidget"
+    },
+    "DWindowCloseButton": {
+      "bases": [
+        "DIconButton"
+      ],
+      "category": "interactive",
+      "root": "QAbstractButton"
+    },
+    "DWindowMaxButton": {
+      "bases": [
+        "DIconButton"
+      ],
+      "category": "interactive",
+      "root": "QAbstractButton"
+    },
+    "DWindowMaxButtonPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "DWindowMinButton": {
+      "bases": [
+        "DIconButton"
+      ],
+      "category": "interactive",
+      "root": "QAbstractButton"
+    },
+    "DWindowOptionButton": {
+      "bases": [
+        "DIconButton"
+      ],
+      "category": "interactive",
+      "root": "QAbstractButton"
+    },
+    "DWindowQuitFullButton": {
+      "bases": [
+        "DIconButton"
+      ],
+      "category": "interactive",
+      "root": "QAbstractButton"
+    },
+    "DWizard": {
+      "bases": [
+        "QWizard"
+      ],
+      "category": "decorative",
+      "root": "QDialog"
+    },
+    "DWizardPage": {
+      "bases": [
+        "QWizardPage"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "DtkBuildVersion": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QAbstractButton": {
+      "bases": [
+        "QWidget"
+      ],
+      "category": "interactive",
+      "root": "QAbstractButton"
+    },
+    "QAbstractButtonPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QAbstractFileIconProvider": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QAbstractGraphicsShapeItem": {
+      "bases": [
+        "QGraphicsItem"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "QAbstractGraphicsShapeItemPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QAbstractItemDelegate": {
+      "bases": [
+        "QObject"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "QAbstractItemDelegatePrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QAbstractItemModel": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QAbstractItemView": {
+      "bases": [],
+      "category": "interactive",
+      "root": "QAbstractItemView"
+    },
+    "QAbstractItemViewPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QAbstractProxyModel": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QAbstractScrollArea": {
+      "bases": [
+        "QFrame"
+      ],
+      "category": "interactive",
+      "root": "QAbstractScrollArea"
+    },
+    "QAbstractScrollAreaPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QAbstractSlider": {
+      "bases": [
+        "QWidget"
+      ],
+      "category": "interactive",
+      "root": "QAbstractSlider"
+    },
+    "QAbstractSliderPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QAbstractSpinBox": {
+      "bases": [
+        "QWidget"
+      ],
+      "category": "interactive",
+      "root": "QAbstractSpinBox"
+    },
+    "QAbstractSpinBoxPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QAccessibleWidget": {
+      "bases": [
+        "QAccessibleObject",
+        "QAccessibleActionInterface"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "QAccessibleWidgetPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QAction": {
+      "bases": [],
+      "category": "interactive",
+      "root": "QAction"
+    },
+    "QActionEvent": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QAnyStringView": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QApplication": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QApplicationPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QBackingStore": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QBoxLayout": {
+      "bases": [
+        "QLayout"
+      ],
+      "category": "layout",
+      "root": "QBoxLayout"
+    },
+    "QBoxLayoutPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QBrush": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QButtonGroup": {
+      "bases": [],
+      "category": "interactive",
+      "root": "QButtonGroup"
+    },
+    "QButtonGroupPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QCalendarWidget": {
+      "bases": [
+        "QWidget"
+      ],
+      "category": "interactive",
+      "root": "QCalendarWidget"
+    },
+    "QCalendarWidgetPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QCheckBox": {
+      "bases": [
+        "QAbstractButton"
+      ],
+      "category": "interactive",
+      "root": "QAbstractButton"
+    },
+    "QCheckBoxPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QCloseEvent": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QColor": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QColorDialog": {
+      "bases": [
+        "QDialog"
+      ],
+      "category": "decorative",
+      "root": "QDialog"
+    },
+    "QColorDialogPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QColormap": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QColormapPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QColumnView": {
+      "bases": [
+        "QAbstractItemView"
+      ],
+      "category": "interactive",
+      "root": "QAbstractItemView"
+    },
+    "QColumnViewPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QComboBox": {
+      "bases": [
+        "QWidget"
+      ],
+      "category": "interactive",
+      "root": "QComboBox"
+    },
+    "QComboBoxPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QCommandLinkButton": {
+      "bases": [
+        "QPushButton"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "QCommandLinkButtonPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QCommonStyle": {
+      "bases": [
+        "QStyle"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "QCommonStylePrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QCompleter": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QCompleterPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QContextMenuEvent": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QCursor": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QDataWidgetMapper": {
+      "bases": [
+        "QObject"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "QDataWidgetMapperPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QDate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QDateEdit": {
+      "bases": [
+        "QDateTimeEdit"
+      ],
+      "category": "interactive",
+      "root": "QAbstractSpinBox"
+    },
+    "QDateTimeEdit": {
+      "bases": [
+        "QAbstractSpinBox"
+      ],
+      "category": "interactive",
+      "root": "QAbstractSpinBox"
+    },
+    "QDateTimeEditPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QDebug": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QDial": {
+      "bases": [
+        "QAbstractSlider"
+      ],
+      "category": "interactive",
+      "root": "QAbstractSlider"
+    },
+    "QDialPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QDialog": {
+      "bases": [
+        "QWidget"
+      ],
+      "category": "decorative",
+      "root": "QDialog"
+    },
+    "QDialogButtonBox": {
+      "bases": [
+        "QWidget"
+      ],
+      "category": "interactive",
+      "root": "QDialogButtonBox"
+    },
+    "QDialogButtonBoxPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QDialogPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QDockAreaLayout": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QDockWidget": {
+      "bases": [
+        "QWidget"
+      ],
+      "category": "decorative",
+      "root": "QWidget"
+    },
+    "QDockWidgetPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QDoubleSpinBox": {
+      "bases": [
+        "QAbstractSpinBox"
+      ],
+      "category": "interactive",
+      "root": "QAbstractSpinBox"
+    },
+    "QDoubleSpinBoxPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QDrag": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QDragEnterEvent": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QDragLeaveEvent": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QDragMoveEvent": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QDropEvent": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QEnterEvent": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QErrorMessage": {
+      "bases": [
+        "QDialog"
+      ],
+      "category": "decorative",
+      "root": "QDialog"
+    },
+    "QErrorMessagePrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QEvent": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QEventLoop": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QFileDialog": {
+      "bases": [
+        "QDialog"
+      ],
+      "category": "decorative",
+      "root": "QDialog"
+    },
+    "QFileDialogArgs": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QFileDialogPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QFileIconProvider": {
+      "bases": [
+        "QAbstractFileIconProvider"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "QFileIconProviderPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QFlickGestureRecognizer": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QFocusEvent": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QFocusFrame": {
+      "bases": [
+        "QWidget"
+      ],
+      "category": "decorative",
+      "root": "QWidget"
+    },
+    "QFocusFramePrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QFont": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QFontComboBox": {
+      "bases": [
+        "QComboBox"
+      ],
+      "category": "interactive",
+      "root": "QComboBox"
+    },
+    "QFontComboBoxPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QFontDialog": {
+      "bases": [
+        "QDialog"
+      ],
+      "category": "decorative",
+      "root": "QDialog"
+    },
+    "QFontDialogPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QFontMetrics": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QFormLayout": {
+      "bases": [
+        "QLayout"
+      ],
+      "category": "layout",
+      "root": "QFormLayout"
+    },
+    "QFormLayoutPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QFrame": {
+      "bases": [
+        "QWidget"
+      ],
+      "category": "decorative",
+      "root": "QFrame"
+    },
+    "QFramePrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGesture": {
+      "bases": [
+        "QObject"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGestureEvent": {
+      "bases": [
+        "QEvent"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGestureEventPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGesturePrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGestureRecognizer": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsAnchor": {
+      "bases": [
+        "QObject"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsAnchorLayout": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsAnchorLayoutPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsAnchorPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsBlurEffect": {
+      "bases": [
+        "QGraphicsEffect"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsBlurEffectPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsColorizeEffect": {
+      "bases": [
+        "QGraphicsEffect"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsColorizeEffectPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsDropShadowEffect": {
+      "bases": [
+        "QGraphicsEffect"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsDropShadowEffectPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsEffect": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsEffectPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsEffectSource": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsEllipseItem": {
+      "bases": [
+        "QAbstractGraphicsShapeItem"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsEllipseItemPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsGridLayout": {
+      "bases": [
+        "QGraphicsLayout"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsGridLayoutPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsItem": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsItemAnimation": {
+      "bases": [
+        "QObject"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsItemAnimationPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsItemGroup": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsItemGroupPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsItemPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsLayout": {
+      "bases": [
+        "QGraphicsLayoutItem"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsLayoutItem": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsLayoutItemPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsLayoutPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsLineItem": {
+      "bases": [
+        "QGraphicsItem"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsLineItemPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsLinearLayout": {
+      "bases": [
+        "QGraphicsLayout"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsLinearLayoutPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsObject": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsOpacityEffect": {
+      "bases": [
+        "QGraphicsEffect"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsOpacityEffectPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsPathItem": {
+      "bases": [
+        "QAbstractGraphicsShapeItem"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsPathItemPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsPixmapItem": {
+      "bases": [
+        "QGraphicsItem"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsPixmapItemPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsPolygonItem": {
+      "bases": [
+        "QAbstractGraphicsShapeItem"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsPolygonItemPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsProxyWidget": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsProxyWidgetPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsRectItem": {
+      "bases": [
+        "QAbstractGraphicsShapeItem"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsRectItemPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsRotation": {
+      "bases": [
+        "QGraphicsTransform"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsRotationPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsScale": {
+      "bases": [
+        "QGraphicsTransform"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsScalePrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsScene": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsSceneContextMenuEvent": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsSceneContextMenuEventPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsSceneDragDropEvent": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsSceneDragDropEventPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsSceneEvent": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsSceneEventPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsSceneHelpEvent": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsSceneHelpEventPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsSceneHoverEvent": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsSceneHoverEventPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsSceneIndex": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsSceneMouseEvent": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsSceneMouseEventPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsSceneMoveEvent": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsSceneMoveEventPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsScenePrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsSceneResizeEvent": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsSceneResizeEventPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsSceneWheelEvent": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsSceneWheelEventPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsSimpleTextItem": {
+      "bases": [
+        "QAbstractGraphicsShapeItem"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsSimpleTextItemPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsTextItem": {
+      "bases": [
+        "QGraphicsObject"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsTextItemPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsTransform": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsTransformPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsView": {
+      "bases": [],
+      "category": "decorative",
+      "root": "QGraphicsView"
+    },
+    "QGraphicsViewPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsWidget": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGraphicsWidgetPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGridLayout": {
+      "bases": [
+        "QLayout"
+      ],
+      "category": "layout",
+      "root": "QGridLayout"
+    },
+    "QGridLayoutPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QGroupBox": {
+      "bases": [
+        "QWidget"
+      ],
+      "category": "interactive",
+      "root": "QGroupBox"
+    },
+    "QGroupBoxPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QHBoxLayout": {
+      "bases": [
+        "QBoxLayout"
+      ],
+      "category": "layout",
+      "root": "QHBoxLayout"
+    },
+    "QHeaderView": {
+      "bases": [
+        "QAbstractItemView"
+      ],
+      "category": "interactive",
+      "root": "QAbstractItemView"
+    },
+    "QHeaderViewPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QHelpEvent": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QHideEvent": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QHoverEvent": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QIcon": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QInputDialog": {
+      "bases": [
+        "QDialog"
+      ],
+      "category": "decorative",
+      "root": "QDialog"
+    },
+    "QInputDialogPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QInputMethodEvent": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QItemDelegate": {
+      "bases": [
+        "QAbstractItemDelegate"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "QItemDelegatePrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QItemEditorCreatorBase": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QItemEditorFactory": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QItemSelection": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QKeyEvent": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QKeySequenceEdit": {
+      "bases": [
+        "QWidget"
+      ],
+      "category": "interactive",
+      "root": "QKeySequenceEdit"
+    },
+    "QKeySequenceEditPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QLCDNumber": {
+      "bases": [
+        "QFrame"
+      ],
+      "category": "decorative",
+      "root": "QFrame"
+    },
+    "QLCDNumberPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QLabel": {
+      "bases": [
+        "QFrame"
+      ],
+      "category": "decorative",
+      "root": "QLabel"
+    },
+    "QLabelPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QLayout": {
+      "bases": [],
+      "category": "layout",
+      "root": "QLayout"
+    },
+    "QLayoutItem": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QLayoutPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QLineEdit": {
+      "bases": [],
+      "category": "interactive",
+      "root": "QLineEdit"
+    },
+    "QLineEditPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QLineF": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QListModel": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QListView": {
+      "bases": [
+        "QAbstractItemView"
+      ],
+      "category": "interactive",
+      "root": "QAbstractItemView"
+    },
+    "QListViewPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QListWidget": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QListWidgetItem": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QListWidgetItemPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QListWidgetPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QLocale": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QMainWindow": {
+      "bases": [],
+      "category": "decorative",
+      "root": "QMainWindow"
+    },
+    "QMainWindowPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QMargins": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QMdiArea": {
+      "bases": [
+        "QAbstractScrollArea"
+      ],
+      "category": "interactive",
+      "root": "QAbstractScrollArea"
+    },
+    "QMdiAreaPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QMdiSubWindow": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QMdiSubWindowPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QMenu": {
+      "bases": [],
+      "category": "interactive",
+      "root": "QMenu"
+    },
+    "QMenuBar": {
+      "bases": [],
+      "category": "interactive",
+      "root": "QMenuBar"
+    },
+    "QMenuBarPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QMenuPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QMessageBox": {
+      "bases": [
+        "QDialog"
+      ],
+      "category": "decorative",
+      "root": "QDialog"
+    },
+    "QMessageBoxPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QMetaTypeId": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QMimeData": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QModelIndex": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QMouseEvent": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QMouseFlickGestureRecognizer": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QMoveEvent": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QObject": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QPagedPaintDevice": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QPaintEvent": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QPainter": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QPainterPath": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QPalette": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QPanGesture": {
+      "bases": [
+        "QGesture"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "QPanGesturePrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QPen": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QPinchGesture": {
+      "bases": [
+        "QGesture"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "QPinchGesturePrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QPixmap": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QPlainTextDocumentLayout": {
+      "bases": [
+        "QAbstractTextDocumentLayout"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "QPlainTextDocumentLayoutPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QPlainTextEdit": {
+      "bases": [
+        "QAbstractScrollArea"
+      ],
+      "category": "interactive",
+      "root": "QPlainTextEdit"
+    },
+    "QPlainTextEditPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QPlatformMenu": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QPlatformMenuBar": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QPlatformNativeInterface": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QPlatformWindow": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QPoint": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QPointF": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QPointingDevice": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QPolygonF": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QPrivateSignal": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QProgressBar": {
+      "bases": [
+        "QWidget"
+      ],
+      "category": "decorative",
+      "root": "QProgressBar"
+    },
+    "QProgressBarPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QProgressDialog": {
+      "bases": [
+        "QDialog"
+      ],
+      "category": "decorative",
+      "root": "QDialog"
+    },
+    "QProgressDialogPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QProxyStyle": {
+      "bases": [
+        "QCommonStyle"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "QProxyStylePrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QPushButton": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QPushButtonPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QRadioButton": {
+      "bases": [
+        "QAbstractButton"
+      ],
+      "category": "interactive",
+      "root": "QAbstractButton"
+    },
+    "QRadioButtonPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QRasterWindowSurface": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QRect": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QRectF": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QRegularExpression": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QResizeEvent": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QRhi": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QRhiCommandBuffer": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QRhiRenderBuffer": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QRhiRenderTarget": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QRhiTexture": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QRhiWidget": {
+      "bases": [
+        "QWidget"
+      ],
+      "category": "decorative",
+      "root": "QWidget"
+    },
+    "QRhiWidgetPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QRubberBand": {
+      "bases": [
+        "QWidget"
+      ],
+      "category": "decorative",
+      "root": "QWidget"
+    },
+    "QRubberBandPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QScreen": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QScrollArea": {
+      "bases": [
+        "QAbstractScrollArea"
+      ],
+      "category": "interactive",
+      "root": "QScrollArea"
+    },
+    "QScrollAreaPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QScrollBar": {
+      "bases": [],
+      "category": "interactive",
+      "root": "QScrollBar"
+    },
+    "QScrollBarPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QScroller": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QScrollerPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QScrollerProperties": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QScrollerPropertiesPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QShowEvent": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QSize": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QSizeF": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QSizeGrip": {
+      "bases": [
+        "QWidget"
+      ],
+      "category": "decorative",
+      "root": "QWidget"
+    },
+    "QSizeGripPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QSizePolicy": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QSlider": {
+      "bases": [
+        "QAbstractSlider"
+      ],
+      "category": "interactive",
+      "root": "QAbstractSlider"
+    },
+    "QSliderPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QSpacerItem": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QSpinBox": {
+      "bases": [
+        "QAbstractSpinBox"
+      ],
+      "category": "interactive",
+      "root": "QAbstractSpinBox"
+    },
+    "QSpinBoxPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QSplashScreen": {
+      "bases": [
+        "QWidget"
+      ],
+      "category": "decorative",
+      "root": "QWidget"
+    },
+    "QSplashScreenPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QSplitter": {
+      "bases": [
+        "QFrame"
+      ],
+      "category": "interactive",
+      "root": "QSplitter"
+    },
+    "QSplitterHandle": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QSplitterHandlePrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QSplitterPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QStackedLayout": {
+      "bases": [
+        "QLayout"
+      ],
+      "category": "layout",
+      "root": "QStackedLayout"
+    },
+    "QStackedLayoutPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QStackedWidget": {
+      "bases": [
+        "QFrame"
+      ],
+      "category": "interactive",
+      "root": "QStackedWidget"
+    },
+    "QStackedWidgetPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QStatusBar": {
+      "bases": [],
+      "category": "interactive",
+      "root": "QStatusBar"
+    },
+    "QStatusBarPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QStyle": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QStyleFactory": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QStyleHintReturn": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QStyleHintReturnMask": {
+      "bases": [
+        "QStyleHintReturn"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "QStyleHintReturnVariant": {
+      "bases": [
+        "QStyleHintReturn"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "QStyleOption": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QStyleOptionButton": {
+      "bases": [
+        "QStyleOption"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "QStyleOptionComboBox": {
+      "bases": [
+        "QStyleOptionComplex"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "QStyleOptionComplex": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QStyleOptionDockWidget": {
+      "bases": [
+        "QStyleOption"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "QStyleOptionFocusRect": {
+      "bases": [
+        "QStyleOption"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "QStyleOptionFrame": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QStyleOptionGraphicsItem": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QStyleOptionGroupBox": {
+      "bases": [
+        "QStyleOptionComplex"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "QStyleOptionHeader": {
+      "bases": [
+        "QStyleOption"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "QStyleOptionHeaderV2": {
+      "bases": [
+        "QStyleOptionHeader"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "QStyleOptionMenuItem": {
+      "bases": [
+        "QStyleOption"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "QStyleOptionProgressBar": {
+      "bases": [
+        "QStyleOption"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "QStyleOptionRubberBand": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QStyleOptionSizeGrip": {
+      "bases": [
+        "QStyleOptionComplex"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "QStyleOptionSlider": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QStyleOptionSpinBox": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QStyleOptionTab": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QStyleOptionTabBarBase": {
+      "bases": [
+        "QStyleOption"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "QStyleOptionTabWidgetFrame": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QStyleOptionTitleBar": {
+      "bases": [
+        "QStyleOptionComplex"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "QStyleOptionToolBar": {
+      "bases": [
+        "QStyleOption"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "QStyleOptionToolBox": {
+      "bases": [
+        "QStyleOption"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "QStyleOptionToolButton": {
+      "bases": [
+        "QStyleOptionComplex"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "QStyleOptionViewItem": {
+      "bases": [
+        "QStyleOption"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "QStylePainter": {
+      "bases": [
+        "QPainter"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "QStylePlugin": {
+      "bases": [
+        "QObject"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "QStylePrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QStyleSheet": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QStyledItemDelegate": {
+      "bases": [
+        "QAbstractItemDelegate"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "QStyledItemDelegatePrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QSwipeGesture": {
+      "bases": [
+        "QGesture"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "QSwipeGesturePrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QSystemTrayIcon": {
+      "bases": [
+        "QObject"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "QSystemTrayIconPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QTab": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QTabBar": {
+      "bases": [
+        "QWidget"
+      ],
+      "category": "interactive",
+      "root": "QTabBar"
+    },
+    "QTabBarPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QTabWidget": {
+      "bases": [
+        "QWidget"
+      ],
+      "category": "interactive",
+      "root": "QTabWidget"
+    },
+    "QTabWidgetPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QTableModel": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QTableView": {
+      "bases": [
+        "QAbstractItemView"
+      ],
+      "category": "interactive",
+      "root": "QAbstractItemView"
+    },
+    "QTableViewPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QTableWidget": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QTableWidgetItem": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QTableWidgetItemPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QTableWidgetPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QTableWidgetSelectionRange": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QTabletEvent": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QTapAndHoldGesture": {
+      "bases": [
+        "QGesture"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "QTapAndHoldGesturePrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QTapGesture": {
+      "bases": [
+        "QGesture"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "QTapGesturePrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QTextBrowser": {
+      "bases": [
+        "QTextEdit"
+      ],
+      "category": "interactive",
+      "root": "QTextEdit"
+    },
+    "QTextBrowserPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QTextCharFormat": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QTextCursor": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QTextDocument": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QTextEdit": {
+      "bases": [
+        "QAbstractScrollArea"
+      ],
+      "category": "interactive",
+      "root": "QTextEdit"
+    },
+    "QTextEditPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QTextStream": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QTileRules": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QTimeEdit": {
+      "bases": [
+        "QDateTimeEdit"
+      ],
+      "category": "interactive",
+      "root": "QAbstractSpinBox"
+    },
+    "QTimeLine": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QTimer": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QToolBar": {
+      "bases": [],
+      "category": "interactive",
+      "root": "QToolBar"
+    },
+    "QToolBarPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QToolBox": {
+      "bases": [
+        "QFrame"
+      ],
+      "category": "decorative",
+      "root": "QFrame"
+    },
+    "QToolBoxPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QToolButton": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QToolButtonPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QToolTip": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QTouchEventWidgetSequence": {
+      "bases": [
+        "QTouchEventSequence"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "QTransform": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QTreeModel": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QTreeView": {
+      "bases": [
+        "QAbstractItemView"
+      ],
+      "category": "interactive",
+      "root": "QAbstractItemView"
+    },
+    "QTreeViewPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QTreeWidget": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QTreeWidgetItem": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QTreeWidgetItemIterator": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QTreeWidgetItemIteratorPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QTreeWidgetItemPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QTreeWidgetPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QTypeInfo": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QUndoGroup": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QUndoStack": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QUndoView": {
+      "bases": [
+        "QListView"
+      ],
+      "category": "interactive",
+      "root": "QAbstractItemView"
+    },
+    "QUndoViewPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QUnifiedToolbarSurface": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QVBoxLayout": {
+      "bases": [
+        "QBoxLayout"
+      ],
+      "category": "layout",
+      "root": "QVBoxLayout"
+    },
+    "QValidator": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QVariant": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QWhatsThis": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QWheelEvent": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QWidget": {
+      "bases": [
+        "QObject",
+        "QPaintDevice"
+      ],
+      "category": "decorative",
+      "root": "QWidget"
+    },
+    "QWidgetAction": {
+      "bases": [
+        "QAction"
+      ],
+      "category": "interactive",
+      "root": "QAction"
+    },
+    "QWidgetActionPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QWidgetData": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QWidgetItem": {
+      "bases": [
+        "QLayoutItem"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "QWidgetItemData": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QWidgetItemV2": {
+      "bases": [
+        "QWidgetItem"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "QWidgetPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QWindow": {
+      "bases": [],
+      "category": "decorative",
+      "root": "QWindow"
+    },
+    "QWindowsStyle": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QWizard": {
+      "bases": [
+        "QDialog"
+      ],
+      "category": "decorative",
+      "root": "QDialog"
+    },
+    "QWizardPage": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QWizardPagePrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "QWizardPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "SpecialSlider": {
+      "bases": [
+        "QSlider"
+      ],
+      "category": "interactive",
+      "root": "QAbstractSlider"
+    },
+    "TransitionInfo": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    },
+    "WaterMarkData": {
+      "bases": [
+        "Dtk::Core::DObject"
+      ],
+      "category": "unknown",
+      "root": ""
+    },
+    "WaterMarkDataPrivate": {
+      "bases": [],
+      "category": "unknown",
+      "root": ""
+    }
+  },
+  "generated_at": "2026-08-04T08:46:47.914290+00:00",
+  "qt_roots": {
+    "decorative": [
+      "QDialog",
+      "QFrame",
+      "QGraphicsView",
+      "QLabel",
+      "QMainWindow",
+      "QProgressBar",
+      "QWidget",
+      "QWindow"
+    ],
+    "interactive": [
+      "QAbstractButton",
+      "QAbstractItemView",
+      "QAbstractScrollArea",
+      "QAbstractSlider",
+      "QAbstractSpinBox",
+      "QAction",
+      "QActionGroup",
+      "QButtonGroup",
+      "QCalendarWidget",
+      "QComboBox",
+      "QDialogButtonBox",
+      "QGroupBox",
+      "QKeySequenceEdit",
+      "QLineEdit",
+      "QMenu",
+      "QMenuBar",
+      "QPlainTextEdit",
+      "QScrollArea",
+      "QScrollBar",
+      "QShortcut",
+      "QSplitter",
+      "QStackedWidget",
+      "QStatusBar",
+      "QTabBar",
+      "QTabWidget",
+      "QTextEdit",
+      "QToolBar"
+    ],
+    "layout": [
+      "QBoxLayout",
+      "QFormLayout",
+      "QGridLayout",
+      "QHBoxLayout",
+      "QLayout",
+      "QStackedLayout",
+      "QVBoxLayout"
+    ]
+  },
+  "version": "1.0"
+}
