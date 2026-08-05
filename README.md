@@ -96,6 +96,41 @@ $ pipx install --system-site-packages --force /path/to/youqu_ai-*.whl
 >
 > 验证：`youqu doctor` 应全部显示 `[OK]`。
 
+#### 从 GitLab 内网仓库离线安装（一键脚本）
+
+youqu-ai 尚未发布到公网 PyPI（`pip3 install youqu-ai` 暂不可用），内网环境推荐使用一键安装脚本：
+
+```shell
+# 一键安装（下载脚本并直接执行）
+$ bash -c "$(curl -fsSL https://gitlabcd.uniontech.com/ut003403/youqu-ai/-/raw/main/install_youqu.sh)"
+
+# 或使用 wget
+$ bash -c "$(wget -qO- https://gitlabcd.uniontech.com/ut003403/youqu-ai/-/raw/main/install_youqu.sh)"
+```
+
+> 脚本从 `https://gitlabcd.uniontech.com/ut003403/youqu-ai/-/tree/main/dist` 自动下载最新 `youqu_ai-*.whl`，通过 `pipx install --system-site-packages` 安装，并自动安装系统依赖、配置环境变量。
+> 远程管道方式无法交互确认，脚本默认自动确认；需要指定参数时，用环境变量或先下载到本地再执行：
+
+```shell
+# 下载到本地后执行（支持命令行参数）
+$ curl -fsSL -o install_youqu.sh https://gitlabcd.uniontech.com/ut003403/youqu-ai/-/raw/main/install_youqu.sh
+$ bash install_youqu.sh                # 交互式确认后安装
+$ bash install_youqu.sh -y -p password # 全自动安装（跳过确认 + 指定 sudo 密码）
+$ bash install_youqu.sh -v 2.18.6      # 指定版本（默认取 dist 目录最新版）
+$ bash install_youqu.sh -n -y          # 跳过系统依赖安装（已有环境）
+$ bash install_youqu.sh -h             # 查看全部参数
+```
+
+脚本会依次完成：
+
+1. **系统依赖**：自动安装 `gir1.2-atspi-2.0`、`python3-opencv`、`scrot`、`openjdk-11-jdk-headless` 等（apt/yum 均支持，Wayland 会话自动附加依赖）
+2. **下载 wheel**：通过 GitLab API 查询 `https://gitlabcd.uniontech.com/ut003403/youqu-ai/-/tree/main/dist` 目录，自动选取最新 `youqu_ai-*.whl` 并下载
+3. **pipx 安装**：`pipx install --system-site-packages`，复用 apt 安装的 `gi`/`pyatspi` 等系统 Python 包
+4. **环境配置**：写入 `DISPLAY=:0`、`QT_ACCESSIBILITY=1` 等环境变量并开启无障碍
+
+> 脚本涉及的可覆盖环境变量：`GITLAB_BASE_URL` / `GITLAB_PROJECT` / `GITLAB_BRANCH` / `GITLAB_USER` / `GITLAB_TOKEN` / `PIP_INDEX_URL`，可适配任意 GitLab 实例与镜像源。
+> 需要认证时用 `-U user:password` 或 `-t PRIVATE_TOKEN`。
+> 安装完成后验证：`youqu doctor` 应全部显示 `[OK]`。
 
 ### 创建项目
 

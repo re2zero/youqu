@@ -14,7 +14,6 @@ public
 node_modules/
 docs/.vitepress/cache/
 pnpm-lock.yaml
-dist
 
 CLAUDE.md
 uv.lock
