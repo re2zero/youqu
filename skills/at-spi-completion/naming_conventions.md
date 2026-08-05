@@ -45,7 +45,11 @@ When generating names for missing widgets, use this priority order:
 
 1. **Display text** (from `tr()` calls): Strip non-alphanumeric, convert to PascalCase
    - `tr("New Window")` → `NewWindow`
-   - `tr("打开文件")` → `OpenFile`
+   
+     > ⚠️ Chinese `tr("打开文件")` cannot be directly converted to English PascalCase.
+     > When the display text is Chinese, the name falls through to the variable-name
+     > strategy. If a meaningful English name is required, use `ClassName_Role` or
+     > provide the English source from the `.ts` file manually.
 
 2. **Variable name**: Strip `m_` prefix, split on camelCase, PascalCase
    - `m_nameLineEdit` → `NameLineEdit`
@@ -66,7 +70,7 @@ When generating names for missing widgets, use this priority order:
 |--------|-----------------|-------------------|
 | `m_newAction` (QAction) | — | `NewAction` |
 | `m_nameLineEdit` (DLineEdit) | — | `NameLineEdit` |
-| `m_cancelBtn` (DPushButton) | — | `CancelButton` |
+| `m_cancelBtn` (DPushButton) | — | `CancelBtn` |
 | `m_confirmBtn` (DSuggestButton) | — | `ConfirmButton` |
 | `lightThemeAction` (QAction) | — | `LightThemeAction` |
 | `m_groupNameEdit` (DLineEdit) | — | `GroupNameEdit` |
@@ -119,6 +123,7 @@ After applying fixes, run the quality gate to verify:
 |-------|-----------|-------------|
 | **Coverage** | ≥80% | Percentage of widgets with names |
 | **New gaps** | 0 | No new gaps introduced |
+| **Regression** | 0 | Previously-named widgets (from `expected_names.yaml`) still have names |
 | **Uniqueness** | 0 issues | No duplicate objectName values |
 | **Conventions** | 0 issues | All names follow PascalCase, English only |
 

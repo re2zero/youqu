@@ -22,17 +22,39 @@ from pathlib import Path
 # libclang bootstrap — MUST happen before any clang import
 # ---------------------------------------------------------------------------
 
-_LIBCLANG_PATH = "/usr/lib/x86_64-linux-gnu"
-if os.path.isdir(_LIBCLANG_PATH):
+_LIBCLANG_CANDIDATES = [
+    "/usr/lib/x86_64-linux-gnu",
+    "/usr/lib64",
+    "/usr/lib",
+    "/usr/lib/llvm-18/lib",
+    "/usr/lib/llvm-17/lib",
+    "/usr/lib/llvm-19/lib",
+]
+
+_libclang_path: str | None = None
+for _base in _LIBCLANG_CANDIDATES:
+    if not os.path.isdir(_base):
+        continue
+    try:
+        for _f in os.listdir(_base):
+            if "libclang" in _f and _f.endswith(".so") or _f.endswith(".so.1"):
+                _libclang_path = _base
+                break
+    except OSError:
+        continue
+    if _libclang_path:
+        break
+
+if _libclang_path:
     os.environ.setdefault("LD_LIBRARY_PATH", "")
     paths = os.environ["LD_LIBRARY_PATH"].split(":")
-    if _LIBCLANG_PATH not in paths:
-        os.environ["LD_LIBRARY_PATH"] = f"{_LIBCLANG_PATH}:" + os.environ["LD_LIBRARY_PATH"]
+    if _libclang_path not in paths:
+        os.environ["LD_LIBRARY_PATH"] = f"{_libclang_path}:" + os.environ["LD_LIBRARY_PATH"]
 
 try:
     from clang.cindex import Config as _ClangConfig
 
-    _ClangConfig.set_library_path(_LIBCLANG_PATH)
+    _ClangConfig.set_library_path(_libclang_path or "/usr/lib/x86_64-linux-gnu")
     from clang.cindex import CursorKind, Index
 
     _LIBCLANG_READY = True

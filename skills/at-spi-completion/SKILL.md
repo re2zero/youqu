@@ -25,11 +25,12 @@ Scans C++ Qt/DTK source for missing `setAccessibleName()` / `setObjectName()` ca
 
 | Phase | Command | Output |
 |-------|---------|--------|
-| **Scan** | `scan_gaps.py --src <dir> --build <dir>` | `pre_scan_gaps.yaml` |
-| **Generate** | `naming.py pre_scan_gaps.yaml [-o map.txt]` | Name suggestions (stdout/file) |
+| **Scan** | `scan_gaps.py --src <dir> --build <dir> --output tests/at/spi/` | `pre_scan_gaps.yaml` + `pre_scan_ok.yaml` |
+| **Generate** | `naming.py pre_scan_gaps.yaml -o map.txt` | `name_map.txt` (with source_file:line info) |
 | **Apply** | LLM inserts calls in constructor | Modified `.cpp` files |
-| **Validate** | `quality_gate.py --src <dir> --baseline <yaml>` | `quality_report.json` |
+| **Validate** | `quality_gate.py --src <dir> --build <dir> --baseline pre_scan_gaps.yaml --expected-names expected_names.yaml` | `quality_report.json` + `quality_gate_scan/` |
 | **Transient** | `menu_extractor.py --src <dir> --compile-commands <cc> --ts-dir <td> --ts-lang zh_CN` | `menu_structure.yaml` |
+| **Merge** | `merge_names.py --input tests/at/spi --scan-dir tests/at/spi/quality_gate_scan` | `expected_names.yaml` ✅ |
 
 ## Name Generation Priority
 
@@ -61,11 +62,15 @@ Full naming rules: [naming_conventions.md](naming_conventions.md) (PascalCase, E
 ```bash
 # Primary: AST-level scan (libclang)
 # NOTE: Large projects may take 5+ minutes. Use `timeout 360` if needed.
-python3 scripts/scan_gaps.py --src /path/to/src --build /path/to/build --output tests/at/spi/
+# --src MUST be the repo root (contains src/ subdirectory) so that file paths
+# in output match those in .ts translation files.
+python3 scripts/scan_gaps.py --src /path/to/repo/root --build /path/to/build --output tests/at/spi/
 
-# Optional: Qt Designer .ui supplement
-python3 -c "from ui_parser import scan_ui_files, merge_ui_gaps; import yaml; ..."
+# Optional: Qt Designer .ui supplement (experimental, see ui_parser.py --help)
+python3 scripts/ui_parser_merge.sh tests/at/spi/
 ```
+
+> ⚠️ `--src` must be the repository root, not `src/` subdirectory. The `.ts` translation files store paths relative to repo root (e.g. `src/views/w.cpp`); menu_extractor matches them by path suffix.
 
 ### Phase 2 — Generate Names
 
@@ -79,7 +84,12 @@ python3 scripts/naming.py tests/at/spi/pre_scan_gaps.yaml -o tests/at/spi/name_m
 
 Priority: display text (`tr()`) → variable name (strip `m_`) → `ClassName_Role` → `Unnamed<Role><Counter>`.
 
-> **⚠️ For parallel execution**: Always run naming.py first and save the name_map file. Every sub-agent must read this file to use the canonical names (including `_2`, `_3` suffix disambiguation), not generate names independently.
+> **⚠️ For parallel execution**: Always run naming.py first and save the name_map file (`-o map.txt`). Every sub-agent must read this file and use the exact canonical name, **including `_2`/`_3` suffixes and the `source_file:line` info to disambiguate same-named variables in different files**. Parsing format:
+> ```
+> m_okButton     -> OkButton       # src/a.cpp:42
+> m_okButton     -> OkButton_2     # src/b.cpp:15
+> ```
+> The `# {src}:{line}` suffix uniquely identifies which instance each name belongs to.
 
 ### Phase 3 — Apply Fixes (LLM)
 
@@ -122,28 +132,50 @@ m_endProcKP->setObjectName("EndProcKp");
 
 When gaps span many files (>20), use parallel sub-agents for efficiency:
 
-1. **Generate authoritative map** — `python3 naming.py gaps.yaml -o map.txt` (this preserves `_2`, `_3` suffix order)
+1. **Generate authoritative map** — `python3 naming.py gaps.yaml -o map.txt` (produces `source_file:line` disambiguated format)
 2. **Split by file** — assign disjoint file sets to sub-agents (never split gaps within one file)
-3. **Sub-agents read the map** — each agent must read `map.txt` and use exact names from it
+3. **Sub-agents read the map** — each agent must read `map.txt` and use exact names from it, keyed by `# {src}:{line}`
 4. **Re-scan after all complete** — run `scan_gaps.py` to check for collisions
 5. **Fix residual collisions** — if any duplicate names remain despite the map, use `ClassName_Role` (e.g., `CompactCpuMonitor_DetailButton`, `CpuMonitor_DetailButton`)
 
 ```bash
-# Step 1: Generate canonical name file
+# Step 1: Generate canonical name file (with source_file:line disambiguation)
 python3 scripts/naming.py tests/at/spi/pre_scan_gaps.yaml -o tests/at/spi/name_map.txt
+# map.txt format:
+#   m_okButton     -> OkButton       # src/a.cpp:42
+#   m_okButton     -> OkButton_2     # src/b.cpp:15
 
 # Step 2: Sub-agents read and apply from name_map.txt
 
-# Step 3: Validate
-python3 scripts/quality_gate.py --src ... --build ... --baseline tests/at/spi/pre_scan_gaps.yaml --threshold 80
+# Step 3: Validate (with regression check if expected_names.yaml exists)
+python3 scripts/quality_gate.py --src ... --build ... \
+  --baseline tests/at/spi/pre_scan_gaps.yaml \
+  --expected-names tests/at/spi/expected_names.yaml \
+  --threshold 80 --output tests/at/spi/
 ```
 
-### Phase 4 — Validate
+### Phase 4 — Validate (with regression check)
+
+After applying fixes (Phase 3), validate coverage and check for regressions.
+If a previous `expected_names.yaml` exists (from a prior run), pass it via
+`--expected-names` to detect any backsliding on already-named widgets:
 
 ```bash
-python3 scripts/quality_gate.py --src /path/to/src --build /path/to/build \
+python3 scripts/quality_gate.py --src /path/to/repo/root --build /path/to/build \
+  --baseline tests/at/spi/pre_scan_gaps.yaml \
+  --expected-names tests/at/spi/expected_names.yaml \
+  --threshold 80 --output tests/at/spi/
+```
+
+**On first run** (no prior expected_names.yaml), omit `--expected-names`:
+
+```bash
+python3 scripts/quality_gate.py --src /path/to/repo/root --build /path/to/build \
   --baseline tests/at/spi/pre_scan_gaps.yaml --threshold 80 --output tests/at/spi/
 ```
+
+The fresh scan results are written to `<output>/quality_gate_scan/`. These are
+used in Phase 6 to build the updated `expected_names.yaml`.
 
 ### Phase 5 — Transient Elements: Extract + Translate
 
@@ -183,29 +215,39 @@ Extraction coverage (verified on deepin-terminal):
 
 ### Phase 6 — Merge: Produce `expected_names.yaml`
 
-Merge persistent results (Phase 1-4) with transient results (Phase 5) into a
-single regression baseline. **The output MUST be written to the TARGET APP
-project** (e.g. `deepin-terminal/tests/at/spi/expected_names.yaml`), not to the
-skill directory:
+Merge the **fresh scan** results (Phase 4 output in `quality_gate_scan/`) with
+transient results (Phase 5) into the single regression baseline.
+
+⚠️ **Use `--scan-dir` to point at the fresh scan output**, not the stale Phase 1
+snapshot. This ensures `expected_names.yaml` reflects the actual state after
+all fixes were applied:
 
 ```bash
 python3 scripts/merge_names.py \
   --input tests/at/spi \
+  --scan-dir tests/at/spi/quality_gate_scan \
   --output /path/to/target/app/tests/at/spi/expected_names.yaml
 ```
+
+**The output MUST be written to the TARGET APP project** (e.g. `deepin-terminal/tests/at/spi/expected_names.yaml`), not to the skill directory.
 
 **Clean up intermediate artifacts:** Once `expected_names.yaml` is produced, remove
 the per-phase output files (they are NOT committed):
 ```bash
 rm -f tests/at/spi/pre_scan_*.yaml tests/at/spi/pre_*.json \
-      tests/at/spi/menu_structure.yaml tests/at/spi/name_map.txt
+      tests/at/spi/menu_structure.yaml tests/at/spi/name_map.txt \
+      tests/at/spi/quality_gate_scan/
 ```
 
 ### Phase 7 — Commit (REQUIRED in the target project)
 
 Commit `expected_names.yaml` **together with the applied source changes** to the
 **target app repository** (e.g. deepin-terminal, not this skill repo). This is
-the regression baseline — future scans compare against it.
+the AT-SPI naming contract — consumed by:
+
+- **Quality Gate** (Phase 4, `--expected-names`): detects regressions in future runs
+- **AT-SPI case generation** (`youqu at` pipeline): provides element names for test locators
+
 Complete the commit using the commit skill.
 
 ```bash
@@ -288,10 +330,13 @@ Run `python3 scripts/<name>.py --help` for per-script options.
 | Check | Threshold | Description |
 |-------|-----------|-------------|
 | Coverage | ≥ 80% | Interactive widgets with AT-SPI names |
-| New gaps | 0 | Fixes must not introduce gaps |
+| New gaps | 0 | Fixes must not introduce new gaps vs baseline |
+| Regression | 0 | Previously-named widgets (from `expected_names.yaml`) still have names |
 | Uniqueness | 0 | No duplicate `objectName` (checked on both `ok` and `gaps` files) |
 | Conventions | 0 | PascalCase, English, no special chars |
 
+> ⚠️ **Regression check requires `--expected-names`**. On first run (no prior baseline), omit the flag. On subsequent runs, always provide it to prevent backsliding.
+>
 > ⚠️ **Quality gate checks uniqueness on both `pre_scan_ok.yaml` AND `pre_scan_gaps.yaml`**. When coverage reaches 100% the gaps file is empty; without the ok-file check, duplicates would be invisible.
 
 Dependencies: `sudo apt install python3-clang-18 libclang-18-dev && pip install pyyaml`

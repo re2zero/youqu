@@ -21,7 +21,7 @@ from typing import Any
 
 def _strip_m_prefix(var: str) -> str:
     """Strip common Hungarian notation prefixes."""
-    for prefix in ("m_", "m_", "_"):
+    for prefix in ("m_", "_"):
         if var.startswith(prefix):
             return var[len(prefix):]
     return var
@@ -144,9 +144,14 @@ def generate_name(instance: dict, existing_names: set[str] | None = None) -> str
             counter += 1
         name = f"{name}_{counter}"
 
-    # Truncate to 64 chars
+    # Truncate to 64 chars, then re-check uniqueness
     if len(name) > 64:
         name = name[:64]
+        if name in existing_names:
+            counter = 2
+            while f"{name}_{counter}" in existing_names:
+                counter += 1
+            name = f"{name}_{counter}"
 
     return name
 
@@ -166,7 +171,10 @@ def batch_generate(
     for inst in instances:
         name = generate_name(inst, existing_names)
         existing_names.add(name)
-        results.append((inst.get("variable", ""), name))
+        var = inst.get("variable", "")
+        src = inst.get("source_file", "")
+        line = inst.get("line", 0)
+        results.append((var, name, src, line))
 
     return results
 
@@ -200,7 +208,7 @@ if __name__ == "__main__":
 
     instances = data if isinstance(data, list) else data.get("gaps", data.get("widgets", [data]))
     results = batch_generate(instances)
-    lines = [f"{var}: {name}" for var, name in results]
+    lines = [f"{var:<30} -> {name:<30}  # {src}:{line}" for var, name, src, line in results]
     output = "\n".join(lines)
 
     if args.output:

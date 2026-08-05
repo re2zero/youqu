@@ -6,13 +6,16 @@ Combines Phase 1-4 output (pre_scan_ok.yaml) with Phase 5 output
 with the app code as the AT-SPI regression baseline.
 
 Usage:
-    merge_names.py --input <dir> [--output <path>]
+    merge_names.py --input <dir> [--scan-dir <dir>] [--output <path>]
 
-  --input   Directory containing pre_scan_ok.yaml and menu_structure.yaml
-            (default: tests/at/spi)
-  --output  Target expected_names.yaml path. MUST be inside the target app
-            project, e.g. deepin-terminal/tests/at/spi/expected_names.yaml.
-            (default: <input>/expected_names.yaml)
+  --input     Directory containing menu_structure.yaml (default: tests/at/spi)
+  --scan-dir Directory containing the FRESH scan output (pre_scan_ok.yaml),
+             e.g. quality_gate_scan/.  If omitted, reads pre_scan_ok.yaml
+             from <input>/ instead (Phase 1 snapshot — not recommended after
+             Phase 3 fixes have been applied).
+  --output    Target expected_names.yaml path. MUST be inside the target app
+             project, e.g. deepin-terminal/tests/at/spi/expected_names.yaml.
+             (default: <input>/expected_names.yaml)
 
 Output schema:
     version: '1.0'
@@ -20,7 +23,7 @@ Output schema:
       - variable, type, object_name, accessible_name,
         source_file, class_name, line
     transient_elements:     # menus / tr()-sourced items (EN + ZH)
-      - menu_var, text_en, text_zh, file, line
+      - menu_var, type, text_en, text_zh, file, line
 """
 
 from __future__ import annotations
@@ -46,17 +49,23 @@ def main():
         description="Merge persistent + transient AT-SPI names into expected_names.yaml",
     )
     parser.add_argument("--input", "-i", default="tests/at/spi",
-                        help="Dir with pre_scan_ok.yaml + menu_structure.yaml "
-                             "(default: tests/at/spi)")
+                        help="Dir with menu_structure.yaml (default: tests/at/spi)")
+    parser.add_argument("--scan-dir",
+                        help="Optional dir with fresh pre_scan_ok.yaml "
+                             "(e.g. output/quality_gate_scan). "
+                             "If omitted, reads from <input>/ instead.")
     parser.add_argument("--output", "-o", default=None,
                         help="Target expected_names.yaml path (default: <input>/expected_names.yaml)")
     args = parser.parse_args()
 
     in_dir = Path(args.input)
-    ok_path = in_dir / "pre_scan_ok.yaml"
+    if args.scan_dir:
+        ok_path = Path(args.scan_dir) / "pre_scan_ok.yaml"
+    else:
+        ok_path = in_dir / "pre_scan_ok.yaml"
     menu_path = in_dir / "menu_structure.yaml"
     if not ok_path.is_file():
-        sys.exit(f"Missing {ok_path} — run scan_gaps.py first (Phase 1)")
+        sys.exit(f"Missing {ok_path} — run scan_gaps.py first")
     if not menu_path.is_file():
         sys.exit(f"Missing {menu_path} — run menu_extractor.py first (Phase 5)")
 
@@ -76,12 +85,17 @@ def main():
         })
 
     # Transient: menus / tr()-items from menu_extractor (EN + ZH)
+    # Includes both addAction (leaf items) and addMenu (submenu titles).
+    # Separators are excluded (they have no text).
     menu = load_yaml(menu_path)
     for menu_group in menu.get("menus", []):
         for it in menu_group.get("items", []):
-            if it.get("type") == "addAction" and it.get("text_en"):
+            if it.get("type") == "separator":
+                continue
+            if it.get("text_en"):
                 data["transient_elements"].append({
                     "menu_var": menu_group.get("menu_var", ""),
+                    "type": it.get("type", "addAction"),
                     "text_en": it.get("text_en", ""),
                     "text_zh": it.get("text_zh", ""),
                     "file": it.get("file", ""),

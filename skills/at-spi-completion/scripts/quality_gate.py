@@ -6,6 +6,7 @@ a baseline, and checks coverage threshold, uniqueness, and naming conventions.
 
 Usage:
     python3 quality_gate.py --src <dir> --build <dir> --baseline pre_scan_gaps.yaml
+    python3 quality_gate.py --src <dir> --build <dir> --baseline pre_scan_gaps.yaml --expected-names expected_names.yaml
 """
 
 from __future__ import annotations
@@ -98,15 +99,66 @@ def check_conventions(gaps_file: str) -> list[str]:
     return issues
 
 
+def _load_expected_names(path: str) -> dict[str, set[str]]:
+    """Load expected_names.yaml and extract named widget signatures.
+
+    Returns {"object_names": set, "accessible_names": set, "variables": set}
+    to use as regression baseline: any widget that was previously named
+    must still be named after code changes.
+    """
+    data = _load_yaml_or_json(path)
+    if not data:
+        return {"object_names": set(), "accessible_names": set(), "variables": set()}
+
+    obj_names: set[str] = set()
+    acc_names: set[str] = set()
+    variables: set[str] = set()
+
+    for w in data.get("widgets", []):
+        obj = w.get("object_name", "")
+        if obj:
+            obj_names.add(obj)
+        acc = w.get("accessible_name", "")
+        if acc:
+            acc_names.add(acc)
+        var = w.get("variable", "")
+        if var:
+            variables.add(var)
+
+    return {
+        "object_names": obj_names,
+        "accessible_names": acc_names,
+        "variables": variables,
+    }
+
+
 def run_quality_gate(
     src_dir: str,
     build_dir: str | None = None,
     compile_commands: str | None = None,
     baseline_gaps: str = "pre_scan_gaps.yaml",
+    expected_names: str | None = None,
     threshold: float = 80.0,
     output_dir: str = ".",
 ) -> dict:
     """Run quality gate checks.
+
+    Checks:
+      1. Coverage threshold (%)
+      2. New gaps since baseline (regression from fixes)
+      3. Uniqueness of all objectName/accessibleName
+      4. Naming conventions (PascalCase, English, no special chars)
+      5. Regression against expected_names.yaml (if provided): previously-named
+         widgets must still have names after code changes.
+
+    Args:
+        src_dir: C++ source directory.
+        build_dir: Build directory (for compile_commands.json).
+        compile_commands: Path to compile_commands.json (overrides build_dir).
+        baseline_gaps: Path to pre_scan_gaps.yaml (the "before fix" state).
+        expected_names: Optional path to expected_names.yaml for regression check.
+        threshold: Coverage threshold %% (default: 80).
+        output_dir: Where to write quality_report.json and fresh scan outputs.
 
     Returns:
         Dict with passed, coverage, threshold, and detailed results.
@@ -156,12 +208,29 @@ def run_quality_gate(
     convention_issues = check_conventions(current_gaps_file)
     convention_issues += check_conventions(current_ok_file)
 
+    # Regression check against expected_names.yaml
+    regressions: list[str] = []
+    expected = _load_expected_names(expected_names) if expected_names else None
+    if expected:
+        # Check: previously-named objectNames should still be present
+        current_obj_names: set[str] = set()
+        for w in result.ok_widgets:
+            if w.existing_object_name:
+                current_obj_names.add(w.existing_object_name)
+            if w.existing_accessible_name:
+                current_obj_names.add(w.existing_accessible_name)
+
+        for expected_name in expected["object_names"]:
+            if expected_name not in current_obj_names:
+                regressions.append(f"'{expected_name}' was named but is now missing")
+
     # Determine pass/fail
     coverage_pass = coverage >= threshold
     new_gaps_pass = len(new_gaps) == 0
     uniqueness_pass = len(uniqueness_issues) == 0
     convention_pass = len(convention_issues) == 0
-    passed = coverage_pass and new_gaps_pass and uniqueness_pass and convention_pass
+    regression_pass = len(regressions) == 0
+    passed = coverage_pass and new_gaps_pass and uniqueness_pass and convention_pass and regression_pass
 
     details_parts: list[str] = []
     if not coverage_pass:
@@ -172,6 +241,8 @@ def run_quality_gate(
         details_parts.append(f"{len(uniqueness_issues)} uniqueness issue(s)")
     if not convention_pass:
         details_parts.append(f"{len(convention_issues)} convention issue(s)")
+    if not regression_pass:
+        details_parts.append(f"{len(regressions)} regression(s) from expected_names.yaml")
 
     quality_result = {
         "passed": passed,
@@ -186,6 +257,8 @@ def run_quality_gate(
         "fixed_gap_list": sorted(fixed_gaps),
         "uniqueness_issues": uniqueness_issues,
         "convention_issues": convention_issues,
+        "regressions": regressions,
+        "regression_pass": regression_pass,
         "details": "; ".join(details_parts) if details_parts else "All checks passed",
     }
 
@@ -207,6 +280,8 @@ def main():
     parser.add_argument("--compile-commands", help="Path to compile_commands.json")
     parser.add_argument("--baseline", default="pre_scan_gaps.yaml",
                         help="Baseline gaps YAML (default: pre_scan_gaps.yaml)")
+    parser.add_argument("--expected-names",
+                        help="expected_names.yaml path for regression check")
     parser.add_argument("--threshold", type=float, default=80.0,
                         help="Coverage threshold %% (default: 80)")
     parser.add_argument("--output", "-o", default=".",
@@ -218,6 +293,7 @@ def main():
         build_dir=args.build,
         compile_commands=args.compile_commands,
         baseline_gaps=args.baseline,
+        expected_names=args.expected_names,
         threshold=args.threshold,
         output_dir=args.output,
     )
@@ -230,6 +306,11 @@ def main():
     print(f"  Fixed gaps: {quality_result['fixed_gaps']}")
     print(f"  New gaps: {quality_result['new_gaps']}")
     print(f"  Details: {quality_result['details']}")
+
+    if quality_result.get("regressions"):
+        print(f"\n  Regressions ({len(quality_result['regressions'])}):")
+        for r in quality_result["regressions"][:10]:
+            print(f"    - {r}")
 
     if quality_result["uniqueness_issues"]:
         print(f"\n  Uniqueness issues ({len(quality_result['uniqueness_issues'])}):")

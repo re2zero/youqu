@@ -166,6 +166,8 @@ class TypeDatabase:
                 break
             matched = False
             for cls_name, info in classes.items():
+                if len(cls_name) < 4:
+                    continue
                 if current.endswith(cls_name):
                     cat = info.get("category", "unknown")
                     if cat != "unknown":
@@ -1077,6 +1079,10 @@ def scan_source(
             still_gaps.append(g)
     all_gaps = still_gaps
 
+    # Sort for deterministic output order (stable dedup suffixes in naming.py)
+    all_ok.sort(key=lambda w: (w.source_file, w.line, w.variable))
+    all_gaps.sort(key=lambda w: (w.source_file, w.line, w.variable))
+
     result = ScanResult(
         source_dir=src_dir,
         total_files=total,
@@ -1220,7 +1226,15 @@ def main():
         output_dir=args.output,
     )
 
-    return 0 if result.failed_files < result.total_files else 1
+    failure_rate = result.failed_files / result.total_files * 100 if result.total_files else 0
+    if failure_rate > 20:
+        logger.error("Parsing failed for %.0f%% of files (%d/%d)",
+                      failure_rate, result.failed_files, result.total_files)
+        return 2
+    if result.failed_files > 0:
+        logger.warning("Parsing failed for %d/%d files (%.0f%%)",
+                       result.failed_files, result.total_files, failure_rate)
+    return 0 if result.parsed_files > 0 else 1
 
 
 if __name__ == "__main__":

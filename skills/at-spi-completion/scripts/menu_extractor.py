@@ -185,14 +185,58 @@ def _translate_text(cursor) -> str:
     return real[1] if len(real) >= 2 else ""
 
 
-def _string_literal(cursor) -> str:
-    """First string literal in cursor subtree.
+def _has_tr_call(child_cursor) -> str | None:
+    """If child_cursor's subtree contains a tr() call, return its string literal.
 
-    Special-cases translate(ctx, TEXT) calls: the first string is the context
-    (not display text), so it is skipped and the 2nd arg is resolved instead.
-    For tr("Copy") the text is the 1st string — unaffected.
+    Handles both resolved (CALL_EXPR spelling='tr') and unresolved
+    (OVERLOADED_DECL_REF 'tr' inside UNEXPOSED_EXPR) forms.
     """
-    # if this subtree contains a translate(...) call, resolve its 2nd arg
+    try:
+        for c in child_cursor.walk_preorder():
+            # Pattern A: fully resolved — CALL_EXPR with spelling="tr"
+            if c.kind == CursorKind.CALL_EXPR and c.spelling == "tr":
+                for sib in c.get_children():
+                    if sib.kind == CursorKind.STRING_LITERAL:
+                        t = sib.spelling.strip('"')
+                        if t:
+                            return t
+            # Pattern B: unresolved/incomplete type —
+            # OVERLOADED_DECL_REF "tr" with STRING_LITERAL sibling
+            if c.kind == CursorKind.OVERLOADED_DECL_REF and c.spelling == "tr":
+                # The STRING_LITERAL is a sibling at the same level
+                # as the tr() reference, not nested inside it.
+                # Collect all strings in this subtree and return the first.
+                for gc in child_cursor.walk_preorder():
+                    if gc.kind == CursorKind.STRING_LITERAL:
+                        t = gc.spelling.strip('"')
+                        if t:
+                            return t
+    except Exception:
+        pass
+    return None
+
+
+def _get_first_nested_string(child_cursor) -> str | None:
+    """Return the first string literal nested in child_cursor, or None."""
+    try:
+        for gc in child_cursor.walk_preorder():
+            if gc.kind == CursorKind.STRING_LITERAL:
+                t = gc.spelling.strip('"')
+                if t:
+                    return t
+    except Exception:
+        pass
+    return None
+
+
+def _string_literal(cursor) -> str:
+    """Extract display text from a CALL_EXPR (e.g. addAction).
+
+    Strategy: iterate through each direct child (each argument to the call).
+    Return the first string argument that is wrapped in tr(), or the first
+    plain-string argument.  Never returns an icon path or other non-text arg.
+    """
+    # Priority 1: translate(ctx, TEXT) — resolve its 2nd arg
     try:
         for c in cursor.walk_preorder():
             if c.kind == CursorKind.CALL_EXPR and (c.spelling or "").endswith("translate"):
@@ -201,28 +245,29 @@ def _string_literal(cursor) -> str:
                     return t
     except Exception:
         pass
-    found: list[str] = []
+
+    # Priority 2: for each direct child (argument position), check for tr() text.
+    # Return the FIRST argument that contains tr() — this is the display text,
+    # regardless of argument position.
+    for child in cursor.get_children():
+        t = _has_tr_call(child)
+        if t:
+            return t
+
+    # Priority 3: first direct-child STRING_LITERAL (plain string argument)
     for c in cursor.get_children():
         if c.kind == CursorKind.STRING_LITERAL:
-            found.append(c.spelling.strip('"'))
-            continue
-        # nested: tr(...) inside call args (e.g. addAction(tr("Copy"), ...))
-        try:
-            for gc in c.walk_preorder():
-                if gc.kind == CursorKind.STRING_LITERAL and gc != c:
-                    found.append(gc.spelling.strip('"'))
-        except Exception:
-            pass
-    if not found:
-        # deep fallback: any string literal in the whole subtree
-        for c in cursor.walk_preorder():
-            try:
-                if c.kind == CursorKind.STRING_LITERAL:
-                    return c.spelling.strip('"')
-            except Exception:
-                pass
-        return ""
-    return found[-1]
+            t = c.spelling.strip('"')
+            if t:
+                return t
+
+    # Priority 4: first nested string in first child (fallback)
+    for c in cursor.get_children():
+        t = _get_first_nested_string(c)
+        if t:
+            return t
+
+    return ""
 
 
 def _has_string_literal(cursor) -> bool:
@@ -338,16 +383,32 @@ def _scan_file_menus(tu, src_name: str) -> list[MenuItem]:
 
 
 def translate_item(it: MenuItem, ts_by_line: dict) -> str:
-    """Look up Chinese translation for a menu item via (file, line) + text check."""
+    """Look up Chinese translation for a menu item via (file, line) + text check.
+
+    Matching strategy (in order):
+      1. Exact (file, line) match.
+      2. Path-suffix match: item.file ends with ts filename, same line + source text.
+      3. Same line + same source text (last resort, cross-file collision possible).
+    """
     if not it.text_en or not it.line:
         return ""
+
+    # 1. Exact match
     hit = ts_by_line.get((it.file, it.line))
     if hit and hit[0] == it.text_en:
         return hit[1]
-    # Fallback: same line but different file prefix (src/ vs main/ vs views/)
+
+    # 2. Path-suffix match: item.file="src/views/w.cpp", ts key fn="views/w.cpp" → ends with
+    for (fn, ln), (src_en, trans) in ts_by_line.items():
+        if ln == it.line and src_en == it.text_en:
+            if fn.endswith(it.file) or it.file.endswith(fn):
+                return trans
+
+    # 3. Last resort: same line + same text (cross-file collision possible)
     for (fn, ln), (src_en, trans) in ts_by_line.items():
         if ln == it.line and src_en == it.text_en:
             return trans
+
     return ""
 
 
@@ -360,7 +421,7 @@ def main():
     parser = argparse.ArgumentParser(
         description="Extract transient menu structure (EN+ZH) from C++ Qt/DTK source",
     )
-    parser.add_argument("--src", required=True, help="Source directory")
+    parser.add_argument("--src", required=True, help="Source directory (must be repo root)")
     parser.add_argument("--compile-commands", required=True,
                         help="Path to compile_commands.json")
     parser.add_argument("--ts-dir", help="Translations directory containing .ts files")
