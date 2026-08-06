@@ -104,6 +104,40 @@ def main():
         "--verbose", action="store_true", help="Show action and assertion details"
     )
 
+    # youqu multica-agent
+    p_ma = sub.add_parser("multica-agent", help="Multica 智能体: 自动生成 AT-SPI YAML 测试套件")
+    ma_sub = p_ma.add_subparsers(dest="ma_command")
+
+    # multica-agent pipeline（默认子命令）
+    p_ma_pipeline = ma_sub.add_parser("pipeline",
+        help="完整管线: scan → dump+merge → parse → generate → run")
+    p_ma_pipeline.add_argument("--app", required=True, help="应用名 (AT-SPI 名称, 如 deepin-music)")
+    p_ma_pipeline.add_argument("--binary", default="", help="应用二进制路径 (默认同 --app)")
+    p_ma_pipeline.add_argument("--package", default="", help="应用包名 (默认同 --app)")
+    p_ma_pipeline.add_argument("--src", default="", help="应用源码目录 (Clang 静态扫描用)")
+    p_ma_pipeline.add_argument("--cases", default="", help="测试用例 xlsx/csv 文件路径")
+    p_ma_pipeline.add_argument("--issue-id", default="", help="Multica issue ID")
+    p_ma_pipeline.add_argument("--report-interval", type=int, default=300, help="心跳报告间隔(秒)")
+    p_ma_pipeline.add_argument("--skip-scan", action="store_true", help="跳过源码扫描")
+    p_ma_pipeline.add_argument("--skip-run", action="store_true", help="跳过执行阶段")
+
+    # multica-agent scan
+    p_ma_scan = ma_sub.add_parser("scan", help="仅扫描源码（Clang 静态分析）")
+    p_ma_scan.add_argument("--app", required=True, help="应用名")
+    p_ma_scan.add_argument("--src", required=True, help="应用源码目录")
+
+    # multica-agent dump（dump 运行时树 + merge 静态类）
+    p_ma_dump = ma_sub.add_parser("dump", help="启动应用 → dump AT-SPI 树 → merge 静态类 → at-tree.yaml")
+    p_ma_dump.add_argument("--app", required=True, help="应用名")
+    p_ma_dump.add_argument("--binary", default="", help="应用二进制路径")
+    p_ma_dump.add_argument("--package", default="", help="应用包名")
+    p_ma_dump.add_argument("--skip-scan", action="store_true", help="跳过扫描（不使用静态类合并）")
+
+    # multica-agent smoke
+    p_ma_smoke = ma_sub.add_parser("smoke", help="执行烟雾测试")
+    p_ma_smoke.add_argument("--app", required=True, help="应用名")
+    p_ma_smoke.add_argument("--modules-dir", default="", help="模块目录（默认 tests/at/yaml/）")
+
     # youqu startproject <name>
     p_sp = sub.add_parser("startproject", help="Create project from template")
     p_sp.add_argument("name", nargs="?", help="Project name (default: youqu)")
@@ -331,6 +365,10 @@ def main():
         from youqu.src.startproject import cli
 
         cli()
+    elif args.command == "multica-agent":
+        from youqu.cli.multica_agent import cmd_multica_agent
+
+        cmd_multica_agent(args)
     elif args.command == "at":
         from youqu.cli.at import (
             cmd_docs,
