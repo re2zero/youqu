@@ -347,8 +347,9 @@ def find_element(dog, attrs, idx=0):
 def _kill_running_app(app_name: str) -> None:
     if not app_name:
         return
+    # 使用 pgrep（无 -f）仅按进程名匹配，避免匹配到命令行参数中包含 app_name 的框架进程自身
     pgrep = subprocess.run(
-        ["pgrep", "-f", re.escape(app_name)],
+        ["pgrep", re.escape(app_name)],
         capture_output=True,
         text=True,
     )

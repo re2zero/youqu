@@ -21,6 +21,7 @@
 - **严禁直接执行 `pytest`**，必须通过 `youqu at run`
 - **严禁输出 `$INSTALL_PASSWORD`** 的值
 - **测试后必须清理环境**
+- **长时间测试必须启用 `--multica-report` 进度报告**，防止 multica 30 分钟超时
 
 ---
 
@@ -42,6 +43,7 @@
 | ISSUE_ID | 是 | — | multica issue ID | `MUL-123` |
 | MODE | 是 | — | 测试模式 | `incremental` / `self-test` / `full-test` |
 | MODULE | 否 | — | 指定模块，映射为 `youqu at run --suite <MODULE>` 过滤 | `播放` |
+| REPORT_INTERVAL | 否 | `300` | multica 心跳报告间隔（秒），默认 5 分钟 | `300` |
 
 如果 `$INSTALL_PASSWORD` 为空，报错并中止：
 ```
@@ -161,17 +163,28 @@ git push origin <BRANCH>
 
 ### 阶段 5：运行测试
 
-根据变更分析结果选择运行范围：
+根据变更分析结果选择运行范围，**必须启用 multica 进度报告**：
 
 ```bash
 # 运行指定模块的套件（增量/自测模式，指定 MODULE 时）
-youqu at run --testdir <PROJECT_ROOT>/<AT_PATH> --suite <MODULE>
+youqu at run --testdir <PROJECT_ROOT>/<AT_PATH> --suite <MODULE> \
+  --multica-report --issue-id <ISSUE_ID> --app <APP_NAME>
 
 # 运行全部套件（全量测试，或未指定 MODULE 时）
-youqu at run --testdir <PROJECT_ROOT>/<AT_PATH>
+youqu at run --testdir <PROJECT_ROOT>/<AT_PATH> \
+  --multica-report --issue-id <ISSUE_ID> --app <APP_NAME>
+
+# 如需自定义心跳间隔（默认 5 分钟）：
+youqu at run --testdir <PROJECT_ROOT>/<AT_PATH> \
+  --multica-report --issue-id <ISSUE_ID> --app <APP_NAME> \
+  --report-interval 300
 ```
 
 也可使用 `-k <keyword>` 按关键词过滤，或 `--tags <tags>` 按标签过滤。
+
+`--multica-report` 会在测试启动时发送开始评论，每完成一个 suite 或每 5 分钟（可配置）发送一条进度评论，测试结束时发送汇总评论。这能防止 multica 因 30 分钟无响应而报告超时失败。
+
+应用版本通过 `dpkg -S <APP_BINARY>` + `apt policy <package>` 自动检测，无需调用 `--version` 参数。
 
 解析终端输出，获取通过/失败/跳过/超时数据。
 
@@ -179,9 +192,9 @@ youqu at run --testdir <PROJECT_ROOT>/<AT_PATH>
 
 ### 阶段 6：清理与报告
 
-1. 清理测试进程：
+1. 清理测试进程（使用 `pkill` 不加 `-f`，仅匹配进程名，避免误杀框架自身）：
 ```bash
-pkill -f "<APP_NAME>" || true
+pkill "<APP_NAME>" || true
 ```
 
 2. 恢复 git 工作区（仅清理非 YAML 临时修改，不回退已 commit 的新增用例）：
@@ -212,7 +225,7 @@ git restore --staged . && git restore .
 ### 3. 安装结果
 - 安装方式: 编译 deb / apt 安装
 - 安装结果: 成功/失败
-- 应用版本: <版本号>
+- 应用版本: <版本号>（通过 `dpkg -S <APP_BINARY>` + `apt policy <package>` 自动检测）
 
 ### 4. 用例覆盖（增量/自测模式）
 - 相关套件: <suite list>
@@ -226,6 +239,7 @@ git restore --staged . && git restore .
 - 跳过: <N>
 - 超时: <N>
 - 通过率: <rate>
+- 进度报告: multica issue <ISSUE_ID> 已自动发送进度评论
 
 ### 6. 结论
 - 代码无影响/代码有影响（增量/自测）

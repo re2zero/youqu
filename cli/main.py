@@ -244,6 +244,15 @@ def main():
     p_at_run.add_argument("--spec-ids", help="Filter by spec IDs (comma-separated)")
     p_at_run.add_argument("--tags", help="Filter by tags (comma-separated)")
     p_at_run.add_argument("--skip-env-check", action="store_true", help="Skip environment checks")
+    # Multica integration (Fix #2)
+    p_at_run.add_argument("--multica-report", action="store_true", default=False,
+                          help="Enable multica batch progress reporting")
+    p_at_run.add_argument("--issue-id", type=str, default="",
+                          help="Multica issue ID (required with --multica-report)")
+    p_at_run.add_argument("--app", type=str, default="",
+                          help="Application name (for version detection)")
+    p_at_run.add_argument("--report-interval", type=int, default=300,
+                          help="Heartbeat interval in seconds (default: 300, i.e. 5 min)")
 
     p_at_validate = at_sub.add_parser(
         "validate", help="Run verification gates on AT pipeline artifacts"

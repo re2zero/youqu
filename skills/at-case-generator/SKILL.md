@@ -451,7 +451,7 @@ The AT pipeline uses `AtSuiteExecutor` in `src/at/executor/`.
 | `youqu at precandidate` | — | --cases, --at-tree, --output, --module-dir |
 | `youqu at validate` | — | --gate (1\|2\|3\|4\|5\|all), --at-tree-annotated, --suite-cases, --cases-mapped, --generate-output, --element-gaps |
 | `youqu at generate` | --cases, --output | --app, --at-tree, --no-assert-gate |
-| `youqu at run` | — | --suite, --testdir, -k, --spec-ids, --tags, --skip-env-check |
+| `youqu at run` | — | --suite, --testdir, -k, --spec-ids, --tags, --skip-env-check, --multica-report, --issue-id, --app, --report-interval |
 | `youqu at smoke` | — | --modules-dir, --module-dir, --skip-env-check |
 | `youqu at verify` | --suite | --spec-id, --skip-env-check |
 

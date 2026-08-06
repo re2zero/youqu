@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 import yaml
 
@@ -144,11 +144,16 @@ def run_tests(
     spec_ids: Optional[str] = None,
     tags: Optional[str] = None,
     skip_env_check: bool = False,
+    on_start: Optional[Callable[[int], None]] = None,
+    on_suite_done: Optional[Callable[[dict], None]] = None,
 ) -> int:
     suite_files = _find_suite_files(test_dir, suite)
     if not suite_files:
         _log.warning("no suite files found in %s", test_dir)
         return 0
+
+    if on_start:
+        on_start(len(suite_files))
 
     total_passed = 0
     total_failed = 0
@@ -176,6 +181,9 @@ def run_tests(
             print(f"    ✗ ERROR: {r.get('error', 'unknown')}", flush=True)
             total_failed += 1
         results.append(r)
+
+        if on_suite_done:
+            on_suite_done(r)
 
     _print_summary(results)
     return 1 if total_failed > 0 else 0

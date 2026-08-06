@@ -630,14 +630,40 @@ def cmd_run(args):
     try:
         from src.at.executor.runner import run_tests
 
-        run_tests(
+        multica_on = getattr(args, "multica_report", False)
+        reporter = None
+        if multica_on:
+            issue_id = getattr(args, "issue_id", "")
+            if not issue_id:
+                print("Error: --issue-id is required when --multica-report is enabled")
+                return
+
+            from cli.multica import MulticaReporter
+
+            reporter = MulticaReporter(
+                issue_id=issue_id,
+                app_name=getattr(args, "app", ""),
+                app_command="",
+                report_interval=getattr(args, "report_interval", 300),
+            )
+
+        exit_code = run_tests(
             test_dir=args.testdir,
             suite=args.suite,
             keyword=args.k,
             spec_ids=args.spec_ids,
             tags=args.tags,
             skip_env_check=args.skip_env_check,
+            on_start=reporter.start if reporter else None,
+            on_suite_done=reporter.on_suite_complete if reporter else None,
         )
+
+        if reporter:
+            if exit_code == 0:
+                reporter.finish(summary="All tests passed")
+            else:
+                reporter.finish(summary="Some tests failed")
+
     except ImportError:
         _not_implemented("run")
 
