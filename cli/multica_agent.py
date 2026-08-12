@@ -643,10 +643,14 @@ def cmd_multica_agent(args) -> None:
         skip_scan = getattr(args, "skip_scan", False)
         if skip_scan:
             agent._scan_result = None
+        elif getattr(args, "src", ""):
+            stats = agent.scan_source()
+            if stats.get("status") == "error":
+                print("错误: 源码扫描失败")
+                sys.exit(1)
         at_tree = agent.dump_and_merge()
         if at_tree:
             print(f"at-tree.yaml: {at_tree}")
-            # 统计节点
             import yaml
             with open(at_tree, encoding="utf-8") as f:
                 data = yaml.safe_load(f)

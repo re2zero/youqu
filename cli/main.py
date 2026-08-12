@@ -132,6 +132,7 @@ def main():
     p_ma_dump.add_argument("--binary", default="", help="应用二进制路径")
     p_ma_dump.add_argument("--package", default="", help="应用包名")
     p_ma_dump.add_argument("--skip-scan", action="store_true", help="跳过扫描（不使用静态类合并）")
+    p_ma_dump.add_argument("--src", default="", help="应用源码目录（Clang 静态扫描用，合并到 at-tree）")
 
     # multica-agent smoke
     p_ma_smoke = ma_sub.add_parser("smoke", help="执行烟雾测试")
