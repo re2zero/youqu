@@ -1,13 +1,13 @@
 ---
 name: at-spi-completion
-description: Use when C++ Qt/DTK widgets lack AT-SPI setAccessibleName() or setObjectName() calls, typically found via libclang AST scan showing coverage <80%, or when accessibility/automation test frameworks fail to locate interactive UI elements
+description: Use when C++ Qt/DTK widgets lack AT-SPI setAccessibleName() or setObjectName() calls, typically found via libclang AST scan showing coverage <80%, or when QML elements lack Accessible.name (scan_qml.py, tokenizer-based, no libclang needed), or when accessibility/automation test frameworks fail to locate interactive UI elements
 ---
 
 # AT-SPI API Completion
 
 ## Overview
 
-Scans C++ Qt/DTK source for missing `setAccessibleName()` / `setObjectName()` calls on interactive widget instances, generates PascalCase names, and guides the LLM to insert the missing calls.
+Scans C++ Qt/DTK source for missing `setAccessibleName()` / `setObjectName()` calls on interactive widget instances, generates PascalCase names, and guides the LLM to insert the missing calls. **QML apps** are covered by a separate path: `scan_qml.py` scans `.qml` files for interactive elements missing the `Accessible.name` attached property and guides insertion of an `Accessible` block (tokenizer-based — no libclang/Qt runtime needed).
 
 **Transient element coverage:** Runtime AT-SPI dumps (dogtail/youqu at dump) cannot see transient menus — context menus, main menus, dropdowns only exist while visible. This skill's `menu_extractor.py` statically recovers them from source (see [Transient Menus](#transient-menus--naming)).
 
@@ -16,21 +16,26 @@ Scans C++ Qt/DTK source for missing `setAccessibleName()` / `setObjectName()` ca
 - Scan output shows widget AT-SPI name coverage < 80%
 - Accessibility tools / YouQu test framework cannot locate UI controls by name
 - "no such node" or "name not found" errors for interactive elements
+- QML app: interactive elements have no `Accessible.name` (scan_qml.py finds them)
 
 **When NOT to use:**
 - Layouts, labels, progress bars, frames — decorative elements don't need names
 - Third-party code you don't own
+- QML: `Text`, `Rectangle`, `Item`, layouts, `MouseArea` — decorative; skip
 
-## Quick Reference
-
-| Phase | Command | Output |
-|-------|---------|--------|
-| **Scan** | `scan_gaps.py --src <dir> --build <dir> --output tests/at/spi/` | `pre_scan_gaps.yaml` + `pre_scan_ok.yaml` |
+> **Core Principle: Only operable + assertion targets need AT-SPI names.**
+> Container types (GroupBox, ScrollArea, Splitter, TabWidget, ToolBar, StatusBar, StackedWidget)
+> are **decorative** — they hold other controls but tests never directly operate or assert on them.
+> Only real interactive controls (buttons, inputs, sliders, menus, lists, tables, trees, tabs)
+> need `setAccessibleName()` / `Accessible.name`. This spans both C++ and QML classification.
+> The skill's scanners (`scan_gaps.py`, `scan_qml.py`) and quality gate enforce this:
+> containers are never reported as gaps, coverage is calculated only over operable+assertion targets.
+| **Scan (QML)** | `scan_qml.py --src <dir> --output tests/at/spi/` | `qml_gaps.yaml` + `qml_ok.yaml` |
 | **Generate** | `naming.py pre_scan_gaps.yaml -o map.txt` | `name_map.txt` (with source_file:line info) |
-| **Apply** | LLM inserts calls in constructor | Modified `.cpp` files |
-| **Validate** | `quality_gate.py --src <dir> --build <dir> --baseline pre_scan_gaps.yaml --expected-names expected_names.yaml` | `quality_report.json` + `quality_gate_scan/` |
+| **Apply** | LLM inserts calls in constructor / `Accessible` block | Modified `.cpp` / `.qml` files |
+| **Validate** | `quality_gate.py --src <dir> --build <dir> --baseline pre_scan_gaps.yaml --qml-baseline qml_gaps.yaml --expected-names expected_names.yaml` | `quality_report.json` + `quality_gate_scan/` |
 | **Transient** | `menu_extractor.py --src <dir> --compile-commands <cc> --ts-dir <td> --ts-lang zh_CN` | `menu_structure.yaml` |
-| **Merge** | `merge_names.py --input tests/at/spi --scan-dir tests/at/spi/quality_gate_scan` | `expected_names.yaml` ✅ |
+| **Merge** | `merge_names.py --input tests/at/spi --scan-dir tests/at/spi/quality_gate_scan --qml-dir tests/at/spi` | `expected_names.yaml` ✅ |
 
 ## Name Generation Priority
 
@@ -177,6 +182,106 @@ python3 scripts/quality_gate.py --src /path/to/repo/root --build /path/to/build 
 The fresh scan results are written to `<output>/quality_gate_scan/`. These are
 used in Phase 6 to build the updated `expected_names.yaml`.
 
+### Phase 4.5 — QML Apps: Scan + Apply (Accessible attached property)
+
+QML controls expose AT-SPI via the **`Accessible` attached property**, not
+`setObjectName()`/`setAccessibleName()`. `scan_qml.py` handles this with a
+lightweight tokenizer + scope-stack parser — **no libclang / Qt runtime
+required** (pure Python stdlib + PyYAML).
+
+```bash
+python3 scripts/scan_qml.py --src /path/to/repo/root --output tests/at/spi/
+```
+
+Output (same pipeline shape as the C++ scan):
+- `qml_ok.yaml` — interactive elements that already set `Accessible.name`
+- `qml_gaps.yaml` — interactive elements missing it, each with `suggested_name`
+- `qml_report.json` — summary
+
+#### QML element classification
+
+| Category | Types | Gate behavior |
+|----------|-------|---------------|
+| Interactive | `Button`, `TextField`, `TextArea`, `ComboBox`, `SpinBox`, `Slider`, `Switch`, `CheckBox`, `RadioButton`, `TabBar`/`TabButton`, `Menu`/`MenuItem`, `ListView`/`GridView`/`TreeView`/`TableView`, delegates (`ItemDelegate`, `CheckDelegate`, …), DTK QML (`DButton`, `DTextField`, …) | **MUST have `Accessible.name`** → gap if missing |
+| Decorative | `Text`, `Label`, `Rectangle`, `Item`, layouts, `MouseArea`, `Flickable`, `ScrollView` | Only reported if explicitly named; never a gap |
+| Structural | `State`, `Transition`, `Binding`, `Connections`, `Component`, `Repeater`, `Loader`, `Timer`, `Action`, `Shortcut` | Skipped entirely |
+| Custom | `MyWidget { … }` matching a `<Name>.qml` file in the tree | Treated as interactive |
+
+Custom components referenced but defined outside the scanned tree are skipped
+(unknown type). Run the scan with `--src` at the repo root so custom
+components resolve.
+
+#### Fix pattern (what to insert)
+
+```qml
+// GAP — no Accessible
+Button {
+    id: saveButton
+    text: qsTr("Save")
+    onClicked: save()
+}
+
+// FIXED — Accessible block with name + role
+Button {
+    id: saveButton
+    text: qsTr("Save")
+    onClicked: save()
+
+    Accessible.name: "SaveButton"
+    Accessible.role: Accessible.Button
+    Accessible.description: "Save current document"   // optional
+}
+```
+
+The dotted form works too:
+
+```qml
+TextField {
+    id: nameInput
+    Accessible.name: "NameInput"
+    Accessible.role: Accessible.EditableText
+}
+```
+
+#### Suggested names (qml_gaps.yaml `suggested_name`)
+
+Priority: `id` → display `text`/`title`/`placeholderText`/`label` →
+`objectName` → `ParentType_Type` → `FileStem_Type` → `Unnamed<Role>`.
+Names are deduped project-wide (`_2`/`_3` suffix). Use them verbatim, same as
+the C++ `name_map.txt` discipline.
+
+#### Validation with QML
+
+Pass `--qml-baseline` to quality_gate; it then runs scan_qml.py too and folds
+QML coverage, uniqueness, conventions, and regressions into the gate:
+
+```bash
+python3 scripts/quality_gate.py --src /path/to/repo/root \
+  --baseline tests/at/spi/pre_scan_gaps.yaml \
+  --qml-baseline tests/at/spi/qml_gaps.yaml \
+  --expected-names tests/at/spi/expected_names.yaml \
+  --threshold 80 --output tests/at/spi/
+```
+
+Pure-QML repos (no C++ sources): the C++ gates are skipped automatically;
+pass `--qml-baseline` only.
+
+#### QML gotchas
+
+| Gotcha | Handling |
+|--------|----------|
+| Multi-line `Accessible { name: ... role: ... }` block | ✅ parsed (scope-stack, not line regex) |
+| `Accessible.ignored: true` | Element excluded from AT-SPI → skipped, not a gap |
+| Delegates (`delegate: ItemDelegate { … }`) | Delegates are templates — name the delegate element itself; each instantiation inherits it |
+| `Loader { sourceComponent: … }` | The loaded component's elements are found by scanning the referenced file |
+| Same `id` reused across files | Names deduped project-wide with `_2`/`_3` |
+| Inline JS (`onClicked: { … }`) with braces | JS blocks never confuse the scope stack (only uppercase-element braces open elements) |
+| `Accessible.name` set on a decorative element | Reported as ok (explicit naming is respected) |
+
+**Chinese matching:** same as C++ — test cases match the *translated* label
+(`qsTr` source + `.ts`) at runtime, while `Accessible.name` stays English
+PascalCase. `Accessible.name` is what tests should use as the locator anchor.
+
 ### Phase 5 — Transient Elements: Extract + Translate
 
 Runtime AT-SPI dumps cannot see transient elements — context menus, main menus,
@@ -216,7 +321,8 @@ Extraction coverage (verified on deepin-terminal):
 ### Phase 6 — Merge: Produce `expected_names.yaml`
 
 Merge the **fresh scan** results (Phase 4 output in `quality_gate_scan/`) with
-transient results (Phase 5) into the single regression baseline.
+transient results (Phase 5) into the single regression baseline. For QML
+apps pass `--qml-dir` so `qml_ok.yaml` elements land in `qml_elements`.
 
 ⚠️ **Use `--scan-dir` to point at the fresh scan output**, not the stale Phase 1
 snapshot. This ensures `expected_names.yaml` reflects the actual state after
@@ -226,8 +332,14 @@ all fixes were applied:
 python3 scripts/merge_names.py \
   --input tests/at/spi \
   --scan-dir tests/at/spi/quality_gate_scan \
+  --qml-dir tests/at/spi \              # optional; QML apps
   --output /path/to/target/app/tests/at/spi/expected_names.yaml
 ```
+
+`menu_structure.yaml` (Phase 5) is optional when absent — pure-QML apps may
+have no C++ transient menus. `expected_names.yaml` gains a `qml_elements`
+section; the quality gate's regression check covers both `widgets` and
+`qml_elements`.
 
 **The output MUST be written to the TARGET APP project** (e.g. `deepin-terminal/tests/at/spi/expected_names.yaml`), not to the skill directory.
 
@@ -235,6 +347,7 @@ python3 scripts/merge_names.py \
 the per-phase output files (they are NOT committed):
 ```bash
 rm -f tests/at/spi/pre_scan_*.yaml tests/at/spi/pre_*.json \
+      tests/at/spi/qml_*.yaml tests/at/spi/qml_report.json \
       tests/at/spi/menu_structure.yaml tests/at/spi/name_map.txt \
       tests/at/spi/quality_gate_scan/
 ```
@@ -284,7 +397,6 @@ translations) keep EN-only — this is correct behaviour: they are either not
 translated or managed by the framework.
 
 ## Common Mistakes
-
 | Mistake | Consequence | Fix |
 |---------|-------------|-----|
 | Naming labels/frames/layouts | Noisy results, wasted review | Only interactive widgets need names |
@@ -295,9 +407,12 @@ translated or managed by the framework.
 | Naming collisions | Two widgets share `objectName` | Use `_2`/`_3` suffix or `ClassName_Role` |
 | **Ignoring `_2`/`_3` suffixes** | **Duplicate objectNames pass quality gate** | **Always check uniqueness in both `pre_scan_ok.yaml` AND `pre_scan_gaps.yaml`** |
 | **Parallel sub-agents inventing names** | **Inconsistent naming, missed collisions** | **All sub-agents MUST read the naming map file** |
+| **Using `setAccessibleName()` on QML** | Compile error — QML has no such method | Use the `Accessible` attached property (`Accessible.name` / `Accessible.role`) |
+| **Forgetting `Accessible.role`** | Element exposed but wrong semantic role | Add both `Accessible.name` AND `Accessible.role` |
+| **Naming `Rectangle`/`Text` in QML** | Noise; they're decorative | Only interactive types need `Accessible.name` |
+
 
 ## Red Flags
-
 - **"setObjectName is enough"** — for QWidget subclasses both calls required
 - **"I modified the ui_*.h"** — it's auto-generated; edit the consuming `.cpp`
 - **"Add names to everything"** — decorative elements don't need names
@@ -305,7 +420,10 @@ translated or managed by the framework.
 - **"I'll worry about collisions later"** — fix them now; uniqueness is checked per-file, not per-widget-tree
 - **"Menus are invisible to static scan"** — false: `menu_extractor.py` recovers them from `addAction(tr(...))` + `.ts` files
 - **"translate() first arg is the label"** — first arg is the *context*; display text is the 2nd arg (may be a constexpr constant)
-- **"Intermediate files are final output"** — `pre_scan_gaps.yaml` and `menu_structure.yaml` are intermediate; the **only** deliverable committed is `expected_names.yaml`
+- **"Intermediate files are final output"** — `pre_scan_gaps.yaml`, `qml_gaps.yaml` and `menu_structure.yaml` are intermediate; the **only** deliverable committed is `expected_names.yaml`
+- **"QML is skipped"** — false: `scan_qml.py` covers `.qml` files via the `Accessible` attached property (tokenizer-based, no libclang)
+- **"QML uses setObjectName/setAccessibleName"** — false: QML uses `Accessible.name` / `Accessible.role` attached properties
+
 
 ## Architecture
 
@@ -314,25 +432,26 @@ skills/at-spi-completion/
 ├── SKILL.md                    # This file
 ├── naming_conventions.md       # Full naming rules
 └── scripts/
-    ├── scan_gaps.py            # AST scanner (libclang)
+    ├── scan_gaps.py            # C++ AST scanner (libclang)
+    ├── scan_qml.py             # QML scanner (tokenizer + scope stack, no libclang)
     ├── menu_extractor.py       # Transient menu extractor (EN+ZH via .ts)
     ├── merge_names.py          # Merge → expected_names.yaml regression baseline
     ├── ui_parser.py            # Qt Designer .ui supplement
-    ├── naming.py               # PascalCase name generator
-    ├── quality_gate.py         # Re-scan + baseline compare
+    ├── naming.py               # PascalCase name generator (C++ + QML)
+    ├── quality_gate.py         # Re-scan + baseline compare (C++ + QML)
     └── generate_type_db.py     # Type DB from DTK/Qt headers
 ```
 
 Run `python3 scripts/<name>.py --help` for per-script options.
 
 ## Quality Gate
-
 | Check | Threshold | Description |
 |-------|-----------|-------------|
-| Coverage | ≥ 80% | Interactive widgets with AT-SPI names |
+| Coverage (C++) | ≥ 80% | Interactive widgets with AT-SPI names |
+| Coverage (QML) | ≥ 80% | Interactive QML elements with `Accessible.name` (when `--qml-baseline` given) |
 | New gaps | 0 | Fixes must not introduce new gaps vs baseline |
-| Regression | 0 | Previously-named widgets (from `expected_names.yaml`) still have names |
-| Uniqueness | 0 | No duplicate `objectName` (checked on both `ok` and `gaps` files) |
+| Regression | 0 | Previously-named widgets (from `expected_names.yaml` `widgets` + `qml_elements`) still have names |
+| Uniqueness | 0 | No duplicate `objectName`/`accessible_name` (checked on both `ok` and `gaps` files, C++ + QML) |
 | Conventions | 0 | PascalCase, English, no special chars |
 
 > ⚠️ **Regression check requires `--expected-names`**. On first run (no prior baseline), omit the flag. On subsequent runs, always provide it to prevent backsliding.

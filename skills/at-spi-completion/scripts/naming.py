@@ -207,9 +207,19 @@ if __name__ == "__main__":
         data = json.load(sys.stdin)
 
     instances = data if isinstance(data, list) else data.get("gaps", data.get("widgets", [data]))
-    results = batch_generate(instances)
-    lines = [f"{var:<30} -> {name:<30}  # {src}:{line}" for var, name, src, line in results]
-    output = "\n".join(lines)
+    # QML gaps carry scan-time suggested_name (tokenizer-scoped naming).
+    # Honor it: regenerate only as a fallback when absent.
+    resolved = []
+    for inst in instances:
+        suggested = inst.get("suggested_name", "")
+        if suggested:
+            resolved.append((inst.get("id") or inst.get("variable", ""),
+                             suggested, inst.get("source_file", ""), inst.get("line", 0)))
+        else:
+            resolved.extend(batch_generate([inst]))
+    results = resolved
+    output = "\n".join(f"{var:<30} -> {name:<30}  # {src}:{line}"
+                       for var, name, src, line in results)
 
     if args.output:
         with open(args.output, "w", encoding="utf-8") as f:

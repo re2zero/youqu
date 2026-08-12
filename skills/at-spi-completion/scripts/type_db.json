@@ -697,7 +697,7 @@
       "bases": [
         "QGroupBox"
       ],
-      "category": "interactive",
+      "category": "decorative",
       "root": "QGroupBox"
     },
     "DHBoxWidget": {
@@ -1218,7 +1218,7 @@
       "bases": [
         "QScrollArea"
       ],
-      "category": "interactive",
+      "category": "decorative",
       "root": "QScrollArea"
     },
     "DScrollBar": {
@@ -1388,7 +1388,7 @@
       "bases": [
         "QSplitter"
       ],
-      "category": "interactive",
+      "category": "decorative",
       "root": "QSplitter"
     },
     "DStackWidget": {
@@ -1408,7 +1408,7 @@
       "bases": [
         "QStackedWidget"
       ],
-      "category": "interactive",
+      "category": "decorative",
       "root": "QStackedWidget"
     },
     "DStandardItem": {
@@ -1422,7 +1422,7 @@
       "bases": [
         "QStatusBar"
       ],
-      "category": "interactive",
+      "category": "decorative",
       "root": "QStatusBar"
     },
     "DStyle": {
@@ -1582,7 +1582,7 @@
       "bases": [
         "QTabWidget"
       ],
-      "category": "interactive",
+      "category": "decorative",
       "root": "QTabWidget"
     },
     "DTableView": {
@@ -1720,7 +1720,7 @@
       "bases": [
         "QToolBar"
       ],
-      "category": "interactive",
+      "category": "decorative",
       "root": "QToolBar"
     },
     "DToolBox": {
@@ -2961,7 +2961,7 @@
       "bases": [
         "QWidget"
       ],
-      "category": "interactive",
+      "category": "decorative",
       "root": "QGroupBox"
     },
     "QGroupBoxPrivate": {
@@ -3538,7 +3538,7 @@
       "bases": [
         "QAbstractScrollArea"
       ],
-      "category": "interactive",
+      "category": "decorative",
       "root": "QScrollArea"
     },
     "QScrollAreaPrivate": {
@@ -3653,7 +3653,7 @@
       "bases": [
         "QFrame"
       ],
-      "category": "interactive",
+      "category": "decorative",
       "root": "QSplitter"
     },
     "QSplitterHandle": {
@@ -3687,7 +3687,7 @@
       "bases": [
         "QFrame"
       ],
-      "category": "interactive",
+      "category": "decorative",
       "root": "QStackedWidget"
     },
     "QStackedWidgetPrivate": {
@@ -3697,7 +3697,7 @@
     },
     "QStatusBar": {
       "bases": [],
-      "category": "interactive",
+      "category": "decorative",
       "root": "QStatusBar"
     },
     "QStatusBarPrivate": {
@@ -3972,7 +3972,7 @@
       "bases": [
         "QWidget"
       ],
-      "category": "interactive",
+      "category": "decorative",
       "root": "QTabWidget"
     },
     "QTabWidgetPrivate": {
@@ -4119,7 +4119,7 @@
     },
     "QToolBar": {
       "bases": [],
-      "category": "interactive",
+      "category": "decorative",
       "root": "QToolBar"
     },
     "QToolBarPrivate": {
@@ -4378,15 +4378,22 @@
       "root": ""
     }
   },
-  "generated_at": "2026-08-04T08:46:47.914290+00:00",
+  "generated_at": "2026-08-12T08:11:35.031843+00:00",
   "qt_roots": {
     "decorative": [
       "QDialog",
       "QFrame",
       "QGraphicsView",
+      "QGroupBox",
       "QLabel",
       "QMainWindow",
       "QProgressBar",
+      "QScrollArea",
+      "QSplitter",
+      "QStackedWidget",
+      "QStatusBar",
+      "QTabWidget",
+      "QToolBar",
       "QWidget",
       "QWindow"
     ],
@@ -4402,22 +4409,15 @@
       "QCalendarWidget",
       "QComboBox",
       "QDialogButtonBox",
-      "QGroupBox",
       "QKeySequenceEdit",
       "QLineEdit",
       "QMenu",
       "QMenuBar",
       "QPlainTextEdit",
-      "QScrollArea",
       "QScrollBar",
       "QShortcut",
-      "QSplitter",
-      "QStackedWidget",
-      "QStatusBar",
       "QTabBar",
-      "QTabWidget",
-      "QTextEdit",
-      "QToolBar"
+      "QTextEdit"
     ],
     "layout": [
       "QBoxLayout",

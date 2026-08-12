@@ -49,14 +49,18 @@ def _load_gaps(gaps_file: str) -> list[dict]:
     return data.get("gaps", data.get("widgets", []))
 
 
-def check_uniqueness(gaps_file: str) -> list[str]:
-    """Check for duplicate object names across the project."""
+def check_uniqueness(gaps_file: str, name_field: str = "existing_object_name") -> list[str]:
+    """Check for duplicate object names across the project.
+
+    name_field selects the name key: `existing_object_name` for C++ scan
+    output, `accessible_name` for QML scan output.
+    """
     gaps = _load_gaps(gaps_file)
     issues: list[str] = []
 
     name_counts: dict[str, list[str]] = {}
     for g in gaps:
-        name = g.get("existing_object_name", "")
+        name = g.get(name_field, "")
         if not name:
             continue  # Only check existing names, not variable names
         if name not in name_counts:
@@ -70,13 +74,17 @@ def check_uniqueness(gaps_file: str) -> list[str]:
     return issues
 
 
-def check_conventions(gaps_file: str) -> list[str]:
-    """Check naming convention compliance."""
+def check_conventions(gaps_file: str, name_field: str = "existing_object_name") -> list[str]:
+    """Check naming convention compliance.
+
+    name_field selects the name key (C++ `existing_object_name` /
+    QML `accessible_name`).
+    """
     gaps = _load_gaps(gaps_file)
     issues: list[str] = []
 
     for g in gaps:
-        name = g.get("existing_object_name", "")
+        name = g.get(name_field, "")
         if not name:
             continue  # Gaps have no existing name; skip variable name check
 
@@ -125,6 +133,16 @@ def _load_expected_names(path: str) -> dict[str, set[str]]:
         if var:
             variables.add(var)
 
+    # QML elements carry Accessible.name — regression against the
+    # accessible_names set (object_name does not exist for QML).
+    for e in data.get("qml_elements", []):
+        acc = e.get("accessible_name", "")
+        if acc:
+            acc_names.add(acc)
+        var = e.get("id", "")
+        if var:
+            variables.add(var)
+
     return {
         "object_names": obj_names,
         "accessible_names": acc_names,
@@ -140,6 +158,7 @@ def run_quality_gate(
     expected_names: str | None = None,
     threshold: float = 80.0,
     output_dir: str = ".",
+    qml_baseline: str | None = None,
 ) -> dict:
     """Run quality gate checks.
 
@@ -159,6 +178,8 @@ def run_quality_gate(
         expected_names: Optional path to expected_names.yaml for regression check.
         threshold: Coverage threshold %% (default: 80).
         output_dir: Where to write quality_report.json and fresh scan outputs.
+        qml_baseline: Optional path to qml_gaps.yaml (QML "before fix" state).
+            When given, scan_qml.py also runs and its coverage joins the gate.
 
     Returns:
         Dict with passed, coverage, threshold, and detailed results.
@@ -178,6 +199,12 @@ def run_quality_gate(
         compile_commands=compile_commands,
         output_dir=str(scan_output),
     )
+
+    # Optional QML scan — runs only when a QML baseline is provided.
+    qml_result = None
+    if qml_baseline:
+        from scan_qml import scan_qml_source  # type: ignore
+        qml_result = scan_qml_source(src_dir=src_dir, output_dir=str(scan_output))
 
     total = len(result.widgets)
     ok_count = len(result.ok_widgets)
@@ -201,12 +228,39 @@ def run_quality_gate(
     new_gaps = current_gap_vars - baseline_vars
 
     # Uniqueness check on both gaps and ok files (gaps may be empty at 100% coverage)
+    # Pure-QML repos have no C++ widgets — skip the C++ gates in that case.
+    has_cpp_widgets = total > 0
     current_gaps_file = str(scan_output / "pre_scan_gaps.yaml")
     current_ok_file = str(scan_output / "pre_scan_ok.yaml")
-    uniqueness_issues = check_uniqueness(current_gaps_file)
-    uniqueness_issues += check_uniqueness(current_ok_file)
-    convention_issues = check_conventions(current_gaps_file)
-    convention_issues += check_conventions(current_ok_file)
+    uniqueness_issues = check_uniqueness(current_gaps_file) if has_cpp_widgets else []
+    uniqueness_issues += check_uniqueness(current_ok_file) if has_cpp_widgets else []
+    convention_issues = check_conventions(current_gaps_file) if has_cpp_widgets else []
+    convention_issues += check_conventions(current_ok_file) if has_cpp_widgets else []
+
+
+    # QML checks: uniqueness/conventions on qml_ok.yaml + qml_gaps.yaml,
+    # QML coverage, and QML new-gap regression vs qml_baseline.
+    qml_coverage = None
+    qml_new_gaps: set[str] = set()
+    qml_gap_ids: set[str] = set()
+    if qml_result is not None:
+        qml_ok_file = str(scan_output / "qml_ok.yaml")
+        qml_gaps_file = str(scan_output / "qml_gaps.yaml")
+        uniqueness_issues += check_uniqueness(qml_ok_file, name_field="accessible_name")
+        uniqueness_issues += check_uniqueness(qml_gaps_file, name_field="accessible_name")
+        convention_issues += check_conventions(qml_ok_file, name_field="accessible_name")
+        convention_issues += check_conventions(qml_gaps_file, name_field="accessible_name")
+
+        q_total = len(qml_result.ok_elements) + len(qml_result.gap_elements)
+        q_ok = len(qml_result.ok_elements)
+        qml_coverage = (q_ok / q_total * 100) if q_total else 0.0
+        qml_gap_ids = {f"{g.source_file}:{g.line}:{g.element_type}"
+                       for g in qml_result.gap_elements}
+
+        baseline = _load_gaps(qml_baseline or "")
+        baseline_qml_ids = {f"{g.get('source_file', '')}:{g.get('line', 0)}:{g.get('element_type', '')}"
+                            for g in baseline}
+        qml_new_gaps = qml_gap_ids - baseline_qml_ids
 
     # Regression check against expected_names.yaml
     regressions: list[str] = []
@@ -224,19 +278,37 @@ def run_quality_gate(
             if expected_name not in current_obj_names:
                 regressions.append(f"'{expected_name}' was named but is now missing")
 
+        # QML regression: previously-named Accessible.name still present
+        if qml_result is not None:
+            current_acc_names = {e.accessible_name for e in qml_result.ok_elements
+                                 if e.accessible_name}
+            for expected_name in expected["accessible_names"]:
+                if expected_name not in current_acc_names:
+                    regressions.append(f"QML '{expected_name}' was named but is now missing")
+
+
     # Determine pass/fail
-    coverage_pass = coverage >= threshold
-    new_gaps_pass = len(new_gaps) == 0
+    # Pure-QML repos: C++ gates skipped (no C++ widgets to measure).
+    coverage_pass = (not has_cpp_widgets) or coverage >= threshold
+    new_gaps_pass = (not has_cpp_widgets) or len(new_gaps) == 0
+    qml_coverage_pass = qml_coverage is None or qml_coverage >= threshold
+    qml_new_gaps_pass = len(qml_new_gaps) == 0
     uniqueness_pass = len(uniqueness_issues) == 0
     convention_pass = len(convention_issues) == 0
     regression_pass = len(regressions) == 0
-    passed = coverage_pass and new_gaps_pass and uniqueness_pass and convention_pass and regression_pass
+    passed = (coverage_pass and new_gaps_pass and qml_coverage_pass
+              and qml_new_gaps_pass and uniqueness_pass
+              and convention_pass and regression_pass)
 
     details_parts: list[str] = []
     if not coverage_pass:
         details_parts.append(f"Coverage {coverage:.1f}% < threshold {threshold:.0f}%")
     if not new_gaps_pass:
         details_parts.append(f"{len(new_gaps)} new gap(s) introduced")
+    if not qml_coverage_pass:
+        details_parts.append(f"QML coverage {qml_coverage:.1f}% < threshold {threshold:.0f}%")
+    if not qml_new_gaps_pass:
+        details_parts.append(f"{len(qml_new_gaps)} new QML gap(s) introduced")
     if not uniqueness_pass:
         details_parts.append(f"{len(uniqueness_issues)} uniqueness issue(s)")
     if not convention_pass:
@@ -255,6 +327,8 @@ def run_quality_gate(
         "fixed_gaps": len(fixed_gaps),
         "new_gap_list": sorted(new_gaps),
         "fixed_gap_list": sorted(fixed_gaps),
+        "qml_coverage": round(qml_coverage, 1) if qml_coverage is not None else None,
+        "qml_new_gaps": sorted(qml_new_gaps),
         "uniqueness_issues": uniqueness_issues,
         "convention_issues": convention_issues,
         "regressions": regressions,
@@ -280,6 +354,9 @@ def main():
     parser.add_argument("--compile-commands", help="Path to compile_commands.json")
     parser.add_argument("--baseline", default="pre_scan_gaps.yaml",
                         help="Baseline gaps YAML (default: pre_scan_gaps.yaml)")
+    parser.add_argument("--qml-baseline",
+                        help="QML baseline gaps YAML (qml_gaps.yaml). When given, "
+                             "scan_qml.py also runs and its coverage joins the gate.")
     parser.add_argument("--expected-names",
                         help="expected_names.yaml path for regression check")
     parser.add_argument("--threshold", type=float, default=80.0,
@@ -296,16 +373,21 @@ def main():
         expected_names=args.expected_names,
         threshold=args.threshold,
         output_dir=args.output,
+        qml_baseline=args.qml_baseline,
     )
 
     print(f"\nQuality Gate: {'PASS' if quality_result['passed'] else 'FAIL'}")
-    print(f"  Coverage: {quality_result['coverage']:.1f}% (threshold: {quality_result['threshold']:.0f}%)")
     print(f"  Total: {quality_result['total_widgets']} widgets")
     print(f"  With names: {quality_result['with_names']}")
     print(f"  Missing names: {quality_result['missing_names']}")
     print(f"  Fixed gaps: {quality_result['fixed_gaps']}")
     print(f"  New gaps: {quality_result['new_gaps']}")
+    qml_cov = quality_result.get("qml_coverage")
+    if qml_cov is not None:
+        print(f"  QML coverage: {qml_cov:.1f}% (threshold: {quality_result['threshold']:.0f}%)")
+        print(f"  QML new gaps: {len(quality_result['qml_new_gaps'])}")
     print(f"  Details: {quality_result['details']}")
+
 
     if quality_result.get("regressions"):
         print(f"\n  Regressions ({len(quality_result['regressions'])}):")

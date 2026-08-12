@@ -201,17 +201,18 @@ class TypeDatabase:
             "QSlider", "QSpinBox", "QDoubleSpinBox", "QScrollBar",
             "QListWidget", "QTreeWidget", "QTableWidget",
             "QListView", "QTreeView", "QTableView",
-            "QTabWidget", "QTabBar", "QGroupBox", "QScrollArea",
-            "QSplitter", "QKeySequenceEdit",
-            "QMenu", "QMenuBar", "QToolBar", "QStatusBar",
+            "QTabBar", "QKeySequenceEdit",
+            "QMenu", "QMenuBar",
             "QAction", "QActionGroup", "QShortcut",
-            "QButtonGroup", "QStackedWidget",
+            "QButtonGroup",
             "QDialogButtonBox", "QCalendarWidget", "QFontComboBox",
             "QAbstractItemView", "QAbstractScrollArea",
         })
         _KNOWN_QT_DECORATIVE = frozenset({
             "QWidget", "QMainWindow", "QDialog", "QWindow", "QFrame",
             "QLabel", "QProgressBar", "QGraphicsView",
+            "QGroupBox", "QScrollArea", "QSplitter",
+            "QStackedWidget", "QStatusBar", "QTabWidget", "QToolBar",
         })
         for ancestor in seen:
             if ancestor in _KNOWN_QT_INTERACTIVE:
@@ -219,7 +220,6 @@ class TypeDatabase:
             if ancestor in _KNOWN_QT_DECORATIVE:
                 return "decorative"
         return "unknown"
-
     def is_ui_type(self, type_name: str) -> bool:
         """Check if a type is any known UI type."""
         return self._classify(type_name) != "unknown"
@@ -335,12 +335,10 @@ _INTERACTIVE_CLASSES: frozenset[str] = frozenset({
     "QPushButton", "QToolButton", "QLineEdit", "QTextEdit", "QComboBox",
     "QCheckBox", "QRadioButton", "QSlider", "QSpinBox", "QDoubleSpinBox",
     "QListWidget", "QTreeWidget", "QTableWidget", "QListView", "QTreeView",
-    "QTableView", "QTabWidget", "QTabBar", "QScrollBar",
-    "QGroupBox", "QScrollArea", "QSplitter",
-    "QMenu", "QMenuBar", "QToolBar", "QStatusBar",
-    "QAction", "QActionGroup", "QShortcut",
-    "QButtonGroup", "QStackedWidget",
-    "DAction", "DMenu", "DMenuItem", "DMenuBar", "DStatusBar",
+    "QTableView", "QTabBar", "QScrollBar",
+    "QMenu", "QMenuBar", "QAction", "QActionGroup", "QShortcut",
+    "QButtonGroup", "QDialogButtonBox", "QCalendarWidget", "QKeySequenceEdit",
+    "DAction", "DMenu", "DMenuItem", "DMenuBar",
     "DTabBar", "DListView", "DTreeView",
     "DKeySequenceEdit",
     "DAbstractButton",
@@ -354,8 +352,12 @@ _DECORATIVE_CLASSES: frozenset[str] = frozenset({
     "DFlyoutWidget", "DMessageBox",
     "DFloatingMessage", "DFloatingWidget", "DDrawer",
     "DSegmentedControl",
+    "DGroupBox", "DScrollArea", "DSplitter",
+    "DStackedWidget", "DStatusBar", "DTabWidget", "DToolBar",
     "QLabel", "QProgressBar", "QFrame", "QGraphicsView",
     "QMainWindow", "QWidget", "QDialog", "QWindow",
+    "QGroupBox", "QScrollArea", "QSplitter",
+    "QStackedWidget", "QStatusBar", "QTabWidget", "QToolBar",
 })
 
 

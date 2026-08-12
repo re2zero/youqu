@@ -82,24 +82,16 @@ QT_INTERACTIVE_ROOTS: set[str] = {
     # Item views
     "QAbstractItemView",
     "QAbstractScrollArea",
-    # Tab / stack
+    # Tab bar (not tab widget — tab widget is a container)
     "QTabBar",
-    "QTabWidget",
-    "QStackedWidget",
-    # Menu / toolbar / statusbar
+    # Menu
     "QMenu",
     "QMenuBar",
-    "QToolBar",
-    "QStatusBar",
     # Actions
     "QAction",
     "QActionGroup",
     "QShortcut",
     "QButtonGroup",
-    # Group / split / scroll
-    "QGroupBox",
-    "QSplitter",
-    "QScrollArea",
     # Calendar
     "QCalendarWidget",
     "QDialogButtonBox",
@@ -115,6 +107,14 @@ QT_DECORATIVE_ROOTS: set[str] = {
     "QMainWindow",
     "QDialog",
     "QWindow",
+    # Container types — not interactive, no assertion target
+    "QGroupBox",
+    "QScrollArea",
+    "QSplitter",
+    "QStackedWidget",
+    "QStatusBar",
+    "QTabWidget",
+    "QToolBar",
 }
 
 # DTK override table: classes whose inheritance chain doesn't reveal their true category.
