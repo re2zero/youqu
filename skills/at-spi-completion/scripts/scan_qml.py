@@ -369,7 +369,7 @@ def _collect_value(
     while j < len(tokens):
         k, v, _, _ = tokens[j]
         if depth == 0 and (
-            k == "NEWLINE" or (k == "PUNCT" and v in (";", "}", "]", ",", "(", "{", "["))
+            k == "NEWLINE" or (k == "PUNCT" and v in (";", "}", "]", ",", "{", "["))
         ):
             break
         if k == "PUNCT" and v in ("(", "[", "{"):
@@ -657,6 +657,9 @@ def _parse_qml(content: str, rel_path: str, src_dir: str) -> list[QmlElement]:
                     is_element = True
                     decl_line, decl_col = tokens[k][2], tokens[k][3]
 
+            if len(stack) == 0:
+                # Stack was emptied by stray closing braces; re-seat the root.
+                stack.append(_Scope())
             scope = _Scope(
                 type_name=type_name,
                 is_element=is_element,
@@ -670,10 +673,12 @@ def _parse_qml(content: str, rel_path: str, src_dir: str) -> list[QmlElement]:
             continue
 
         if kind == "PUNCT" and val == "}":
-            scope = stack.pop()
-            elem = _finalize_scope(scope, rel_path, src_dir)
-            if elem is not None:
-                results.append(elem)
+            if len(stack) > 1:
+                scope = stack.pop()
+                elem = _finalize_scope(scope, rel_path, src_dir)
+                if elem is not None:
+                    results.append(elem)
+            # else: stray closing brace or mismatched scope — ignore
             i += 1
             continue
 
@@ -730,8 +735,6 @@ def scan_qml_source(src_dir: str, output_dir: str = ".") -> QmlScanResult:
         if any(part in _SKIP_DIRS for part in p.parts):
             continue
         all_files.append(p)
-    ok_elements = [e for e in all_elements if _is_element_complete(e, src_dir)]
-    gap_elements = [e for e in all_elements if not _is_element_complete(e, src_dir)]
     if not all_files:
         logger.warning("No .qml files found in %s", src_dir)
         return QmlScanResult(source_dir=src_dir)

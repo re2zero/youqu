@@ -826,15 +826,13 @@ def _scan_one_file(
                                         break
                             else:
                                 target_var = ref.spelling if ref else ""
-                        # STRING_LITERAL may be directly in CALL_EXPR children
-                        # or nested inside a constructor like QAnyStringView("CancelButton")
-                        # Use recursive search for robustness
-                        if child.kind == CursorKind.STRING_LITERAL:
-                            name_value = child.spelling.strip('"')
-                        elif child.kind in (CursorKind.CALL_EXPR, CursorKind.CONSTRUCTOR):
-                            lit = _extract_string_literal(child)
-                            if lit:
-                                name_value = lit
+                        # STRING_LITERAL may be directly in CALL_EXPR children,
+                        # or nested inside UNEXPOSED_EXPR (incomplete pointer resolve),
+                        # or inside a constructor like QAnyStringView("CancelButton").
+                        # Use recursive search for robustness across all nesting depths.
+                        lit = _extract_string_literal(child)
+                        if lit:
+                            name_value = lit
 
                 # Handle CALL_EXPR with empty spelling (dependent type, incomplete pointer)
                 # e.g. m_cancelButton->setObjectName("CancelButton") when DPushButton is incomplete
@@ -847,8 +845,11 @@ def _scan_one_file(
                         elif child.kind == CursorKind.STRING_LITERAL:
                             string_lit = child
 
-                    if member_ref and string_lit:
-                        name_value = string_lit.spelling.strip('"')
+                    if member_ref:
+                        # STRING_LITERAL may be nested inside UNEXPOSED_EXPR
+                        lit = _extract_string_literal(cursor)
+                        if lit:
+                            name_value = lit
                         # Extract target variable from MEMBER_REF_EXPR children
                         # May be nested: MEMBER_REF_EXPR -> UNEXPOSED_EXPR -> DECL_REF_EXPR
                         def _extract_target(c):

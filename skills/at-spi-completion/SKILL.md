@@ -32,9 +32,11 @@ Scans C++ Qt/DTK source for missing `setAccessibleName()` / `setObjectName()` ca
 > need `setAccessibleName()` / `Accessible.name` (standard QML types auto-infer role; custom components need explicit `Accessible.role`). This spans both C++ and QML classification.
 > The skill's scanners (`scan_gaps.py`, `scan_qml.py`) and quality gate enforce this:
 > containers are never reported as gaps, coverage is calculated only over operable+assertion targets.
+| **Scan (C++)** | `scan_gaps.py --src <dir> --output tests/at/spi/` | `pre_scan_gaps.yaml` + `ok_widgets.yaml` |
 | **Scan (QML)** | `scan_qml.py --src <dir> --output tests/at/spi/` | `qml_gaps.yaml` + `qml_ok.yaml` |
 | **Generate** | `naming.py pre_scan_gaps.yaml -o map.txt` | `name_map.txt` (with source_file:line info) |
-| **Apply** | LLM inserts calls in constructor / `Accessible` block | Modified `.cpp` / `.qml` files |
+| **Apply (auto)** | `apply_fixes.py pre_scan_gaps.yaml --name-map map.txt --src-dir .` | `apply_fixes_report.json` + modified `.cpp` files |
+| **Apply (LLM)** | LLM inserts calls for unsupported gaps / QML files | Modified `.cpp` / `.qml` files |
 | **Validate** | `quality_gate.py --src <dir> --build <dir> --baseline pre_scan_gaps.yaml --qml-baseline qml_gaps.yaml --expected-names expected_names.yaml` | `quality_report.json` + `quality_gate_scan/` |
 | **Transient** | `menu_extractor.py --src <dir> --compile-commands <cc> --ts-dir <td> --ts-lang zh_CN` | `menu_structure.yaml` |
 | **Merge** | `merge_names.py --input tests/at/spi --scan-dir tests/at/spi/quality_gate_scan --qml-dir tests/at/spi` | `expected_names.yaml` ✅ |
@@ -64,7 +66,13 @@ Full naming rules: [naming_conventions.md](naming_conventions.md) (PascalCase, E
 
 ## Workflow
 
-### Phase 1 — Scan
+> **工作目录约定：** 所有命令默认在 **目标应用仓库根目录** 执行（例如 `deepin-terminal/`），`scripts/` 目录相对于技能路径 `skills/at-spi-completion/`。
+>
+> **输入输出路径约定：** 所有扫描和修复的中间产物统一输出到 `tests/at/spi/` 目录下（在目标应用仓库中创建），最终产物 `expected_names.yaml` 也提交到该目录。
+>
+> **完整流程：** C++ 纯补全走 Phase 1→2→3→5→7→8；QML 纯补全走 Phase 4→5→7→8；混合项目走全流程。
+
+### Phase 1 — Scan (C++ AST)
 
 ```bash
 # Primary: AST-level scan (libclang)
@@ -79,6 +87,8 @@ python3 scripts/ui_parser_merge.sh tests/at/spi/
 
 > ⚠️ `--src` must be the repository root, not `src/` subdirectory. The `.ts` translation files store paths relative to repo root (e.g. `src/views/w.cpp`); menu_extractor matches them by path suffix.
 
+**输出：** `pre_scan_gaps.yaml`（缺失 AT-SPI 调用的控件列表）+ `ok_widgets.yaml`（已有完整命名的控件列表）
+
 ### Phase 2 — Generate Names
 
 ```bash
@@ -91,21 +101,93 @@ python3 scripts/naming.py tests/at/spi/pre_scan_gaps.yaml -o tests/at/spi/name_m
 
 Priority: display text (`tr()`) → variable name (strip `m_`) → `ClassName_Role` → `Unnamed<Role><Counter>`.
 
-> **⚠️ For parallel execution**: Always run naming.py first and save the name_map file (`-o map.txt`). Every sub-agent must read this file and use the exact canonical name, **including `_2`/`_3` suffixes and the `source_file:line` info to disambiguate same-named variables in different files**. Parsing format:
+> **⚠️ 所有后续步骤必须使用 `name_map.txt` 中的规范名称**，包括 `_2`/`_3` 后缀。格式：
 > ```
 > m_okButton     -> OkButton       # src/a.cpp:42
 > m_okButton     -> OkButton_2     # src/b.cpp:15
 > ```
-> The `# {src}:{line}` suffix uniquely identifies which instance each name belongs to.
+> `# {src}:{line}` 后缀用于区分不同文件中同名变量。
 
-### Phase 3 — Apply Fixes (LLM)
+### Phase 3 — Apply Fixes (C++)
+
+Phase 3 分为两步：Phase 3a（自动化脚本）+ Phase 3b（LLM 人工修复）
+
+#### Phase 3a — Automated Apply (`apply_fixes.py`)
+
+**覆盖 80% 常见 C++ 模式**，剩余 20% 交给 Phase 3b LLM 处理。
+
+自动处理以下模式：
+| 模式 | 匹配条件 | 插入位置 |
+|------|---------|---------|
+| 成员指针初始化 | `m_var = new Type(this)` | `new` 表达式下一行 |
+| `Ui_*` 模式 | `ui->setupUi(this)` | `setupUi()` 调用之后 |
+| `addAction(...)` | `->addAction(...)` | `addAction` 调用之后 |
+| `QShortcut` | `new QShortcut(...)` | `new` 表达式之后 |
+| `QAction` 创建 | `new QAction(...)` | `new` 表达式之后 |
+
+**用法：**
+```bash
+# Step 1: 生成规范名称映射
+python3 scripts/naming.py tests/at/spi/pre_scan_gaps.yaml -o tests/at/spi/name_map.txt
+
+# Step 2: 自动修复（--dry-run 预览）
+python3 scripts/apply_fixes.py tests/at/spi/pre_scan_gaps.yaml \
+  --name-map tests/at/spi/name_map.txt --src-dir . --dry-run
+
+# Step 3: 确认无误后执行
+python3 scripts/apply_fixes.py tests/at/spi/pre_scan_gaps.yaml \
+  --name-map tests/at/spi/name_map.txt --src-dir .
+
+# Step 4: 查看报告
+cat apply_fixes_report.json | python3 -m json.tool
+```
+
+**输出：** `apply_fixes_report.json`
+```json
+{
+  "fixed": 42,
+  "unsupported": 5,
+  "skipped": 0,
+  "already_ok": 3,
+  "total": 50,
+  "results": [
+    {"variable": "m_nameEdit", "file": "src/widget.cpp", "status": "fixed", "inserted_lines": 2, "inserted_after_line": 42}
+  ]
+}
+```
+
+**未支持（unsupported）的 gap 交给 Phase 3b LLM 处理：**
+- 找不到插入点（`new` 表达式不在当前文件或 `.cpp` 中）
+- 变量没有在 `name_map.txt` 中对应
+- 特殊的构造函数模式（如 `QMenu *menu = new QMenu(tr("File"), this);` 中 `menu` 变量）
+
+> ⚠️ **Phase 3a 完成后，必须继续执行 Phase 5（重新扫描验证）和 Phase 7（合并生成 expected_names.yaml）**。否则 `expected_names.yaml` 中的名字仍为空值，质量门禁无法正确检测回归。
+>
+> ```bash
+# 补全后立即执行 Phase 5 重新扫描
+python3 scripts/quality_gate.py --src . --build build/ \
+  --baseline tests/at/spi/pre_scan_gaps.yaml \
+  --threshold 80 --output tests/at/spi/
+
+# 然后执行 Phase 7 合并
+python3 scripts/merge_names.py \
+  --input tests/at/spi \
+  --scan-dir tests/at/spi/quality_gate_scan \
+  --output tests/at/spi/expected_names.yaml
+```
+>
+> 验证方法：检查 `expected_names.yaml` 中所有条目的 `object_name` 和 `accessible_name` 字段是否都有非空值。如果仍有空值，说明 re-scan 未正确执行。
+
+#### Phase 3b — Apply Fixes (LLM)
+处理 Phase 3a 自动化脚本无法覆盖的 gap（`apply_fixes_report.json` 中 `status: "unsupported"` 的项）。
 
 **核心原则：增量补全，不修改已有代码。**
 
-1. 打开 `source_file` 定位到 `line` 行附近的 `variable` 声明
-2. 检查该变量附近**是否已有** `setObjectName()` / `setAccessibleName()` 调用
-3. **只补缺的**，已有的**不动**
-4. 不修改任何已有代码——不调缩进、不删空行、不改注释、不碰括号风格
+1. 打开 `source_file` 定位到 `line` 行（`pre_scan_gaps.yaml` 中的行号，指向 `.h` 文件中的 FIELD_DECL）
+2. **注意：`line` 指向 `.h` 文件中的变量声明行，`new` 表达式通常在 `.cpp` 文件中**。到 `.cpp` 文件中搜索 `variable = new Type(...)` 或 `ui->variable = new Type(...)` 或 `ui->setupUi(this)` 作为插入点
+3. 检查插入点附近**是否已有** `setObjectName()` / `setAccessibleName()` 调用
+4. **只补缺的**，已有的**不动**
+5. 不修改任何已有代码——不调缩进、不删空行、不改注释、不碰括号风格
 
 **`pre_scan_gaps.yaml` 中每个 gap 的字段说明：**
 
@@ -117,6 +199,16 @@ Priority: display text (`tr()`) → variable name (strip `m_`) → `ClassName_Ro
 | `type` | 控件类型 | 含 `QAction`/`QShortcut`/`DAction` → 只能补 `setObjectName()` |
 | `variable` | 变量名 | 用于 `name_map.txt` 查找规范名称 |
 | `existing_object_name` | 已有的 `setObjectName("...")` 值 | 已有的话直接复用 |
+
+**插入位置规则：**
+| 模式 | 插入位置 | 调用前缀 |
+|------|---------|---------|
+| 成员指针 `m_var = new Type(this)` | 在 `new` 表达式**之后** | `m_var->` |
+| `Ui_*` 模式 `ui->setupUi(this)` | 在 `setupUi()` 调用**之后** | `ui->variable->` |
+| `addAction(...)` | 在 `addAction` 调用**之后** | `variable->` |
+| `new QShortcut(...)` | 在 `new QShortcut` 表达式**之后** | `variable->` |
+
+**名称来源：** 必须使用 `name_map.txt` 中的规范名称，不能自行发明名称。
 
 #### 增量补全示例
 
@@ -169,82 +261,47 @@ m_newAction->setObjectName("NewWindowAction");           // ← 新增
 > ⚠️ **Only QWidget subclasses have `setAccessibleName()`.** QAction, QShortcut, and other pure-QObject types compile with `setObjectName()` only — adding `setAccessibleName()` to them is a **compile error**. Verify the widget type in `pre_scan_gaps.yaml` (`type` field) before inserting. Common non-widget types: `QAction *`, `QShortcut *`, `QMenu *` (QMenu IS a widget, OK), `DMenu *` (OK).
 >
 > ⚠️ **不要贪多。** 只补 `pre_scan_gaps.yaml` 中列出的 gap。如果一个 gap 同时有 `has_object_name=true` 和 `has_accessible_name=true`，说明它已被修复——跳过。
-
+>
 > ⚠️ **不能修改代码格式。** 不动缩进、空行、注释、括号风格、分号风格、命名风格。只做纯增量插入。
+>
+> ⚠️ **Phase 3b 全部完成后，必须重新扫描并更新 expected_names.yaml**（同 Phase 3a 警告）。执行：
+> ```bash
+> # Phase 5: 重新扫描验证
+> python3 scripts/quality_gate.py --src . --build build/ \
+>   --baseline tests/at/spi/pre_scan_gaps.yaml \
+>   --threshold 80 --output tests/at/spi/
+> 
+> # Phase 7: 合并生成 expected_names.yaml
+> python3 scripts/merge_names.py \
+>   --input tests/at/spi \
+>   --scan-dir tests/at/spi/quality_gate_scan \
+>   --output tests/at/spi/expected_names.yaml
+> ```
+> 验证：`expected_names.yaml` 中所有 `object_name` 和 `accessible_name` 字段必须为非空值。
 
-**插入位置规则：**
-| 模式 | 插入位置 |
-|------|---------|
-| 成员指针 `m_var = new Type(this)` | 在 `new` 表达式**之后**（同一行或下一行缩进） |
-| 值成员 / `Ui_*` 模式 `ui->setupUi(this)` | 在 `setupUi()` 调用**之后** |
-| `addAction(...)` | 在 `addAction` 调用**之后** |
-| `new QShortcut(...)` | 在 `new QShortcut` 表达式**之后** |
+#### Parallel Apply Strategy (for large projects)
 
-**名称来源：** 必须使用 `name_map.txt` 中的规范名称（`# {src}:{line}` 后缀用于去重），不能自行发明名称。
+当 gaps 跨越 20 个以上文件时，使用自动脚本 + 并行子代理：
 
-Re-scan every 2-3 batches to check for regressions.
+1. **生成规范名称映射** — `python3 scripts/naming.py pre_scan_gaps.yaml -o map.txt`
+2. **运行自动化修复** — `python3 scripts/apply_fixes.py pre_scan_gaps.yaml --name-map map.txt --src-dir .`
+3. **重新扫描** — 运行 `scan_gaps.py` 获取更新后的 gap 列表（仅剩 unsupported 的 gap）
+4. **按文件分配残余 gap** — 将无关联的文件组分配给不同的子代理（同一个文件内的 gap 不分给多个代理）
+5. **子代理读取名称映射** — 每个代理必须读取 `map.txt` 并使用精确名称，通过 `# {src}:{line}` 键匹配
+6. **全部完成后重新扫描** — 运行 `scan_gaps.py` 检查命名冲突
+7. **修复残余冲突** — 如果仍有重复名称，使用 `ClassName_Role` 格式（如 `CompactCpuMonitor_DetailButton`、`CpuMonitor_DetailButton`）
 
-### 👥 Parallel Apply Strategy
+### Phase 4 — QML Scan + Apply
 
-When gaps span many files (>20), use parallel sub-agents for efficiency:
-
-1. **Generate authoritative map** — `python3 naming.py gaps.yaml -o map.txt` (produces `source_file:line` disambiguated format)
-2. **Split by file** — assign disjoint file sets to sub-agents (never split gaps within one file)
-3. **Sub-agents read the map** — each agent must read `map.txt` and use exact names from it, keyed by `# {src}:{line}`
-4. **Re-scan after all complete** — run `scan_gaps.py` to check for collisions
-5. **Fix residual collisions** — if any duplicate names remain despite the map, use `ClassName_Role` (e.g., `CompactCpuMonitor_DetailButton`, `CpuMonitor_DetailButton`)
-
-```bash
-# Step 1: Generate canonical name file (with source_file:line disambiguation)
-python3 scripts/naming.py tests/at/spi/pre_scan_gaps.yaml -o tests/at/spi/name_map.txt
-# map.txt format:
-#   m_okButton     -> OkButton       # src/a.cpp:42
-#   m_okButton     -> OkButton_2     # src/b.cpp:15
-
-# Step 2: Sub-agents read and apply from name_map.txt
-
-# Step 3: Validate (with regression check if expected_names.yaml exists)
-python3 scripts/quality_gate.py --src ... --build ... \
-  --baseline tests/at/spi/pre_scan_gaps.yaml \
-  --expected-names tests/at/spi/expected_names.yaml \
-  --threshold 80 --output tests/at/spi/
-```
-
-### Phase 4 — Validate (with regression check)
-
-After applying fixes (Phase 3), validate coverage and check for regressions.
-If a previous `expected_names.yaml` exists (from a prior run), pass it via
-`--expected-names` to detect any backsliding on already-named widgets:
-
-```bash
-python3 scripts/quality_gate.py --src /path/to/repo/root --build /path/to/build \
-  --baseline tests/at/spi/pre_scan_gaps.yaml \
-  --expected-names tests/at/spi/expected_names.yaml \
-  --threshold 80 --output tests/at/spi/
-```
-
-**On first run** (no prior expected_names.yaml), omit `--expected-names`:
-
-```bash
-python3 scripts/quality_gate.py --src /path/to/repo/root --build /path/to/build \
-  --baseline tests/at/spi/pre_scan_gaps.yaml --threshold 80 --output tests/at/spi/
-```
-
-The fresh scan results are written to `<output>/quality_gate_scan/`. These are
-used in Phase 6 to build the updated `expected_names.yaml`.
-
-### Phase 4.5 — QML Apps: Scan + Apply (Accessible attached property)
-
-QML controls expose AT-SPI via the **`Accessible` attached property**, not
-`setObjectName()`/`setAccessibleName()`. `scan_qml.py` handles this with a
-lightweight tokenizer + scope-stack parser — **no libclang / Qt runtime
-required** (pure Python stdlib + PyYAML).
+QML controls expose AT-SPI via the **`Accessible` attached property** (not
+`setObjectName()`/`setAccessibleName()`). Run this phase for QML apps
+or mixed C++/QML projects.
 
 ```bash
 python3 scripts/scan_qml.py --src /path/to/repo/root --output tests/at/spi/
 ```
 
-Output (same pipeline shape as the C++ scan):
+Output:
 - `qml_ok.yaml` — elements that already set required AT-SPI properties (standard types: `Accessible.name`; custom components: `Accessible.name` + `Accessible.role`)
 - `qml_gaps.yaml` — elements missing required AT-SPI properties, each with `suggested_name`
 - `qml_report.json` — summary
@@ -401,7 +458,7 @@ the C++ `name_map.txt` discipline.
 
 #### Validation with QML
 
-Pass `--qml-baseline` to quality_gate; it then runs scan_qml.py too and folds
+Pass `--qml-baseline` to quality_gate (Phase 5) so it runs scan_qml.py and folds
 QML coverage, uniqueness, conventions, and regressions into the gate:
 
 ```bash
@@ -426,12 +483,33 @@ pass `--qml-baseline` only.
 | Same `id` reused across files | Names deduped project-wide with `_2`/`_3` |
 | Inline JS (`onClicked: { … }`) with braces | JS blocks never confuse the scope stack (only uppercase-element braces open elements) |
 | `Accessible.name` / `Accessible.role` set on a decorative element | Reported as ok (explicit naming is respected) |
-**Chinese matching:** same as C++ — test cases match the *translated* label
-(`qsTr` source + `.ts`) at runtime, while `Accessible.name` stays English
-PascalCase. `Accessible.name` is what tests should use as the locator anchor
-(standard types auto-infer role; custom components also need `Accessible.role` for correct semantic role).
+| Chinese matching | Same as C++ — test cases match the *translated* label (`qsTr` source + `.ts`) at runtime, while `Accessible.name` stays English PascalCase |
 
-### Phase 5 — Transient Elements: Extract + Translate
+### Phase 5 — Validate
+
+After applying fixes (Phase 3 for C++, Phase 4 for QML), validate coverage and
+check for regressions. If a previous `expected_names.yaml` exists (from a prior
+run), pass it via `--expected-names` to detect any backsliding on already-named
+widgets:
+
+```bash
+python3 scripts/quality_gate.py --src /path/to/repo/root --build /path/to/build \
+  --baseline tests/at/spi/pre_scan_gaps.yaml \
+  --expected-names tests/at/spi/expected_names.yaml \
+  --threshold 80 --output tests/at/spi/
+```
+
+**On first run** (no prior expected_names.yaml), omit `--expected-names`:
+
+```bash
+python3 scripts/quality_gate.py --src /path/to/repo/root --build /path/to/build \
+  --baseline tests/at/spi/pre_scan_gaps.yaml --threshold 80 --output tests/at/spi/
+```
+
+The fresh scan results are written to `<output>/quality_gate_scan/`. These are
+used in Phase 7 to build the updated `expected_names.yaml`.
+
+### Phase 6 — Transient Elements: Extract + Translate
 
 Runtime AT-SPI dumps cannot see transient elements — context menus, main menus,
 dropdowns, and any `tr()`-labeled widgets only exist while visible or have no
@@ -450,10 +528,8 @@ Output: `menu_structure.yaml` — every menu item with `text_en` (from source `t
 
 > **`text_zh` is mandatory for all `tr()`-sourced elements**, not just menus.
 > The `.ts` file provides the Chinese translation that test cases match against
-> in a Chinese test environment. If a user-visible element has a `tr()` call
-> in its display text, its Chinese translation MUST be resolved via `.ts`.
-> Elements without a `.ts` entry (brand names, DTK-provided translations) keep
-> EN-only — this is correct behaviour for untranslated strings.
+> in a Chinese test environment. Elements without a `.ts` entry (brand names,
+> DTK-provided translations) keep EN-only — this is correct behaviour.
 
 Extraction coverage (verified on deepin-terminal):
 
@@ -467,10 +543,10 @@ Extraction coverage (verified on deepin-terminal):
 | DTK-provided translations | `qApp->translate("TitleBarMenu", ...)` | ✅ EN only (.ts lacks them — correct) |
 | `addAction(existingActionVar)` | `group->addAction(lightThemeAction)` | ⏭ skipped (not a new item) |
 
-### Phase 6 — Merge: Produce `expected_names.yaml`
+### Phase 7 — Merge: Produce `expected_names.yaml`
 
-Merge the **fresh scan** results (Phase 4 output in `quality_gate_scan/`) with
-transient results (Phase 5) into the single regression baseline. For QML
+Merge the **fresh scan** results (Phase 5 output in `quality_gate_scan/`) with
+transient results (Phase 6) into the single regression baseline. For QML
 apps pass `--qml-dir` so `qml_ok.yaml` elements land in `qml_elements`.
 
 ⚠️ **Use `--scan-dir` to point at the fresh scan output**, not the stale Phase 1
@@ -485,10 +561,9 @@ python3 scripts/merge_names.py \
   --output /path/to/target/app/tests/at/spi/expected_names.yaml
 ```
 
-`menu_structure.yaml` (Phase 5) is optional when absent — pure-QML apps may
-have no C++ transient menus. `expected_names.yaml` gains a `qml_elements`
-section; the quality gate's regression check covers both `widgets` and
-`qml_elements`.
+`menu_structure.yaml` (Phase 6) is optional when absent — pure-QML apps may have
+no C++ transient menus. `expected_names.yaml` gains a `qml_elements` section;
+the quality gate's regression check covers both `widgets` and `qml_elements`.
 
 **The output MUST be written to the TARGET APP project** (e.g. `deepin-terminal/tests/at/spi/expected_names.yaml`), not to the skill directory.
 
@@ -501,13 +576,13 @@ rm -f tests/at/spi/pre_scan_*.yaml tests/at/spi/pre_*.json \
       tests/at/spi/quality_gate_scan/
 ```
 
-### Phase 7 — Commit (REQUIRED in the target project)
+### Phase 8 — Commit (REQUIRED in the target project)
 
 Commit `expected_names.yaml` **together with the applied source changes** to the
 **target app repository** (e.g. deepin-terminal, not this skill repo). This is
 the AT-SPI naming contract — consumed by:
 
-- **Quality Gate** (Phase 4, `--expected-names`): detects regressions in future runs
+- **Quality Gate** (Phase 5, `--expected-names`): detects regressions in future runs
 - **AT-SPI case generation** (`youqu at` pipeline): provides element names for test locators
 
 Complete the commit using the commit skill.
@@ -517,33 +592,6 @@ cd /path/to/target/app        # e.g. deepin-terminal
 # Stage: modified .cpp/.h files + tests/at/spi/expected_names.yaml
 git add -A
 git commit
-```
-
-## Transient Elements — Naming
-
-Widgets created via `addAction(tr(...))` lack variable names. Name them
-hierarchically by their role in the UI tree:
-
-| Menu type | Pattern | Example |
-|-----------|---------|--------|
-| Context menu | `ClassName_ContextMenu_ItemText` | `TermWidget_ContextMenu_Copy` |
-| Main menu | `ClassName_MainMenu_ItemText` | `MainWindow_MainMenu_Settings` |
-| Nested | `ClassName_MainMenu_SubMenu_ItemText` | `TermWidget_ContextMenu_Search_Bing` |
-| Dedup | `_2`/`_3` suffix | `TermWidget_ContextMenu_Split_2` |
-
-`ItemText` comes from `text_en` (PascalCase, e.g. `Copy` → `Copy`, `Open in file manager` → `OpenInFileManager`).
-
-**Chinese matching:** Test cases are written in Chinese and run on a Chinese
-environment. The runtime AT-SPI label of a transient element is the *translated*
-text (`text_zh`, e.g. `复制`). **Always match against `text_zh` when writing
-tests**, not the English `text_en`. If a transient element must be locatable by
-objectName, it needs explicit `setObjectName()` in source (same as Phase 3).
-
-**Coverage boundary for `tr()`:** All user-visible strings wrapped in `tr()`
-have a corresponding `.ts` entry. The `menu_extractor.py` script resolves these
-by `(file, line)` match. Strings without a `.ts` entry (brand names, DTK-provided
-translations) keep EN-only — this is correct behaviour: they are either not
-translated or managed by the framework.
 
 ## Common Mistakes
 | Mistake | Consequence | Fix |
@@ -566,14 +614,6 @@ translated or managed by the framework.
 - **"I modified the ui_*.h"** — it's auto-generated; edit the consuming `.cpp`
 - **"Add names to everything"** — decorative elements don't need names
 - **"I'll name it myself, naming.py is just a suggestion"** — always use naming.py output verbatim; it handles deduplication
-- **"I'll worry about collisions later"** — fix them now; uniqueness is checked per-file, not per-widget-tree
-- **"Menus are invisible to static scan"** — false: `menu_extractor.py` recovers them from `addAction(tr(...))` + `.ts` files
-- **"translate() first arg is the label"** — first arg is the *context*; display text is the 2nd arg (may be a constexpr constant)
-- **"Intermediate files are final output"** — `pre_scan_gaps.yaml`, `qml_gaps.yaml` and `menu_structure.yaml` are intermediate; the **only** deliverable committed is `expected_names.yaml`
-- **"QML uses setObjectName/setAccessibleName"** — false: QML uses `Accessible.name` / `Accessible.role` attached properties
-- **"Accessible.name is enough for QML"** — depends on type: standard Qt Quick Controls 2 / DTK types auto-infer role, so name alone is sufficient. Custom components and decorative elements used as interactive (e.g. `Rectangle` delegate) need explicit `Accessible.role`.
-
-
 ## Architecture
 
 ```
@@ -583,19 +623,20 @@ skills/at-spi-completion/
 └── scripts/
     ├── scan_gaps.py            # C++ AST scanner (libclang)
     ├── scan_qml.py             # QML scanner (tokenizer + scope stack, no libclang)
+    ├── naming.py               # PascalCase name generator (C++ + QML)
+    ├── apply_fixes.py          # Automated fix application for C++ gaps
     ├── menu_extractor.py       # Transient menu extractor (EN+ZH via .ts)
     ├── merge_names.py          # Merge → expected_names.yaml regression baseline
     ├── ui_parser.py            # Qt Designer .ui supplement
-    ├── naming.py               # PascalCase name generator (C++ + QML)
     ├── quality_gate.py         # Re-scan + baseline compare (C++ + QML)
     └── generate_type_db.py     # Type DB from DTK/Qt headers
 ```
 
 Run `python3 scripts/<name>.py --help` for per-script options.
-
 ## Quality Gate
 | Check | Threshold | Description |
 |-------|-----------|-------------|
+| Coverage (C++) | ≥ 80% | Interactive C++ widgets with both `setObjectName()` + `setAccessibleName()` |
 | Coverage (QML) | ≥ 80% | Interactive QML elements with `Accessible.name` (role auto-inferred for standard types; custom components also need `Accessible.role`) |
 | Regression | 0 | Previously-named widgets (from `expected_names.yaml` `widgets` + `qml_elements`) still have names |
 | Uniqueness | 0 | No duplicate `objectName`/`accessible_name` (checked on both `ok` and `gaps` files, C++ + QML) |
