@@ -331,6 +331,25 @@ def _is_custom_component(elem_type: str, src_dir: str) -> bool:
     return False
 
 
+
+def _is_element_complete(e: QmlElement, src_dir: str) -> bool:
+    """Check if element has complete AT-SPI exposure.
+
+    - Standard Qt Quick Controls 2 types and DTK QML types have C++ backends
+      that auto-set Accessible.role — only Accessible.name is required.
+    - Custom components (user-defined .qml files) need BOTH name AND role.
+    - Decorative elements only need Accessible.name.
+    """
+    if not e.has_accessible_name:
+        return False
+    # Standard interactive types (Qt Quick Controls 2 + DTK) auto-infer role
+    if _is_interactive_type(e.element_type):
+        return True
+    # Custom components need explicit role
+    if _is_custom_component(e.element_type, src_dir):
+        return e.has_accessible_role
+    return True  # decorative — name is sufficient
+
 # ---------------------------------------------------------------------------
 # Value extraction
 # ---------------------------------------------------------------------------
@@ -711,8 +730,8 @@ def scan_qml_source(src_dir: str, output_dir: str = ".") -> QmlScanResult:
         if any(part in _SKIP_DIRS for part in p.parts):
             continue
         all_files.append(p)
-    all_files.sort()
-
+    ok_elements = [e for e in all_elements if _is_element_complete(e, src_dir)]
+    gap_elements = [e for e in all_elements if not _is_element_complete(e, src_dir)]
     if not all_files:
         logger.warning("No .qml files found in %s", src_dir)
         return QmlScanResult(source_dir=src_dir)
@@ -725,8 +744,8 @@ def scan_qml_source(src_dir: str, output_dir: str = ".") -> QmlScanResult:
             parsed += 1
         all_elements.extend(elements)
 
-    ok_elements = [e for e in all_elements if e.has_accessible_name]
-    gap_elements = [e for e in all_elements if not e.has_accessible_name]
+    ok_elements = [e for e in all_elements if _is_element_complete(e, src_dir)]
+    gap_elements = [e for e in all_elements if not _is_element_complete(e, src_dir)]
 
     # Project-wide name dedup: seed with existing names, then assign gaps.
     existing_names: set[str] = {e.accessible_name for e in ok_elements if e.accessible_name}
@@ -826,7 +845,6 @@ def _write_outputs(result: QmlScanResult, output_dir: str) -> None:
     report_path = out / "qml_report.json"
     report = {
         "version": "1.0",
-        "source": "qml",
         "source_dir": result.source_dir,
         "stats": {
             "total_files": result.total_files,

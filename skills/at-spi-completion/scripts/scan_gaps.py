@@ -344,6 +344,13 @@ _INTERACTIVE_CLASSES: frozenset[str] = frozenset({
     "DAbstractButton",
 })
 
+_NON_WIDGET_INTERACTIVE: frozenset[str] = frozenset({
+    # Pure QObject types — only setObjectName() is available, no setAccessibleName()
+    "QAction", "QActionGroup", "QShortcut",
+    "QButtonGroup",
+    "DAction",
+})
+
 _DECORATIVE_CLASSES: frozenset[str] = frozenset({
     "DLabel", "DTitlebar", "DProgressBar", "DIndeterminateProgressBar",
     "DWaterProgress", "DAlertControl",
@@ -476,6 +483,17 @@ def _is_interactive_type(type_name: str) -> bool:
     if base in _INTERACTIVE_CLASSES:
         return True
     for cls in _INTERACTIVE_CLASSES:
+        if base.endswith(cls):
+            return True
+    return False
+
+
+def _is_non_widget_interactive(type_name: str) -> bool:
+    """Check if a type is interactive but NOT a QWidget (no setAccessibleName())."""
+    base = type_name.replace(" *", "").replace("&", "").split("<")[0].strip()
+    if base in _NON_WIDGET_INTERACTIVE:
+        return True
+    for cls in _NON_WIDGET_INTERACTIVE:
         if base.endswith(cls):
             return True
     return False
@@ -913,9 +931,24 @@ def _scan_one_file(
             continue
 
         if inst.has_object_name or inst.has_accessible_name:
-            ok_widgets_list.append(inst)
+            if is_interactive and not _is_non_widget_interactive(inst.type_name):
+                # QWidget subclass: need BOTH setObjectName() AND setAccessibleName()
+                if inst.has_object_name and inst.has_accessible_name:
+                    ok_widgets_list.append(inst)
+                else:
+                    # Partial: only one of the two exists → still a gap
+                    gap_widgets_list.append(inst)
+            else:
+                # Non-widget interactive (QAction, QShortcut) or decorative — either is sufficient
+                ok_widgets_list.append(inst)
         elif is_interactive:
-            gap_widgets_list.append(inst)
+            if _is_non_widget_interactive(inst.type_name):
+                # Non-widget (QAction, QShortcut): only setObjectName() is needed
+                # Don't report if truly no name — scanner will still list it
+                gap_widgets_list.append(inst)
+            else:
+                # QWidget subclass: needs both
+                gap_widgets_list.append(inst)
 
     return rel_path, ok_widgets_list, gap_widgets_list, all_named_vars, None
 

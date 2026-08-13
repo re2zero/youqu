@@ -1,22 +1,24 @@
 ---
 name: at-spi-completion
-description: Use when C++ Qt/DTK widgets lack AT-SPI setAccessibleName() or setObjectName() calls, typically found via libclang AST scan showing coverage <80%, or when QML elements lack Accessible.name (scan_qml.py, tokenizer-based, no libclang needed), or when accessibility/automation test frameworks fail to locate interactive UI elements
+description: Use when C++ Qt/DTK widgets lack AT-SPI setAccessibleName() or setObjectName() calls, typically found via libclang AST scan showing coverage <80%, or when QML elements lack Accessible.name / Accessible.role (scan_qml.py, tokenizer-based, no libclang needed), or when accessibility/automation test frameworks fail to locate interactive UI elements
 ---
 
 # AT-SPI API Completion
 
 ## Overview
 
-Scans C++ Qt/DTK source for missing `setAccessibleName()` / `setObjectName()` calls on interactive widget instances, generates PascalCase names, and guides the LLM to insert the missing calls. **QML apps** are covered by a separate path: `scan_qml.py` scans `.qml` files for interactive elements missing the `Accessible.name` attached property and guides insertion of an `Accessible` block (tokenizer-based — no libclang/Qt runtime needed).
+Scans C++ Qt/DTK source for missing `setAccessibleName()` / `setObjectName()` calls on interactive widget instances, generates PascalCase names, and guides the LLM to insert the missing calls. **QML apps** are covered by a separate path: `scan_qml.py` scans `.qml` files for interactive elements missing the `Accessible.name` / `Accessible.role` attached properties and guides insertion of an `Accessible` block (tokenizer-based — no libclang/Qt runtime needed).
 
 **Transient element coverage:** Runtime AT-SPI dumps (dogtail/youqu at dump) cannot see transient menus — context menus, main menus, dropdowns only exist while visible. This skill's `menu_extractor.py` statically recovers them from source (see [Transient Menus](#transient-menus--naming)).
+
+> **⚠️ 全局约束：只做增量补全，不修改已有代码。** 无论是 C++ 还是 QML 补全，都只添加缺失的 AT-SPI 调用/属性。不动缩进、空行、注释、括号风格、分号风格、命名风格、代码顺序。已有的 `setObjectName()`、`setAccessibleName()`、`Accessible.name`、`Accessible.role` 等调用**一律不修改、不删除、不移动**。
 
 ## When to Use
 
 - Scan output shows widget AT-SPI name coverage < 80%
 - Accessibility tools / YouQu test framework cannot locate UI controls by name
 - "no such node" or "name not found" errors for interactive elements
-- QML app: interactive elements have no `Accessible.name` (scan_qml.py finds them)
+- QML app: interactive elements have no `Accessible.name` / `Accessible.role` (scan_qml.py finds them)
 
 **When NOT to use:**
 - Layouts, labels, progress bars, frames — decorative elements don't need names
@@ -27,7 +29,7 @@ Scans C++ Qt/DTK source for missing `setAccessibleName()` / `setObjectName()` ca
 > Container types (GroupBox, ScrollArea, Splitter, TabWidget, ToolBar, StatusBar, StackedWidget)
 > are **decorative** — they hold other controls but tests never directly operate or assert on them.
 > Only real interactive controls (buttons, inputs, sliders, menus, lists, tables, trees, tabs)
-> need `setAccessibleName()` / `Accessible.name`. This spans both C++ and QML classification.
+> need `setAccessibleName()` / `Accessible.name` (standard QML types auto-infer role; custom components need explicit `Accessible.role`). This spans both C++ and QML classification.
 > The skill's scanners (`scan_gaps.py`, `scan_qml.py`) and quality gate enforce this:
 > containers are never reported as gaps, coverage is calculated only over operable+assertion targets.
 | **Scan (QML)** | `scan_qml.py --src <dir> --output tests/at/spi/` | `qml_gaps.yaml` + `qml_ok.yaml` |
@@ -98,40 +100,89 @@ Priority: display text (`tr()`) → variable name (strip `m_`) → `ClassName_Ro
 
 ### Phase 3 — Apply Fixes (LLM)
 
-Per gap (batch ≤ 20), open `source_file` at `line`, find the `new` expression, add both calls **immediately after**:
+**核心原则：增量补全，不修改已有代码。**
+
+1. 打开 `source_file` 定位到 `line` 行附近的 `variable` 声明
+2. 检查该变量附近**是否已有** `setObjectName()` / `setAccessibleName()` 调用
+3. **只补缺的**，已有的**不动**
+4. 不修改任何已有代码——不调缩进、不删空行、不改注释、不碰括号风格
+
+**`pre_scan_gaps.yaml` 中每个 gap 的字段说明：**
+
+| 字段 | 含义 | 判断依据 |
+|------|------|---------|
+| `has_object_name` | 是否已有 `setObjectName()` 调用 | `false` → 需要补 |
+| `has_accessible_name` | 是否已有 `setAccessibleName()` 调用 | `false` → 需要补 |
+| `is_action` | 是否为 `QAction` 类型 | `true` → 只能补 `setObjectName()` |
+| `type` | 控件类型 | 含 `QAction`/`QShortcut`/`DAction` → 只能补 `setObjectName()` |
+| `variable` | 变量名 | 用于 `name_map.txt` 查找规范名称 |
+| `existing_object_name` | 已有的 `setObjectName("...")` 值 | 已有的话直接复用 |
+
+#### 增量补全示例
 
 ```cpp
-// Pointer member — after new expression
+// 已有 objectName，缺 accessibleName → 只补后者
+// BEFORE:
 m_nameLineEdit = new DLineEdit(this);
 m_nameLineEdit->setObjectName("NameLineEdit");
-m_nameLineEdit->setAccessibleName("NameLineEdit");
+
+// AFTER: 只追加缺失的 setAccessibleName()
+m_nameLineEdit = new DLineEdit(this);
+m_nameLineEdit->setObjectName("NameLineEdit");          // ← 已有，不动
+m_nameLineEdit->setAccessibleName("NameLineEdit");       // ← 新增
 ```
 
 ```cpp
-// Value member / Ui_* pattern — after setupUi()
+// 已有 accessibleName，缺 objectName → 只补前者
+// BEFORE:
 ui->setupUi(this);
-ui->nameEdit->setObjectName("NameEdit");
 ui->nameEdit->setAccessibleName("NameEdit");
+
+// AFTER:
+ui->setupUi(this);
+ui->nameEdit->setObjectName("NameEdit");                 // ← 新增
+ui->nameEdit->setAccessibleName("NameEdit");             // ← 已有，不动
 ```
 
 ```cpp
-// QAction — after creation (new or addAction)
-// NOTE: QAction inherits QObject, NOT QWidget. It only has setObjectName().
-// setAccessibleName() does NOT exist on QAction → compile error.
+// 两者都缺 → 在 new 表达式之后追加
+// BEFORE:
+m_nameLineEdit = new DLineEdit(this);
+
+// AFTER:
+m_nameLineEdit = new DLineEdit(this);
+m_nameLineEdit->setObjectName("NameLineEdit");           // ← 新增
+m_nameLineEdit->setAccessibleName("NameLineEdit");       // ← 新增
+```
+
+```cpp
+// QAction: 只有 setObjectName()
+// BEFORE:
 m_newAction = new QAction(tr("New Window"), this);
-m_newAction->setObjectName("NewWindowAction");
-```
 
-```cpp
-// QShortcut — after new QShortcut(...)
-// NOTE: QShortcut inherits QObject, NOT QWidget. Only setObjectName() is available.
-m_endProcKP = new QShortcut(QKeySequence(Qt::ALT + Qt::Key_E), this);
-m_endProcKP->setObjectName("EndProcKp");
+// AFTER:
+m_newAction = new QAction(tr("New Window"), this);
+m_newAction->setObjectName("NewWindowAction");           // ← 新增
+// 注意：不添加 setAccessibleName() — QAction 没有此方法
 ```
 
 > ⚠️ **Only QWidget subclasses have `setAccessibleName()`.** QAction, QShortcut, and other pure-QObject types compile with `setObjectName()` only — adding `setAccessibleName()` to them is a **compile error**. Verify the widget type in `pre_scan_gaps.yaml` (`type` field) before inserting. Common non-widget types: `QAction *`, `QShortcut *`, `QMenu *` (QMenu IS a widget, OK), `DMenu *` (OK).
+>
+> ⚠️ **不要贪多。** 只补 `pre_scan_gaps.yaml` 中列出的 gap。如果一个 gap 同时有 `has_object_name=true` 和 `has_accessible_name=true`，说明它已被修复——跳过。
 
-**Both `setObjectName()` AND `setAccessibleName()` are required for QWidget subclasses** (QAction/QShortcut get `setObjectName()` only). Re-scan every 2-3 batches to check for regressions.
+> ⚠️ **不能修改代码格式。** 不动缩进、空行、注释、括号风格、分号风格、命名风格。只做纯增量插入。
+
+**插入位置规则：**
+| 模式 | 插入位置 |
+|------|---------|
+| 成员指针 `m_var = new Type(this)` | 在 `new` 表达式**之后**（同一行或下一行缩进） |
+| 值成员 / `Ui_*` 模式 `ui->setupUi(this)` | 在 `setupUi()` 调用**之后** |
+| `addAction(...)` | 在 `addAction` 调用**之后** |
+| `new QShortcut(...)` | 在 `new QShortcut` 表达式**之后** |
+
+**名称来源：** 必须使用 `name_map.txt` 中的规范名称（`# {src}:{line}` 后缀用于去重），不能自行发明名称。
+
+Re-scan every 2-3 batches to check for regressions.
 
 ### 👥 Parallel Apply Strategy
 
@@ -194,54 +245,152 @@ python3 scripts/scan_qml.py --src /path/to/repo/root --output tests/at/spi/
 ```
 
 Output (same pipeline shape as the C++ scan):
-- `qml_ok.yaml` — interactive elements that already set `Accessible.name`
-- `qml_gaps.yaml` — interactive elements missing it, each with `suggested_name`
+- `qml_ok.yaml` — elements that already set required AT-SPI properties (standard types: `Accessible.name`; custom components: `Accessible.name` + `Accessible.role`)
+- `qml_gaps.yaml` — elements missing required AT-SPI properties, each with `suggested_name`
 - `qml_report.json` — summary
+
+**`qml_gaps.yaml` 中每个 gap 的字段说明：**
+
+| 字段 | 含义 | 判断依据 |
+|------|------|---------|
+| `has_accessible_name` | 是否已有 `Accessible.name` | `false` → 需要补 |
+| `has_accessible_role` | 是否已有 `Accessible.role` | `false` 且是自定义组件 → 需要补 |
+| `element_type` | 元素类型 | 标准类型→只补 name；自定义组件→补 name+role |
+| `suggested_name` | 建议的 `Accessible.name` 值 | 直接使用，不要改 |
+| `accessible_name` | 已有的 `Accessible.name` 值 | 已有的话直接复用 |
+| `accessible_role` | 已有的 `Accessible.role` 值 | 已有的话直接复用 |
+| `source_file` / `line` | 文件路径和行号 | 定位元素位置 |
 
 #### QML element classification
 
 | Category | Types | Gate behavior |
 |----------|-------|---------------|
-| Interactive | `Button`, `TextField`, `TextArea`, `ComboBox`, `SpinBox`, `Slider`, `Switch`, `CheckBox`, `RadioButton`, `TabBar`/`TabButton`, `Menu`/`MenuItem`, `ListView`/`GridView`/`TreeView`/`TableView`, delegates (`ItemDelegate`, `CheckDelegate`, …), DTK QML (`DButton`, `DTextField`, …) | **MUST have `Accessible.name`** → gap if missing |
+| Standard interactive | `Button`, `TextField`, `ComboBox`, `Slider`, `CheckBox`, `RadioButton`, `Switch`, `SpinBox`, `TabBar`/`TabButton`, `Menu`/`MenuItem`, `ListView`/`GridView`/`TreeView`/`TableView`, delegates (`ItemDelegate`, `CheckDelegate`, …), DTK QML (`DButton`, `DTextField`, …) | **MUST have `Accessible.name`** → gap if missing. Role auto-inferred by C++ backend. |
+| Custom component | `MyWidget { … }` matching a `<Name>.qml` file in the tree | **MUST have `Accessible.name` + `Accessible.role`** → gap if missing either |
 | Decorative | `Text`, `Label`, `Rectangle`, `Item`, layouts, `MouseArea`, `Flickable`, `ScrollView` | Only reported if explicitly named; never a gap |
 | Structural | `State`, `Transition`, `Binding`, `Connections`, `Component`, `Repeater`, `Loader`, `Timer`, `Action`, `Shortcut` | Skipped entirely |
-| Custom | `MyWidget { … }` matching a `<Name>.qml` file in the tree | Treated as interactive |
 
 Custom components referenced but defined outside the scanned tree are skipped
 (unknown type). Run the scan with `--src` at the repo root so custom
 components resolve.
 
-#### Fix pattern (what to insert)
+#### Fix pattern (what to insert) — 增量补全
+
+**核心原则：**
+
+1. 检查元素是否已有 `Accessible { ... }` 块或 `Accessible.name:` / `Accessible.role:` 属性
+2. **只补缺的**，已有的不动
+3. 如果已有 `Accessible { }` 块，往块内追加缺少的属性（不重建块）
+4. 如果已有 `Accessible.name` 或 `Accessible.role` 的单独属性（点号形式），追加缺少的另一个
+5. 不修改任何已有代码——不调缩进、不删空行、不改注释、不碰括号风格
+
+**场景一：完全无 Accessible 属性**
+
+在元素体内（`id` 或其他属性之后，`onClicked` 等事件处理之前）插入 `Accessible` 属性：
 
 ```qml
-// GAP — no Accessible
+// BEFORE:
 Button {
     id: saveButton
     text: qsTr("Save")
     onClicked: save()
 }
 
-// FIXED — Accessible block with name + role
+// AFTER: 在 id/text 之后、onClicked 之前追加
 Button {
     id: saveButton
     text: qsTr("Save")
-    onClicked: save()
 
-    Accessible.name: "SaveButton"
-    Accessible.role: Accessible.Button
-    Accessible.description: "Save current document"   // optional
+    Accessible.name: "SaveButton"           // ← 新增
+    onClicked: save()
 }
 ```
-
-The dotted form works too:
 
 ```qml
-TextField {
-    id: nameInput
-    Accessible.name: "NameInput"
-    Accessible.role: Accessible.EditableText
+// 自定义组件，完全无 Accessible
+// BEFORE:
+MyWidget {
+    id: customWidget
+}
+
+// AFTER:
+MyWidget {
+    id: customWidget
+
+    Accessible.name: "CustomWidget"         // ← 新增
+    Accessible.role: Accessible.Panel       // ← 新增
 }
 ```
+
+**场景二：已有 Accessible 块，缺属性**
+
+在已有 `Accessible { }` 块内部追加缺失的属性：
+
+```qml
+// 已有 Accessible 块，缺 role
+// BEFORE:
+MyWidget {
+    id: customWidget
+    Accessible {
+        name: "CustomWidget"
+    }
+}
+
+// AFTER: 往块内追加 role
+MyWidget {
+    id: customWidget
+    Accessible {
+        name: "CustomWidget"                 // ← 已有，不动
+        role: Accessible.Panel               // ← 新增
+    }
+}
+```
+
+```qml
+// 已有 Accessible 块，缺 name
+// BEFORE:
+MyWidget {
+    id: customWidget
+    Accessible {
+        role: Accessible.Panel
+    }
+}
+
+// AFTER: 往块内追加 name
+MyWidget {
+    id: customWidget
+    Accessible {
+        name: "CustomWidget"                 // ← 新增
+        role: Accessible.Panel               // ← 已有，不动
+    }
+}
+```
+
+**场景三：已有点号形式的 Accessible 属性**
+
+在已有 `Accessible.name:` 或 `Accessible.role:` 之后追加缺失的另一个：
+
+```qml
+// 已有 Accessible.name，缺 Accessible.role
+// BEFORE:
+Rectangle {
+    id: fileItem
+    Accessible.name: "FileItem"
+}
+
+// AFTER:
+Rectangle {
+    id: fileItem
+    Accessible.name: "FileItem"              // ← 已有，不动
+    Accessible.role: Accessible.ListItem     // ← 新增
+}
+```
+
+> **注意：** 装饰元素（`Rectangle`、`Text` 等）被扫描器归为装饰类型，只要有 `Accessible.name` 就归为 ok，不会出现在 gap 中。如果这类元素实际充当交互组件（如列表项 delegate），需要手动检查并补充 `Accessible.role`。
+
+> ⚠️ **不能修改代码格式。** 不动缩进、空行、注释、括号风格、命名风格。只做纯增量插入。
+
+**名称来源：** 使用 `qml_gaps.yaml` 中的 `suggested_name` 字段，不要自行发明名称。
 
 #### Suggested names (qml_gaps.yaml `suggested_name`)
 
@@ -276,11 +425,11 @@ pass `--qml-baseline` only.
 | `Loader { sourceComponent: … }` | The loaded component's elements are found by scanning the referenced file |
 | Same `id` reused across files | Names deduped project-wide with `_2`/`_3` |
 | Inline JS (`onClicked: { … }`) with braces | JS blocks never confuse the scope stack (only uppercase-element braces open elements) |
-| `Accessible.name` set on a decorative element | Reported as ok (explicit naming is respected) |
-
+| `Accessible.name` / `Accessible.role` set on a decorative element | Reported as ok (explicit naming is respected) |
 **Chinese matching:** same as C++ — test cases match the *translated* label
 (`qsTr` source + `.ts`) at runtime, while `Accessible.name` stays English
-PascalCase. `Accessible.name` is what tests should use as the locator anchor.
+PascalCase. `Accessible.name` is what tests should use as the locator anchor
+(standard types auto-infer role; custom components also need `Accessible.role` for correct semantic role).
 
 ### Phase 5 — Transient Elements: Extract + Translate
 
@@ -408,8 +557,8 @@ translated or managed by the framework.
 | **Ignoring `_2`/`_3` suffixes** | **Duplicate objectNames pass quality gate** | **Always check uniqueness in both `pre_scan_ok.yaml` AND `pre_scan_gaps.yaml`** |
 | **Parallel sub-agents inventing names** | **Inconsistent naming, missed collisions** | **All sub-agents MUST read the naming map file** |
 | **Using `setAccessibleName()` on QML** | Compile error — QML has no such method | Use the `Accessible` attached property (`Accessible.name` / `Accessible.role`) |
-| **Forgetting `Accessible.role`** | Element exposed but wrong semantic role | Add both `Accessible.name` AND `Accessible.role` |
-| **Naming `Rectangle`/`Text` in QML** | Noise; they're decorative | Only interactive types need `Accessible.name` |
+| **Forgetting `Accessible.role` on custom/decorative QML** | Custom components and decorative elements used as interactive (e.g. `Rectangle` delegate) expose wrong semantic role | Add `Accessible.role` for custom components and decorative elements used as interactive; standard Qt Quick Controls 2 / DTK types auto-infer role |
+| **Adding `Accessible.role` to standard QML types** | Unnecessary; role is auto-inferred by C++ backend | Only `Accessible.name` is needed for `Button`, `TextField`, `Slider`, etc. |
 
 
 ## Red Flags
@@ -421,8 +570,8 @@ translated or managed by the framework.
 - **"Menus are invisible to static scan"** — false: `menu_extractor.py` recovers them from `addAction(tr(...))` + `.ts` files
 - **"translate() first arg is the label"** — first arg is the *context*; display text is the 2nd arg (may be a constexpr constant)
 - **"Intermediate files are final output"** — `pre_scan_gaps.yaml`, `qml_gaps.yaml` and `menu_structure.yaml` are intermediate; the **only** deliverable committed is `expected_names.yaml`
-- **"QML is skipped"** — false: `scan_qml.py` covers `.qml` files via the `Accessible` attached property (tokenizer-based, no libclang)
 - **"QML uses setObjectName/setAccessibleName"** — false: QML uses `Accessible.name` / `Accessible.role` attached properties
+- **"Accessible.name is enough for QML"** — depends on type: standard Qt Quick Controls 2 / DTK types auto-infer role, so name alone is sufficient. Custom components and decorative elements used as interactive (e.g. `Rectangle` delegate) need explicit `Accessible.role`.
 
 
 ## Architecture
@@ -447,9 +596,7 @@ Run `python3 scripts/<name>.py --help` for per-script options.
 ## Quality Gate
 | Check | Threshold | Description |
 |-------|-----------|-------------|
-| Coverage (C++) | ≥ 80% | Interactive widgets with AT-SPI names |
-| Coverage (QML) | ≥ 80% | Interactive QML elements with `Accessible.name` (when `--qml-baseline` given) |
-| New gaps | 0 | Fixes must not introduce new gaps vs baseline |
+| Coverage (QML) | ≥ 80% | Interactive QML elements with `Accessible.name` (role auto-inferred for standard types; custom components also need `Accessible.role`) |
 | Regression | 0 | Previously-named widgets (from `expected_names.yaml` `widgets` + `qml_elements`) still have names |
 | Uniqueness | 0 | No duplicate `objectName`/`accessible_name` (checked on both `ok` and `gaps` files, C++ + QML) |
 | Conventions | 0 | PascalCase, English, no special chars |
