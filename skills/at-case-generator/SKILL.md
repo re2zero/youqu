@@ -1,6 +1,6 @@
 ---
 name: at-case-generator
-version: "0.6.0"
+version: "0.7.0"
 description: >
   Use when generating AT-SPI test suites from xlsx/csv test case documents
   for a Linux desktop application. Triggers: AT用例生成, at-case generation,
@@ -20,6 +20,7 @@ this) are the AI.** Framework provides data tools; you provide understanding.
 - xlsx/csv test case documents for a Linux desktop application
 - Need executable AT-SPI test suites from those documents
 - Input is a PR/issue/requirement and you want to generate cases directly
+- 当请求/环境带有 `auto`、`自动`、`无 record`、`不需要录制`、`multica`、headless/CI 等触发时，使用下方“场景变体：auto / 自动 / 无 record 模式”
 
 ## Pipeline
 
@@ -66,6 +67,41 @@ Step 5: Layered runtime verification (optional)
     youqu at verify --suite <suite.yaml> --spec-id <id>  (L3: single case deep verify)
 ```
 
+## 场景变体：auto / 自动 / 无 record 模式（通用）
+
+**触发条件（满足任一即进入本模式）**：
+
+- 用户/任务描述中出现 `auto`、`自动`、`自动生成`、`无 record`、`不需要录制`、`跳过 record`
+- 调用方是 Multica
+- 环境是 headless / CI / 无人工操作条件
+
+**唯一差异：AT 元树获取不需要人工 `record`。** 其余步骤（AI 标注、用例规范化、
+AI 语义映射、生成、校验、执行）与标准管线完全一致。
+
+```
+标准 AT 元树获取：scan → record（人工操作） → merge
+auto 模式获取：   scan + dump（自动启动应用） + merge
+                 或 scan → scan_to_atree.py（headless 静态合成）
+```
+
+推荐命令：
+
+```bash
+# 有 DISPLAY / 可启动应用时
+youqu at scan --src <src_dir> --app <app> --output scan_output/
+youqu at dump dtk --app <app> --launch <binary> --output dump_output/   # 自动 dump，不需要人工 record
+youqu at merge --scan scan_output/ --record dump_output/ --output .
+
+# 无 DISPLAY / headless 时
+youqu at scan --src <src_dir> --app <app> --output scan_output/
+python3 skills/autogen-at-suites/scripts/scan_to_atree.py scan_output/ <app> at-tree.yaml
+```
+
+之后从 `youqu at tree-info` 开始，按标准管线继续：
+`tree-info → P2.5 AI 标注 → P2.7 AI 规范化 → P3 AI 映射 → generate → validate → run`。
+
+**禁止**：不要因为“自动化”就把 P3 换成脚本/正则映射；AI 语义映射仍然是本技能的核心。
+
 `youqu at map` is **deprecated**. Mapping is done by you (the agent) in Step 3.
 
 ## Step 1: Pre-flight Checks
@@ -97,11 +133,16 @@ the denoise filter (interactive/container). Replaces the old flat `compact_tree.
 
 ### 2c: Acquire at-tree.yaml (if not present)
 
+标准交互模式：
+
 ```bash
 youqu at dump dtk <app_name> --src <source_dir> --output <output_dir>
 ```
 
 Requires desktop environment with target app running.
+
+auto / 自动 / 无 record 模式：使用“场景变体：auto / 自动 / 无 record 模式”中的
+`scan + dump + merge` 或 `scan → scan_to_atree.py`，不需要人工 `record`。
 
 ## Step 2.5: AT Tree Annotation (AI Session)
 

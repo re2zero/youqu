@@ -22,21 +22,61 @@ for i in SystemPath:
         sys.path.append(i.value)
 
 from src.dbus_utils import DbusUtils as DbusUtils
-from src.assert_common import AssertCommon as AssertCommon
 from src.calculate import Calculate as Calculate
 from src.cmdctl import CmdCtl as CmdCtl
-from src.dogtail_utils import DogtailUtils as DogtailUtils
-from src.image_utils import ImageUtils as ImageUtils
-from src.ocr_utils import OCRUtils as OCR
-from src.button_center import ButtonCenter as ButtonCenter
 from src.filectl import FileCtl as FileCtl
 from src.shortcut import ShortCut as ShortCut
-from src.mouse_key import MouseKey as MouseKey
-from src.video_utils import VideoUtils as VideoUtils
-from src.read_csv import ReadCsv as ReadCsv
-from src.pinyin import pinyin as pinyin
 from src.sleepx import sleep as sleep
 from src.custom_exception import *
+
+# ── Lazy display-dependent imports ──
+# These can fail in sandboxed/headless environments (e.g. multica agent).
+# The framework feature they provide (mouse/keyboard simulation) is not
+# needed by headless pipelines like AT-SPI YAML generation.
+try:
+    from src.assert_common import AssertCommon as AssertCommon
+except Exception:
+    AssertCommon = object  # type: ignore
+
+try:
+    from src.dogtail_utils import DogtailUtils as DogtailUtils
+except Exception:
+    DogtailUtils = object  # type: ignore
+
+try:
+    from src.image_utils import ImageUtils as ImageUtils
+except Exception:
+    ImageUtils = object  # type: ignore
+
+try:
+    from src.ocr_utils import OCRUtils as OCR
+except Exception:
+    OCR = object  # type: ignore
+
+try:
+    from src.button_center import ButtonCenter as ButtonCenter
+except Exception:
+    ButtonCenter = object  # type: ignore
+
+try:
+    from src.mouse_key import MouseKey as MouseKey
+except Exception:
+    MouseKey = object  # type: ignore
+
+try:
+    from src.video_utils import VideoUtils as VideoUtils
+except Exception:
+    VideoUtils = object  # type: ignore
+
+try:
+    from src.read_csv import ReadCsv as ReadCsv
+except Exception:
+    ReadCsv = object  # type: ignore
+
+try:
+    from src.pinyin import pinyin as pinyin
+except Exception:
+    pinyin = object  # type: ignore
 
 try:
     from src.vlm.config import VLMConfig as VLMConfig

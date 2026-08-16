@@ -5,16 +5,18 @@
 
 """Multica 智能体 — 自动生成 AT-SPI YAML 测试用例。
 
-核心思路：**scan + dump + merge**，三种确定性手段保证 100% 控件覆盖。
+核心思路：**scan + dump + merge** 自动化获取 AT 元树，语义映射由 AI 智能体
+按照 `at-case-generator` 技能完成；本模块只负责可脚本化的数据准备与生成/验证。
 
   Pipeline:
   1. scan     — 源码扫描（Clang），提取全部 UI 控件类骨架
   2. dump     — 启动应用，dump 运行时 AT-SPI 树
   3. merge    — merge_trees() 合并，静态无运行时无法渲染的也作为占位节点加入
   4. parse    — 解析 xlsx/csv 用例为 cases_raw.yaml
-  5. generate — precandidate + generate → 可执行 YAML 套件（输出到 tests/at/yaml/）
-  6. run      — 执行生成的测试
-  7. report   — 汇总结果
+  5. AI 映射  — 由 AI 智能体按 at-case-generator Step 3 生成 cases_mapped.yaml
+  6. generate — 使用 AI 映射结果生成可执行 YAML 套件（输出到 tests/at/yaml/）
+  7. run      — 执行生成的测试
+  8. report   — 汇总结果
 
   合并策略（merge_trees 原生逻辑）：
   - 静态有 + 运行时也有 → 富化节点（class_name, object_name, accessible_id 注入）
@@ -24,7 +26,7 @@
   不依赖：
   - ❌ youqu at record（事件驱动录制，Multica 环境不可用）
   - ❌ explore 乱点（不可靠，遗漏控件）
-  - ❌ AI 生成的 markdown 解析（格式不固定，有遗漏风险）
+  - ❌ 脚本正则映射（ai_mapper 等）：映射必须是 AI 对 AT 元树 + 用例描述的理解
 """
 
 from __future__ import annotations
@@ -410,21 +412,79 @@ class MulticaAgent:
         logger.info("用例已解析: %s", out_path)
         return str(out_path)
 
+    @staticmethod
+    def _load_src_module(module_path: str) -> Any:
+        """Load a src module via importlib, bypassing src/__init__.py DISPLAY dep.
+
+        Args:
+            module_path: Relative path from project root, e.g.
+                         "src/at/generator/case_parser.py"
+
+        Returns:
+            Loaded module object.
+        """
+        import importlib.util as _ilu
+
+        _base = Path(__file__).resolve().parent.parent
+        _full = _base / module_path
+        _name = "_src_" + module_path.replace("/", "_").replace(".py", "")
+        _spec = _ilu.spec_from_file_location(_name, str(_full))
+        _mod = _ilu.module_from_spec(_spec)
+        _spec.loader.exec_module(_mod)
+        return _mod
+
+    @staticmethod
+    def _looks_mapped(cases_path: str) -> bool:
+        """Detect whether a cases YAML already contains mapped actions."""
+        try:
+            import yaml
+            data = yaml.safe_load(Path(cases_path).read_text(encoding="utf-8"))
+            cases = data.get("cases", []) if isinstance(data, dict) else []
+            for case in cases[:1]:
+                steps = case.get("steps", [])
+                if steps and isinstance(steps[0], dict) and steps[0].get("action"):
+                    return True
+        except Exception:
+            pass
+        return False
+
+    @staticmethod
+    def _load_mapped_stats(mapped_path: str) -> dict:
+        """Load summary stats from an AI-mapped cases_mapped.yaml."""
+        import yaml
+        data = yaml.safe_load(Path(mapped_path).read_text(encoding="utf-8"))
+        cases = data.get("cases", []) if isinstance(data, dict) else []
+        total_steps = sum(len(c.get("steps", [])) for c in cases)
+        return {
+            "status": "ok",
+            "cases_mapped": len(cases),
+            "steps_mapped": total_steps,
+            "mapped_actions": total_steps,
+            "unsupported_steps": 0,
+            "output": mapped_path,
+            "source": "AI manual (at-case-generator)",
+        }
+
     # ------------------------------------------------------------------
     # 阶段 4：生成套件
     # ------------------------------------------------------------------
 
     def generate_suite(self, cases_path: str, at_tree_path: str,
-                       output_dir: str = "") -> tuple[str, dict]:
+                       output_dir: str = "",
+                       skip_mapping: bool = False) -> tuple[str, dict]:
         """生成可执行 YAML 测试套件。
 
         Args:
-            cases_path: cases_raw.yaml 路径。
+            cases_path: cases_raw.yaml 路径（AI 映射的输入）或 cases_mapped.yaml 路径。
             at_tree_path: at-tree.yaml 路径。
             output_dir: 套件输出目录（默认 tests/at/yaml/）。
+            skip_mapping: 为 True 时使用已存在的 cases_mapped.yaml（由 AI 按 at-case-generator 生成）。
 
         Returns:
             (suite_dir, stats)
+
+        Raises:
+            RuntimeError: 缺少 AI 映射结果时，提示先完成 at-case-generator Step 3。
         """
         self._report_progress("阶段 4: 生成 YAML 测试套件...")
 
@@ -432,28 +492,77 @@ class MulticaAgent:
             self.yaml_dir
         suite_dir.mkdir(parents=True, exist_ok=True)
 
-        # Step 1: tree-info → 精简 at-tree（输出到 tests/at/ 级别）
+        # Step 1: tree-info → 精简 at-tree（输出到 tests/at/ 级别，可选）
+        #   如果 DISPLAY 不可用则跳过（不影响用例生成）
         tree_info_path = self.output_dir / "at-tree-compact.yaml"
-        from src.at.generator.case_parser import compact_at_tree_to_file
-        compact_at_tree_to_file(
-            at_tree_path=at_tree_path,
-            output_path=str(tree_info_path),
-            fmt="yaml",
-        )
+        try:
+            _cp = self._load_src_module("src/at/generator/case_parser.py")
+            _cp.compact_at_tree_to_file(
+                at_tree_path=at_tree_path,
+                output_path=str(tree_info_path),
+                fmt="yaml",
+            )
+        except Exception as exc:
+            logger.warning("Compact tree skipped (no DISPLAY?): %s", exc)
 
-        # Step 2: precandidate → 候选元素匹配（输出到 tests/at/ 级别）
+        mapped_path = self.output_dir / "cases_mapped.yaml"
+
+        # 确定要喂给 generate_yaml 的 cases_mapped 文件。
+        # 注意：这里绝不调用脚本/正则映射；cases_mapped.yaml 必须由 AI 智能体
+        # 按照 at-case-generator Step 3 理解 AT 元树和用例描述后填写。
+        cases_input = ""
+        map_stats: dict = {}
+
+        if skip_mapping:
+            if not mapped_path.exists():
+                raise RuntimeError(
+                    "缺少 AI 映射结果: 请先按 at-case-generator Step 3 生成 "
+                    f"{mapped_path}，再使用 --skip-mapping 生成套件。"
+                )
+            cases_input = str(mapped_path)
+            map_stats = self._load_mapped_stats(cases_input)
+            logger.info("使用 AI 已映射结果: %s", cases_input)
+        elif self._looks_mapped(cases_path):
+            cases_input = cases_path
+            map_stats = self._load_mapped_stats(cases_input)
+            logger.info("使用传入的 AI 已映射结果: %s", cases_input)
+        else:
+            # 仍生成 precandidate 作为 AI 参考，但不自动映射
+            candidates_path = self.output_dir / "suite-cases.yaml"
+            try:
+                _precan = self._load_src_module("src/at/generator/precandidate.py")
+                _precan.precandidate_from_cases(
+                    cases_path=cases_path,
+                    at_tree_path=at_tree_path,
+                    output_path=str(candidates_path),
+                )
+            except Exception as exc:
+                logger.warning("Precandidate skipped (debug-only): %s", exc)
+            raise RuntimeError(
+                "AI 语义映射是必需的，不能由脚本代替。"
+                "请按 at-case-generator 技能完成："
+                "1) 阅读 at-tree-annotated.yaml 与 cases_raw.yaml；"
+                "2) AI 理解并拆分步骤，填写 action/selector/items/key/text；"
+                "3) 写出 cases_mapped.yaml；"
+                "4) 重新运行本命令并加 --skip-mapping。"
+            )
+
+        # Step 2b: 保留 precandidate 输出作为引用（仅调试用，不用于生成）
         candidates_path = self.output_dir / "suite-cases.yaml"
-        from src.at.generator.precandidate import precandidate_from_cases
-        stats = precandidate_from_cases(
-            cases_path=cases_path,
-            at_tree_path=at_tree_path,
-            output_path=str(candidates_path),
-        )
+        try:
+            _precan = self._load_src_module("src/at/generator/precandidate.py")
+            _precan.precandidate_from_cases(
+                cases_path=cases_path,
+                at_tree_path=at_tree_path,
+                output_path=str(candidates_path),
+            )
+        except Exception as exc:
+            logger.warning("Precandidate skipped (debug-only): %s", exc)
 
-        # Step 3: generate → 可执行 YAML（输出到 tests/at/yaml/）
-        from src.at.generator.yaml_generator import generate_yaml
-        generate_yaml(
-            cases_path=str(candidates_path),
+        # Step 3: generate → 可执行 YAML（从 AI 映射结果生成）
+        _yaml_gen = self._load_src_module("src/at/generator/yaml_generator.py")
+        _yaml_gen.generate_yaml(
+            cases_path=cases_input,
             mappings_path="",
             output_dir=str(suite_dir),
             app_name=self.app_name,
@@ -463,10 +572,10 @@ class MulticaAgent:
 
         logger.info("套件已生成: %s", suite_dir)
         self._report_progress(
-            f"套件已生成: {stats.get('cases', 0)} 个用例, "
-            f"{stats.get('steps', 0)} 个步骤"
+            f"套件已生成: {map_stats.get('cases_mapped', 0)} 个用例, "
+            f"{map_stats.get('steps_mapped', 0)} 个步骤"
         )
-        return str(suite_dir), stats
+        return str(suite_dir), map_stats
 
     # ------------------------------------------------------------------
     # 阶段 5：执行测试
@@ -504,15 +613,23 @@ class MulticaAgent:
         self,
         xlsx_path: str = "",
         *,
+        cases: str = "",
         skip_scan: bool = False,
         skip_run: bool = False,
+        skip_mapping: bool = False,
+        no_display: bool = False,
     ) -> dict[str, Any]:
-        """完整管线：scan → dump → merge → parse → generate → run。
+        """数据准备 + 生成管线：scan → dump → merge → parse → generate → run。
+
+        AI 语义映射由智能体按 at-case-generator 完成，不在本方法内用脚本替代。
 
         Args:
             xlsx_path: 测试用例 xlsx/csv 文件路径。
+            cases: 已存在的 cases_raw.yaml 路径（xlsx_path 为空时使用）。
             skip_scan: 跳过源码扫描（使用已有产物）。
             skip_run: 跳过执行阶段。
+            skip_mapping: 跳过 AI 语义映射，使用已存在的 cases_mapped.yaml。
+            no_display: 无 DISPLAY 环境，跳过运行时 dump，合成 at-tree。
 
         Returns:
             管线结果。
@@ -534,18 +651,27 @@ class MulticaAgent:
         else:
             results["phases"]["scan"] = {"status": "skipped"}
 
-        # ---- Phase 2: Dump + Merge ----
-        at_tree_path = self.dump_and_merge()
-        results["phases"]["build"] = {
-            "status": "ok" if at_tree_path else "failed",
-            "at_tree": at_tree_path,
-            "runtime_nodes": len(self._runtime_tree),
-            "static_classes": len(self._scan_result.classes)
-            if self._scan_result else 0,
-        }
-        if not at_tree_path:
-            results["status"] = "failed"
-            return results
+        # ---- Phase 2: Dump + Merge (or synthesize for no-DISPLAY) ----
+        if no_display:
+            at_tree_path = self._synthesize_at_tree()
+            results["phases"]["build"] = {
+                "status": "ok" if at_tree_path else "error",
+                "at_tree": at_tree_path or "",
+                "method": "synthesized",
+            }
+            if not at_tree_path:
+                results["status"] = "failed"
+                return results
+        else:
+            at_tree_path = self.dump_and_merge()
+            results["phases"]["build"] = {
+                "status": "ok" if at_tree_path else "failed",
+                "at_tree": at_tree_path or "",
+                "method": "runtime",
+            }
+            if not at_tree_path:
+                results["status"] = "failed"
+                return results
 
         # ---- Phase 3: Parse ----
         if xlsx_path:
@@ -557,15 +683,37 @@ class MulticaAgent:
                 "status": "ok",
                 "cases": cases_path,
             }
+        elif cases:
+            cases_path = cases
+            results["phases"]["parse"] = {
+                "status": "ok",
+                "cases": cases_path,
+                "source": "existing",
+            }
         else:
+            cases_path = ""
             results["phases"]["parse"] = {"status": "skipped", "reason": "未提供用例文件"}
 
         # ---- Phase 4: Generate ----
-        if xlsx_path:
-            suite_dir, gen_stats = self.generate_suite(
-                cases_path=cases_path,
-                at_tree_path=at_tree_path,
-            )
+        if cases_path or skip_mapping:
+            # skip_mapping=True 时，即使没有 xlsx 也生成套件（使用已存在的 cases_mapped.yaml）
+            if not cases_path:
+                cases_path = str(self.output_dir / "cases_mapped.yaml")
+            try:
+                suite_dir, gen_stats = self.generate_suite(
+                    cases_path=cases_path,
+                    at_tree_path=at_tree_path,
+                    skip_mapping=skip_mapping,
+                )
+            except RuntimeError as exc:
+                results["status"] = "need_ai_mapping"
+                results["phases"]["generate"] = {
+                    "status": "need_ai_mapping",
+                    "message": str(exc),
+                }
+                self._report_final(str(exc))
+                logger.info("管线暂停: %s", exc)
+                return results
             results["phases"]["generate"] = {
                 "status": "ok",
                 "suite_dir": suite_dir,
@@ -575,7 +723,7 @@ class MulticaAgent:
             results["phases"]["generate"] = {"status": "skipped"}
 
         # ---- Phase 5: Run ----
-        if not skip_run and xlsx_path:
+        if not skip_run and cases_path:
             test_summary = self.run_tests(
                 test_dir=str(self.yaml_dir),
             )
@@ -589,6 +737,169 @@ class MulticaAgent:
         logger.info("管线完成: %s", json.dumps(results, ensure_ascii=False, indent=2))
 
         return results
+
+    # ------------------------------------------------------------------
+    # 无 DISPLAY 环境：合成 at-tree
+    # ------------------------------------------------------------------
+
+    def _synthesize_at_tree(self) -> str:
+        """在无 DISPLAY 环境下，从 expected_names.yaml 和 scanned_ok.yaml 合成 at-tree。
+
+        Returns:
+            at-tree.yaml 路径，失败返回空字符串。
+        """
+        self._report_progress("阶段 2 (no-DISPLAY): 合成 at-tree...")
+
+        nodes: list[dict] = []
+        seen_names: set[str] = set()
+        node_id = 0
+
+        # 1. 从 spi/expected_names.yaml 读取预期元素
+        expected_path = self.output_dir / "spi" / "expected_names.yaml"
+        if expected_path.exists():
+            try:
+                import yaml
+                expected_data = yaml.safe_load(expected_path.read_text(encoding="utf-8"))
+                if isinstance(expected_data, dict):
+                    # C++ widgets
+                    for w in expected_data.get("widgets", []):
+                        name = w.get("name", "") or w.get("accessibleName", "")
+                        if name and name not in seen_names:
+                            seen_names.add(name)
+                            nodes.append({
+                                "id": f"n{node_id}",
+                                "name": name,
+                                "role": w.get("role", "panel"),
+                                "source": "expected",
+                            })
+                            node_id += 1
+                    # QML elements
+                    for q in expected_data.get("qml", []):
+                        name = q.get("name", "") or q.get("accessibleName", "")
+                        if name and name not in seen_names:
+                            seen_names.add(name)
+                            nodes.append({
+                                "id": f"q{node_id}",
+                                "name": name,
+                                "role": "push button",
+                                "source": "expected",
+                            })
+                            node_id += 1
+            except Exception as exc:
+                logger.warning("expected_names.yaml 解析失败: %s", exc)
+
+        # 2. 从 scanned_classes.yaml 读取已命名的控件类
+        # 格式：{version, type, classes: [{class_name, accessible_names, ...}, ...]}
+        scanned_path = self.output_dir / "scanned_classes.yaml"
+        if scanned_path.exists():
+            try:
+                import yaml
+                scan_data = yaml.safe_load(scanned_path.read_text(encoding="utf-8"))
+                if isinstance(scan_data, dict):
+                    scan_classes = scan_data.get("classes", [])
+                    if isinstance(scan_classes, list):
+                        for doc in scan_classes:
+                            if not isinstance(doc, dict):
+                                continue
+                            acc_names = doc.get("accessible_names", [])
+                            for name in acc_names:
+                                if name and name not in seen_names:
+                                    seen_names.add(name)
+                                    role = "panel"
+                                    base = doc.get("base_classes", [])
+                                    if any(b in ("DPushButton", "QPushButton", "DIconButton") for b in base):
+                                        role = "push button"
+                                    elif any(b in ("DSpinBox", "QSpinBox") for b in base):
+                                        role = "spin button"
+                                    elif any(b in ("DLineEdit", "QLineEdit") for b in base):
+                                        role = "text"
+                                    elif any(b in ("DTabBar", "QTabBar") for b in base):
+                                        role = "page tab list"
+                                    elif any(b in ("DLabel", "QLabel") for b in base):
+                                        role = "label"
+                                    elif any(b in ("DAbstractDialog", "QDialog") for b in base):
+                                        role = "dialog"
+                                    nodes.append({
+                                        "id": f"s{node_id}",
+                                        "name": name,
+                                        "role": role,
+                                        "source": "static",
+                                    })
+                                    node_id += 1
+            except Exception as exc:
+                logger.warning("scanned_classes.yaml 解析失败: %s", exc)
+        # 2b. Fallback: scanned_ok.yaml (multi-doc format from `youqu at scan`)
+        scanned_ok_path = self.output_dir / "scanned_ok.yaml"
+        if scanned_ok_path.exists() and scanned_ok_path != scanned_path:
+            try:
+                import yaml
+                for doc in yaml.safe_load_all(scanned_ok_path.read_text(encoding="utf-8")):
+                    if not isinstance(doc, dict):
+                        continue
+                    acc_names = doc.get("accessible_names", [])
+                    for name in acc_names:
+                        if name and name not in seen_names:
+                            seen_names.add(name)
+                            role = "panel"
+                            base = doc.get("base_classes", [])
+                            if any(b in ("DPushButton", "QPushButton", "DIconButton") for b in base):
+                                role = "push button"
+                            elif any(b in ("DSpinBox", "QSpinBox") for b in base):
+                                role = "spin button"
+                            elif any(b in ("DLineEdit", "QLineEdit") for b in base):
+                                role = "text"
+                            elif any(b in ("DTabBar", "QTabBar") for b in base):
+                                role = "page tab list"
+                            elif any(b in ("DLabel", "QLabel") for b in base):
+                                role = "label"
+                            elif any(b in ("DAbstractDialog", "QDialog") for b in base):
+                                role = "dialog"
+                            nodes.append({
+                                "id": f"t{node_id}",
+                                "name": name,
+                                "role": role,
+                                "source": "static",
+                            })
+                            node_id += 1
+            except Exception as exc:
+                logger.warning("scanned_ok.yaml 解析失败: %s", exc)
+
+        # 3. Always add the app frame itself
+        if self.app_name not in seen_names:
+            nodes.insert(0, {
+                "id": f"f{node_id}",
+                "name": self.app_name,
+                "role": "frame",
+                "source": "synthesized",
+            })
+            node_id += 1
+
+        if not nodes:
+            logger.error("无法合成 at-tree：没有 expected_names 或 scanned_classes")
+            return ""
+
+        # Write at-tree.yaml
+        out_path = self.output_dir / "at-tree.yaml"
+        tree_data = {
+            "version": "2.0",
+            "app": self.app_name,
+            "tree": nodes,
+            "transient_contexts": [],
+        }
+        try:
+            import yaml
+            out_path.write_text(
+                yaml.dump(tree_data, allow_unicode=True, default_flow_style=False, sort_keys=False),
+                encoding="utf-8",
+            )
+        except Exception as exc:
+            logger.error("写入 at-tree.yaml 失败: %s", exc)
+            return ""
+
+        self._report_progress(
+            f"at-tree 合成完成: {len(nodes)} 个节点 (来源: expected_names + scanned_classes)"
+        )
+        return str(out_path)
 
     # ------------------------------------------------------------------
     # 辅助：快速验证
@@ -673,15 +984,27 @@ def cmd_multica_agent(args) -> None:
     elif subcommand == "pipeline":
         skip_scan = getattr(args, "skip_scan", False)
         skip_run = getattr(args, "skip_run", False)
-        xlsx_path = getattr(args, "cases", "")
+        skip_mapping = getattr(args, "skip_mapping", False)
+        no_display = getattr(args, "no_display", False)
+        cases_path = getattr(args, "cases", "")
+
+        # Detect if --cases is an existing yaml (cases_raw.yaml) or xlsx
+        cases_param = ""
+        xlsx_param = ""
+        if cases_path:
+            if cases_path.endswith(".yaml") or cases_path.endswith(".yml"):
+                cases_param = cases_path
+            else:
+                xlsx_param = cases_path
 
         results = agent.run_pipeline(
-            xlsx_path=xlsx_path,
+            xlsx_path=xlsx_param,
+            cases=cases_param,
             skip_scan=skip_scan,
             skip_run=skip_run,
+            skip_mapping=skip_mapping,
+            no_display=no_display,
         )
-
-        print(f"\n=== Multica 智能体管线结果 ===")
         print(f"状态: {results['status']}")
         print(f"应用: {results['app']}")
         print(f"输出目录: {results['output_dir']}")
@@ -689,6 +1012,8 @@ def cmd_multica_agent(args) -> None:
             status = data.get("status", "?")
             icon = "✓" if status == "ok" else "✗" if status == "failed" else "○"
             print(f"  {icon} {phase}: {status}")
+            if status == "need_ai_mapping" and data.get("message"):
+                print(f"      {data['message']}")
 
         build = results.get("phases", {}).get("build", {})
         if build.get("runtime_nodes", 0) > 0:

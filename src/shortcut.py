@@ -7,7 +7,25 @@
 # pylint: disable=C0114
 # pylint: disable=C0301,C0103,R0904
 from time import sleep
-from src.mouse_key import MouseKey
+
+# Lazy import: MouseKey depends on pyautogui which requires DISPLAY
+# In headless environments (multica agent), this falls back to a no-op base.
+try:
+    from src.mouse_key import MouseKey
+except Exception:
+    class MouseKey:  # type: ignore
+        """No-op fallback for headless environments."""
+        @classmethod
+        def key(cls, *a, **kw): pass
+        @classmethod
+        def hot_key(cls, *a, **kw): pass
+        @classmethod
+        def click(cls, *a, **kw): pass
+        @classmethod
+        def double_click(cls, *a, **kw): pass
+        @classmethod
+        def scroll(cls, *a, **kw): pass
+
 from src import log
 
 

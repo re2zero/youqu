@@ -110,7 +110,7 @@ def main():
 
     # multica-agent pipeline（默认子命令）
     p_ma_pipeline = ma_sub.add_parser("pipeline",
-        help="完整管线: scan → dump+merge → parse → generate → run")
+        help="数据准备+生成: scan → dump+merge → parse → generate → run（AI 映射由智能体完成）")
     p_ma_pipeline.add_argument("--app", required=True, help="应用名 (AT-SPI 名称, 如 deepin-music)")
     p_ma_pipeline.add_argument("--binary", default="", help="应用二进制路径 (默认同 --app)")
     p_ma_pipeline.add_argument("--package", default="", help="应用包名 (默认同 --app)")
@@ -120,6 +120,8 @@ def main():
     p_ma_pipeline.add_argument("--report-interval", type=int, default=300, help="心跳报告间隔(秒)")
     p_ma_pipeline.add_argument("--skip-scan", action="store_true", help="跳过源码扫描")
     p_ma_pipeline.add_argument("--skip-run", action="store_true", help="跳过执行阶段")
+    p_ma_pipeline.add_argument("--skip-mapping", action="store_true", help="使用已存在的 AI 映射 cases_mapped.yaml（AI 按 at-case-generator 生成）")
+    p_ma_pipeline.add_argument("--no-display", action="store_true", help="无 DISPLAY 环境，跳过运行时 dump，使用 expected_names 合成 at-tree")
 
     # multica-agent scan
     p_ma_scan = ma_sub.add_parser("scan", help="仅扫描源码（Clang 静态分析）")
