@@ -94,7 +94,7 @@ youqu at merge --scan scan_output/ --record dump_output/ --output .
 
 # 无 DISPLAY / headless 时
 youqu at scan --src <src_dir> --app <app> --output scan_output/
-python3 skills/autogen-at-suites/scripts/scan_to_atree.py scan_output/ <app> at-tree.yaml
+python3 skills/at-case-generator/scripts/scan_to_atree.py scan_output/ <app> at-tree.yaml
 ```
 
 之后从 `youqu at tree-info` 开始，按标准管线继续：
@@ -198,7 +198,18 @@ interface-based grouping and suite annotations.
    - `前置条件`: setup requirements (moved from setup steps)
    - `AT元素引用`: list of AT tree element names used by this suite
 5. Split compound steps (multiple operations in one step) into atomic steps
-6. Run `youqu at validate --gate 2 --suite-cases <path> --at-tree-annotated <path>`
+6. Use short functional module names as the suite `module` value (e.g. `查找`,
+   `设置`, `远程管理`, `自定义命令`, `键盘交互-设置`), **not** the raw xlsx
+   module path. The `module` field becomes the generated suite directory/file
+   name, so long paths produce unreadable suites.
+7. Deduplicate repeated operations while mapping/normalizing:
+   - Common preconditions belong in the suite-level `前置条件` / setup, not
+     repeated in every case step.
+   - Do not emit duplicate identical assertions (same action + same selector)
+     in one suite case.
+   - Keep intentional repeated key presses (e.g. Tab Tab Tab) intact; do not
+     blindly collapse them.
+8. Run `youqu at validate --gate 2 --suite-cases <path> --at-tree-annotated <path>`
 
 ### Suite Annotation Example
 
@@ -262,6 +273,14 @@ NOT clickable via `element_action` — they require keyboard navigation:
 - **`element_action`**: Only for visible non-menu elements (buttons, tabs, fields).
 
 **NEVER use `element_action` for menu items.**
+
+**Localized menu/button labels**: Menu items and DTK buttons are displayed in
+the current language environment, so do not guess labels from test
+descriptions. Read the app's translation files (e.g.
+`translations/<app>_zh_CN.ts`) and use the actual translated strings for
+`items` and `selector.name`. DTK button labels often contain spaces
+(e.g. `取 消`, `确 定`, `保 存`), while menu items usually do not
+(e.g. `设置`, `远程管理`, `横向分屏`).
 
 ### How to Map Each Step
 
@@ -457,6 +476,11 @@ youqu at generate --cases <mapped_cases.yaml> --output <output_dir> \
 ```
 
 Output: `elements.yaml`, `<module>/<module>.suite.yaml`, `app-optimization.md`.
+
+The generated directory/file names come from the `module` field in
+`cases_mapped.yaml`. Keep `module` short and functional (e.g. `查找`, `设置`,
+`远程管理`) so the output stays readable; for deepin-terminal projects the
+conventional output root is `tests/at/yaml`.
 
 ### 4b: Validate
 
