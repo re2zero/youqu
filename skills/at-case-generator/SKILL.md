@@ -388,8 +388,13 @@ to verify format example exists, selectors cross-reference the annotated tree,
 and no noise selectors remain.
 
 Then run `youqu at validate --gate 5 --cases-mapped <path>` to verify semantic
-safety: no description text as keyboard input, no keyboard_press without a prior
-panel-opener action, no selector missing both name and accessible_id.
+safety:
+- C1: no description text as keyboard input
+- C2: no keyboard_press without a prior panel-opener action
+- C3: no selector missing both name and accessible_id
+- C4: no uncategorized step_type (所有 step 必须有 action 映射)
+- C5: no `dtk_main_menu` misuse in right-click menu scenarios (cases with
+  "右键菜单" keywords should use `dtk_context_menu`, not `dtk_main_menu`)
 
 See `references/pipeline-reference.md` for full cases.yaml schema and
 `references/suite-format.md` for all action types and their fields.
@@ -468,6 +473,7 @@ are candidly marked `unsupported` rather than shipped as silent no-ops.
 
 ## Step 4: Generate + Validate
 
+
 ### 4a: Generate
 
 ```bash
@@ -501,6 +507,24 @@ youqu at run --testdir <output_dir> [--suite <suite_file>]
 ```
 **NOT** `python -m src.yaml_test.suite` — that is a different executor.
 The AT pipeline uses `AtSuiteExecutor` in `src/at/executor/`.
+
+### 4c: 覆盖率报告（独立脚本）
+
+```bash
+python3 skills/at-case-generator/scripts/coverage_report.py \
+  --testdir <output_dir> \
+  [--expected-names tests/at/spi/expected_names.yaml] \
+  [--cases-mapped tests/at/cases_mapped.yaml]
+```
+
+输出 `report.md`，包含：
+- 用例统计（总用例数、断言覆盖率、模块分布）
+- AT-SPI 元素覆盖率（口径 A/B）
+- 重复用例检测（相同操作序列分组）
+- 未覆盖元素清单
+- 不可自动化用例（条件性）
+
+报告是纯分析工具，不修改生成产物。generate 后、run 前或 run 后任意时刻执行。
 
 ## CLI Quick Reference
 

@@ -204,10 +204,13 @@ youqu at validate --gate 2 \
 youqu at validate --gate 5 --cases-mapped tests/at/cases_mapped.yaml
 ```
 
-- C2: 检测 keyboard_type 文本疑似描述（非输入内容，而是描述性文字）
+- C1: 检测 keyboard_type 文本疑似描述（非输入内容，而是描述性文字）
+- C2: 检测 keyboard_type 文本含中文标点（长期禁用）
 - C3: 检测 ESC/Tab 前缺打开面板步骤
 - C4: 检测 selector 缺 name 和 accessible_id（error 级）
-- **0 errors 才能继续**，warnings 需人工确认
+- C5: 检测 `dtk_main_menu` 在右键菜单场景中误用（应使用 `dtk_context_menu`）
+
+**0 errors 才能继续**，warnings 需人工确认
 
 ### Step 9: Gate 3 验证 + 生成
 
@@ -229,6 +232,24 @@ youqu at validate --gate 4 --generate-output tests/at/yaml
 ```
 
 **校验项**：selectors 交叉引用 at-tree、无噪声 selector、有效 action 值、suite 文件存在。
+
+### Step 10: 覆盖率报告（独立脚本）
+
+```bash
+python3 skills/at-case-generator/scripts/coverage_report.py \
+  --testdir tests/at/yaml \
+  [--expected-names tests/at/spi/expected_names.yaml] \
+  [--cases-mapped tests/at/cases_mapped.yaml]
+```
+
+输出 `tests/at/yaml/report.md`，包含：
+- 用例统计（总用例数、断言覆盖率、模块分布）
+- AT-SPI 元素覆盖率（口径 A/B）
+- 重复用例检测（相同操作序列分组）
+- 未覆盖元素清单
+- 不可自动化用例（条件性）
+
+报告是纯分析工具，不修改生成产物。在 Step 9 之后、提交之前执行。
 
 ### 可追溯性链
 
@@ -304,7 +325,7 @@ plan.yaml.modules[].status → 进度跟踪
 
 报告输出规范
 
-每次执行后必须输出标准报告，包含以下维度：
+AI 需在 issue 评论中输出报告摘要，覆盖以下维度：
 1. 用例统计
 
     总用例数（suite.yaml 中每个 module 的 test_count）

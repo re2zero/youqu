@@ -512,6 +512,7 @@ def validate_gate5(cases_mapped_path: str, at_tree_annotated_path: str = "") -> 
         }
     )
     _ESCAPE_KEYS = frozenset({"escape", "esc", "tab"})
+    _CONTEXT_MENU_KEYWORDS = frozenset({"右键菜单", "右键", "context_menu", "context"})
 
     for suite in cases:
         sid = suite.get("id", "?")
@@ -520,6 +521,21 @@ def validate_gate5(cases_mapped_path: str, at_tree_annotated_path: str = "") -> 
             continue
 
         steps = suite.get("steps", [])
+
+        # C5: 检测 dtk_main_menu 在右键菜单场景中误用
+        module = suite.get("module", "")
+        name = suite.get("name", "")
+        suite_text = f"{module} {name} {sid}"
+        has_context_keywords = any(kw in suite_text for kw in _CONTEXT_MENU_KEYWORDS)
+        if has_context_keywords:
+            for i, step in enumerate(steps):
+                action = step.get("action", "")
+                if action == "dtk_main_menu":
+                    report["warnings"].append(
+                        f"[{sid}] step {i}: dtk_main_menu 在右键菜单场景中可能误用 "
+                        f"(suite 包含右键菜单关键词: {module})"
+                    )
+
         for i, step in enumerate(steps):
             action = step.get("action", "")
 
@@ -566,7 +582,6 @@ def validate_gate5(cases_mapped_path: str, at_tree_annotated_path: str = "") -> 
                     report["passed"] = False
 
     return report
-
 
 def run_all_gates(
     at_tree_annotated_path: str = "",
