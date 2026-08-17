@@ -278,14 +278,19 @@ plan.yaml.modules[].status → 进度跟踪
 
     tests/at/yaml/elements.yaml
     tests/at/yaml/**/*.suite.yaml
+    tests/at/at-tree.yaml
+    tests/at/suite-cases.yaml
+    tests/at/cases_mapped.yaml
     tests/at/ui-map.md（若存在）
     tests/at/expected-at-spi-elements.md（若存在）
     tests/at/at-spi-implementation-checklist.md（若存在）
-    其他扫描/生成中间产物（如 cases_mapped.yaml、at-tree.yaml 等）
+
+**强制要求**：`tests/at/cases_mapped.yaml` 文件头必须包含 `=== 格式范例 ===`
+注释块（见 Step 3 格式范例要求），提交前 AI 必须人工检查确认。
 
 不随代码提交，仅通过 issue 评论附件的产物（报告）：
 
-    tests/at/report.md（覆盖率报告）
+    tests/at/yaml/report.md（覆盖率报告）
     图谱三件套（若未与代码产物合并）
 
 4.2 提交规范

@@ -387,6 +387,17 @@ After mapping, run `youqu at validate --gate 3 --cases-mapped <path> --at-tree-a
 to verify format example exists, selectors cross-reference the annotated tree,
 and no noise selectors remain.
 
+**提交前人工检查**：确认 `cases_mapped.yaml` 文件头的 `=== 格式范例 ===`
+注释块包含以下关键字段的示例，缺一不可：
+- `action`（如 `session_start`、`mouse_click`、`dtk_main_menu`、`assert_element`）
+- `selector`（含 `name` 和 `role`）
+- `items`（菜单操作）
+- `assert_element` 或 `assert_window`（断言）
+- 4 字段注解（`测试界面`、`测试功能`、`前置条件`、`AT元素引用`）
+
+同时确认 `tests/at/at-tree.yaml`、`tests/at/suite-cases.yaml`、`tests/at/cases_mapped.yaml`
+三个中间产物已生成并纳入提交范围。
+
 Then run `youqu at validate --gate 5 --cases-mapped <path>` to verify semantic
 safety:
 - C1: no description text as keyboard input
