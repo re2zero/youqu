@@ -97,18 +97,27 @@ AI 语义映射是 AT 用例生成的核心环节，但必须在前置数据准�
 
 必须先加载 `at-mapping-rules` 技能，阅读完整的步骤语义解析协议（四字段拆解、selector 填写约束、DTK 菜单二分规则、断言质量规则、UNSUPPORTED 分类、瞬态元素处理、语义安全门禁规则），然后按 `at-case-generator` auto 模式的管线步骤执行。
 
-### Step 0: 解析 + 计划（有 xlsx/csv 时执行）
+### Step 0: 解析 + 文档 + 计划（有 xlsx/csv 时执行）
 
-如果提供了 xlsx/csv 测试用例文档，必须先解析并生成模块计划：
+如果提供了 xlsx/csv 测试用例文档，必须先解析、扫描帮助手册、生成模块计划：
 
 ```bash
+# 0a: 解析 xlsx → cases_raw.yaml
 youqu at parse --input <xlsx> --output tests/at/cases_raw.yaml
-youqu at plan --cases tests/at/cases_raw.yaml --app <app> --output tests/at/
+
+# 0b: 导入帮助手册（必须执行，由命令扫描决定是否存在）
+youqu at docs --app <app_id> --output tests/at/
+# 输出 "skipped: no manual found" → 该应用无帮助手册，不影响后续步骤
+# 输出 "imported N sections" → docs/modules/<slug>.md 已生成，AI 映射时可参考
+# 0c: 生成模块计划（**必须执行**）
+youqu at plan --cases tests/at/cases_raw.yaml --docs tests/at/docs/ --app <app> --output tests/at/
 ```
 
 产出：
 - `cases_raw.yaml` — 格式转换后的原始用例数据
+- `docs/modules/<slug>.md` — 帮助手册章节（AI 映射时参考 GUI 位置说明）
 - `plan.yaml` — 模块列表 + 状态跟踪（pending → mapped → verified → failed）
+- `plan.md` — 人可读的录制操作指引（auto 模式可跳过）
 
 **验证**：确认 `tests/at/plan.yaml` 存在且包含 `modules` 列表。如果不存在，**停止并报告错误**，不继续执行。
 
@@ -250,6 +259,20 @@ python3 skills/at-case-generator/scripts/coverage_report.py \
 - 不可自动化用例（条件性）
 
 报告是纯分析工具，不修改生成产物。在 Step 9 之后、提交之前执行。
+
+### Step 11: 运行时验证（可选，需要桌面环境）
+
+```bash
+youqu at run --testdir tests/at/yaml/
+```
+
+如果桌面环境可用：
+- 通过率 ≥80% → 确认用例可执行
+- 通过率 <80% → 在报告中标注失败原因，不阻塞后续提交
+
+如果桌面环境不可用（headless/CI）：
+- 跳过运行，在报告中标注"未经过运行时验证，需在有桌面环境后执行验收"
+- 不阻塞提交
 
 ### 可追溯性链
 
