@@ -249,3 +249,35 @@ baseline on the same project. Regex cannot handle:
 **Fix**: DO NOT write scripts. Read each case description, understand the
 user's intent, match against the AT-SPI tree through semantic reasoning,
 and fill fields directly. Process in batches of ≤10 for large datasets.
+
+## 19. file_dialog_select without prior dialog trigger
+
+**Problem**: `file_dialog_select` is used without a preceding step that opens
+the file dialog. The handler simulates keyboard events (Ctrl+L, type path,
+Return) targeting the modal file dialog — if the dialog isn't open, these keys
+go to the main application window, causing unpredictable behavior.
+
+**Impact**: The path text is typed into whatever widget has focus in the main
+window, possibly corrupting state. No file is selected. The test appears to
+pass (no error) but doesn't actually operate on the file dialog.
+
+**Solution**: Always precede `file_dialog_select`/`file_dialog_cancel` with a
+step that opens the file dialog:
+- `keyboard_hot_key` with `key: "ctrl+o"` (common shortcut)
+- `element_action` clicking an "Open" or "Import" button
+- `dtk_main_menu` navigating to a file import menu item
+
+```yaml
+# Correct
+- action: keyboard_hot_key
+  key: ctrl+o
+  wait: 1.0
+- action: file_dialog_select
+  path: ${TEST_FILES_DIR}/test.png
+  wait: 3.0
+```
+
+**NEVER use `element_action` to click elements inside the file dialog.**
+The native file dialog is a separate process portal, not part of the app's
+AT-SPI tree. All file dialog interactions must go through
+`file_dialog_select`/`file_dialog_cancel`.

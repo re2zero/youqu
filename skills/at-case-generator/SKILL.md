@@ -282,13 +282,83 @@ descriptions. Read the app's translation files (e.g.
 (e.g. `取 消`, `确 定`, `保 存`), while menu items usually do not
 (e.g. `设置`, `远程管理`, `横向分屏`).
 
+### File Dialog Actions (Core Rule)
+
+File dialog operations (`file_dialog_select`, `file_dialog_cancel`) handle
+the native file picker dialog (deepin/UOS portal). Like DTK menus, they
+do NOT use AT-SPI element lookup — they use xdotool to simulate keyboard
+events directly on the dialog.
+
+**`file_dialog_select`**: Ctrl+L → Ctrl+A → Delete → type path → Return.
+Accepts a `path` field (string, required). Supports `${VAR}` variable
+substitution and `~` home expansion.
+
+```yaml
+- action: file_dialog_select
+  path: ${TEST_FILES_DIR}/album_test
+  wait: 3.0
+```
+
+Two modes:
+- **Directory mode** (path is a directory): navigates to the dir, Ctrl+A
+  selects all files, Return confirms open.
+- **Single file mode** (path is a file): navigates to the file, Return
+  confirms open.
+
+**`file_dialog_cancel`**: Escape. Closes the dialog without selecting.
+
+```yaml
+- action: file_dialog_cancel
+  wait: 1.0
+```
+
+**CRITICAL: CRITICAL: CRITICAL: You MUST trigger the file dialog first.**
+`file_dialog_select`/`file_dialog_cancel` only work when the modal file
+dialog is already open. Trigger it via:
+- `keyboard_hot_key` (e.g., `ctrl+o`)
+- `element_action` clicking an "Open" or "Import" button
+- `dtk_main_menu` selecting "导入" from the menu
+
+```yaml
+# Wrong — file_dialog_select without prior trigger
+- action: file_dialog_select
+  path: ${TEST_FILES_DIR}/file.png
+
+# Correct — trigger first
+- action: keyboard_hot_key
+  key: ctrl+o
+  wait: 1.0
+- action: file_dialog_select
+  path: ${TEST_FILES_DIR}/file.png
+  wait: 3.0
+```
+
+**NEVER use `element_action` to click file dialog elements.** The native
+file dialog is a separate process portal, not part of the app's AT-SPI tree.
+`element_action` on a file dialog element will fail.
+
+**Coverage scenarios**:
+| Scenario | Usage | Notes |
+|----------|-------|-------|
+| Batch import (directory) | `file_dialog_select` with dir path | Ctrl+A selects all files |
+| Single file import | `file_dialog_select` with file path | Direct file selection |
+| Cancel dialog | `file_dialog_cancel` | Escape closes |
+| Repeat import | Import same path twice | Verifies no duplicate |
+| Corrupt file | Import corrupt file path | Verifies app doesn't crash |
+
+**Limitations**:
+- Depends on xdotool (X11 only). Wayland needs ydotool/wtype adapter.
+- File dialog must already be open (modal), otherwise keys go to main window.
+- Each `file_dialog_select` starts from the path bar — do NOT call Ctrl+L
+  manually before it.
+
 ### How to Map Each Step
 
 Read each step description and understand:
 1. **What action is the user performing?** (click, type, press key, open menu, assert)
 2. **What element is the target?** (extract name and role from the description)
 3. **Is this a compound step?** (multiple actions in one description → split into separate CaseSteps)
-4. **Is there a precondition clause?** (e.g., "弹出XX后，" → strip, it's context not action)
+4. **Is the action a file dialog operation?** (descriptions containing "打开文件", "选择文件", "导入", "取消" in context of file picker → use `file_dialog_select`/`file_dialog_cancel` with `path`, not `element_action`)
 
 Write `selector: {name, role}` from the description for runtime AT-SPI lookup.
 Do NOT rely on static at-tree node IDs (only ~3.6% coverage). The executor
@@ -348,6 +418,14 @@ annotation from `suite-cases.yaml`.
 #         action: "session_start"
 #         command: "app-name"           # full launch command incl. file args
 #       - step_type: "action"
+#         action: "dtk_main_menu"
+#         items: ["视图", "横向分屏"]
+#         wait: 0
+#       - step_type: "action"
+#         action: "file_dialog_select"
+#         path: "${TEST_FILES_DIR}/test.png"
+#         wait: 3.0
+#       - step_type: "action"
 #         action: "mouse_click"
 #         selector: {name: "打开", role: "push button"}
 #       - step_type: "assert"
@@ -389,7 +467,7 @@ and no noise selectors remain.
 
 **提交前人工检查**：确认 `cases_mapped.yaml` 文件头的 `=== 格式范例 ===`
 注释块包含以下关键字段的示例，缺一不可：
-- `action`（如 `session_start`、`mouse_click`、`dtk_main_menu`、`assert_element`）
+- `action`（如 `session_start`、`mouse_click`、`dtk_main_menu`、`file_dialog_select`、`assert_element`）
 - `selector`（含 `name` 和 `role`）
 - `items`（菜单操作）
 - `assert_element` 或 `assert_window`（断言）
@@ -401,7 +479,7 @@ and no noise selectors remain.
 Then run `youqu at validate --gate 5 --cases-mapped <path>` to verify semantic
 safety:
 - C1: no description text as keyboard input
-- C2: no keyboard_press without a prior panel-opener action
+- C2: no keyboard_press / file_dialog action without a prior trigger
 - C3: no selector missing both name and accessible_id
 - C4: no uncategorized step_type (所有 step 必须有 action 映射)
 - C5: no `dtk_main_menu` misuse in right-click menu scenarios (cases with
@@ -596,4 +674,4 @@ absent, it falls back to old-style state snapshots (v1.0 without
 |------|---------|
 | `references/pipeline-reference.md` | CLI commands, input/output formats, cases.yaml schema |
 | `references/suite-format.md` | Generated suite YAML structure, action fields, elements.yaml, action types |
-| `references/pitfalls.md` | 18 documented edge cases — review before Step 3, verify after |
+| `references/pitfalls.md` | 19 documented edge cases — review before Step 3, verify after |

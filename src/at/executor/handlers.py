@@ -479,11 +479,20 @@ def handle_element_action(step: SuiteActionStep, context: dict) -> None:
             f"Unknown element action '{action}'. Supported: {sorted(_ELEMENT_DO_WHITELIST)}"
         )
     if action == "click":
-        element.click()
+        try:
+            element.click()
+        except NotImplementedError:
+            element.doActionNamed('click')
     elif action == "right_click":
-        element.click(button=3)
+        try:
+            element.click(button=3)
+        except NotImplementedError:
+            element.doActionNamed('click')
     elif action == "double_click":
-        element.doubleClick()
+        try:
+            element.doubleClick()
+        except NotImplementedError:
+            element.doActionNamed('click')
     elif action == "focus":
         element.grabFocus()
     elif action == "point":
@@ -616,6 +625,98 @@ def handle_dbus_get_property(step: SuiteActionStep, context: dict) -> None:
 
 def handle_wait(step: SuiteActionStep, context: dict) -> None:
     pass
+
+def handle_file_dialog_select(step: SuiteActionStep, context: dict) -> None:
+    """Select files in a native file dialog (deepin/UOS portal).
+
+    Caller must trigger the file dialog opening first (e.g. click Import button
+    or press Ctrl+O). Then this handler:
+
+    Directory mode (path is a directory):
+      1. Ctrl+L to focus path bar, Ctrl+A select all, Delete clear
+      2. Types the directory path
+      3. Presses Enter to navigate
+      4. Ctrl+A to select all files
+      5. Presses Enter to confirm
+
+    Single file mode:
+      1. Ctrl+L to focus path bar, Ctrl+A select all, Delete clear
+      2. Types the full file path
+      3. Presses Enter to navigate
+      4. Presses Enter again to confirm
+    """
+    import os
+    import subprocess
+    import time
+
+    path = step.path or ""
+    if not path:
+        raise ValueError("file_dialog_select requires a 'path' argument")
+
+    path = os.path.expanduser(path)
+    is_dir = os.path.isdir(path)
+
+    # Wait for dialog to appear
+    time.sleep(1.0)
+
+    # Focus the path bar via Ctrl+L, then clear existing text
+    subprocess.run(
+        ["xdotool", "key", "--clearmodifiers", "ctrl+l"],
+        capture_output=True, timeout=5
+    )
+    time.sleep(0.3)
+    subprocess.run(
+        ["xdotool", "key", "--clearmodifiers", "ctrl+a"],
+        capture_output=True, timeout=5
+    )
+    time.sleep(0.1)
+    subprocess.run(
+        ["xdotool", "key", "--clearmodifiers", "Delete"],
+        capture_output=True, timeout=5
+    )
+    time.sleep(0.1)
+
+    # Type the path
+    subprocess.run(
+        ["xdotool", "type", "--clearmodifiers", path],
+        capture_output=True, timeout=5
+    )
+    time.sleep(0.3)
+
+    # Navigate to the location
+    subprocess.run(
+        ["xdotool", "key", "--clearmodifiers", "Return"],
+        capture_output=True, timeout=5
+    )
+    time.sleep(0.5)
+
+    if is_dir:
+        # Select all files in the directory
+        subprocess.run(
+            ["xdotool", "key", "--clearmodifiers", "ctrl+a"],
+            capture_output=True, timeout=5
+        )
+        time.sleep(0.3)
+
+    # Press Enter to confirm/open
+    subprocess.run(
+        ["xdotool", "key", "--clearmodifiers", "Return"],
+        capture_output=True, timeout=5
+    )
+    time.sleep(0.5)
+
+
+def handle_file_dialog_cancel(step: SuiteActionStep, context: dict) -> None:
+    """Cancel the native file dialog by pressing Escape."""
+    import subprocess
+    import time
+
+    time.sleep(0.5)
+    subprocess.run(
+        ["xdotool", "key", "--clearmodifiers", "Escape"],
+        capture_output=True, timeout=5
+    )
+    time.sleep(1.0)
 
 
 def handle_screenshot(step: SuiteActionStep, context: dict) -> None:
@@ -811,7 +912,8 @@ HANDLERS: dict[str, Callable[[SuiteActionStep, dict], None]] = {
     "dtk_context_menu": handle_dtk_context_menu,
     "dbus_call": handle_dbus_call,
     "dbus_get_property": handle_dbus_get_property,
-    "wait": handle_wait,
+    "file_dialog_select": handle_file_dialog_select,
+    "file_dialog_cancel": handle_file_dialog_cancel,
     "screenshot": handle_screenshot,
     "assert_element": handle_assert_element,
     "assert_not_exists": handle_assert_not_exists,

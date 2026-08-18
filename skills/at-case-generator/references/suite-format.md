@@ -116,6 +116,54 @@ Requires TWO pieces:
 1. **Where to right-click**: `ref`/`selector` (AT-SPI element) or `x`/`y`
 2. **Menu path**: `items` list
 
+## File Dialog Actions
+
+### file_dialog_select
+
+Select files in the native file dialog (deepin/UOS portal) by keyboard simulation.
+**Does NOT use AT-SPI element lookup.** Uses xdotool: Ctrl+L → Ctrl+A → Delete →
+type path → Return → (directory mode: Ctrl+A →) Return.
+
+```yaml
+- action: file_dialog_select
+  path: ${TEST_FILES_DIR}/album_test
+  wait: 3.0
+```
+
+Two modes determined by path type:
+- **Directory mode** (path is a directory): navigates to dir, Ctrl+A selects all
+  files, Return confirms open.
+- **Single file mode** (path is a file): navigates to file, Return confirms open.
+
+**CRITICAL: Must trigger the file dialog first** (keyboard_hot_key, mouse_click,
+or dtk_main_menu). file_dialog_select only works when the modal dialog is open.
+
+### file_dialog_cancel
+
+Cancel/close the native file dialog by pressing Escape.
+
+```yaml
+- action: file_dialog_cancel
+  wait: 1.0
+```
+
+### Coverage Scenarios
+
+| Scenario | YAML | Notes |
+|----------|------|-------|
+| Batch import directory | `file_dialog_select` with dir path | Ctrl+A auto-selects all files |
+| Single file import | `file_dialog_select` with file path | Direct file selection |
+| Cancel dialog | `file_dialog_cancel` | Escape closes dialog |
+| Repeat import | Import same path twice | Verify no duplicate display |
+| Corrupt file | Import corrupt file path | Verify app doesn't crash |
+| Multi-path selection | Ctrl+O then `file_dialog_select` each time | New dialog each time |
+
+### Limitations
+
+- X11 only (xdotool). Wayland needs ydotool/wtype adapter.
+- File dialog must already be open — keys otherwise go to main window.
+- Each `file_dialog_select` starts from the path bar — do not call Ctrl+L manually.
+
 ## Action Types
 
 | Action | Key Fields | Description |
@@ -123,7 +171,8 @@ Requires TWO pieces:
 | session_start | command, wait | Launch app (wait default 3.0s) |
 | session_stop | — | Terminate app |
 | dtk_main_menu | items | Navigate DTK main menu by keyboard |
-| dtk_context_menu | items | Navigate DTK context menu by keyboard |
+| file_dialog_select | path | Select file(s) in native file dialog (xdotool keyboard simulation) |
+| file_dialog_cancel | — | Cancel native file dialog (Escape) |
 | element_action | ref, selector, do | AT-SPI element operation |
 | element_set_value | ref, text | Set text value on element |
 | keyboard_press | key | Press single key (e.g., "enter") |

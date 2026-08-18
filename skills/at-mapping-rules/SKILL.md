@@ -135,7 +135,7 @@ selector with at least one of:
 | `role` | 3rd | Only when name is empty |
 | `parent` + `parent_role` | disambiguation | Required when multiple elements share the same name |
 | `index` | disambiguation | Zero-based; when parent alone can't disambiguate |
-| `child_index` | child navigation | Picks the Nth child of a located container (see Constraint 4) |
+| `child_index` | child navigation | Picks the Nth child of a located container (see Constraint 3) |
 | `child_role` / `child_name` | child filter | Optionally filter children by role/name before indexing |
 
 ### Constraint 2: Hierarchy Disambiguation
@@ -150,7 +150,7 @@ selector:
   parent_role: dialog
 ```
 
-### Constraint 4: Dynamic List Child Navigation
+### Constraint 3: Dynamic List Child Navigation
 
 When the target is a **child of a container whose contents are only known at
 runtime** (e.g., a `list`/`icon list`/`tree` whose items are populated by the
@@ -199,7 +199,7 @@ selector:
 
 `child_index` is zero-based and supports negative values (`-1` = last child).
 
-### Constraint 3: DTK Menu Items Use Menu Navigation
+### Constraint 4: DTK Menu Items Use Menu Navigation
 
 DTK menu items are **transient** — they only exist in AT-SPI tree when the
 menu is open. **NEVER** use `element_action` for menu items.
@@ -217,7 +217,36 @@ Right:
   items: [设置]                  # ← keyboard navigation, not AT-SPI lookup
 ```
 
-Same for context menus: use `dtk_context_menu` + `items`.
+
+### Constraint 5: File Dialog Actions Use Keyboard Simulation
+
+File dialog operations (`file_dialog_select`, `file_dialog_cancel`) handle the
+native file picker (deepin/UOS portal) via xdotool keyboard simulation. Like
+DTK menus, they do NOT use AT-SPI element lookup.
+
+**CRITICAL: Must trigger the file dialog first.** A `file_dialog_select` or
+`file_dialog_cancel` without a prior step that opens the dialog will send
+keys to the main window instead.
+
+```yaml
+# Correct: trigger first, then select
+- action: keyboard_hot_key
+  key: ctrl+o
+  wait: 1.0
+- action: file_dialog_select
+  path: ${TEST_FILES_DIR}/test.png
+  wait: 3.0
+```
+
+```yaml
+# Correct: cancel dialog
+- action: file_dialog_cancel
+  wait: 1.0
+```
+
+**NEVER use `element_action` to interact with file dialog elements.** The
+native file dialog is a separate process, not part of the app's AT-SPI tree.
+File dialog elements must be accessed via `file_dialog_select`/`file_dialog_cancel`.
 
 ## Assert Quality Rules
 
@@ -383,7 +412,8 @@ Before writing ANY YAML for a case:
   expected results vs. preconditions vs. notes
 - [ ] For each operation, find the target element in at-tree-annotated.yaml
 - [ ] If the element is NOT in at-tree, check if it's a DTK menu item (use
-  `dtk_main_menu`/`dtk_context_menu`) or mark UNSUPPORTED
+  `dtk_main_menu`/`dtk_context_menu`) or a file dialog operation (use
+  `file_dialog_select`/`file_dialog_cancel`), or mark UNSUPPORTED
 - [ ] For each expected result, determine the assert type (element/ocr/image)
 - [ ] For each precondition, ensure it becomes a prior action step
 - [ ] If any step is touchscreen/human-judgment/hardware → mark UNSUPPORTED
@@ -397,6 +427,8 @@ After writing cases_mapped.yaml, before `youqu at generate`:
 - [ ] Every `element_action`/`mouse_click` has a selector with name or
   accessible_id
 - [ ] No menu item uses `element_action` (must use `dtk_main_menu`/`dtk_context_menu`)
+- [ ] `file_dialog_select`/`file_dialog_cancel` has a preceding dialog trigger step
+  (`keyboard_hot_key`, `element_action`, or `dtk_main_menu`)
 - [ ] Runtime-populated list/tree children use `child_index` (not a bare `index`)
 - [ ] Every suite has at least one non-`assert_window` assert step
 - [ ] No suite is a no-op (session_start → wait → assert_window → session_stop)
