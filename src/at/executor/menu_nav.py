@@ -36,13 +36,35 @@ class AtMenuNavigator:
         try:
             from src.dogtail_utils import DogtailUtils
             dog = DogtailUtils(self.app_name, self.desc) if self.app_name else DogtailUtils()
-            btn = dog.find_element_by_attr("$//DTitlebarDWindowOptionButton/", index=-1)
-            if btn:
+            btns = dog.find_elements_by_attr("$//DTitlebarDWindowOptionButton/")
+            if btns:
+                btn = btns[-1]
                 if "Press" in getattr(btn, "actions", {}):
                     btn.doActionNamed("Press")
                 else:
                     btn.click()
                 time.sleep(0.15)
+                return
+        except BaseException:
+            pass
+        # Fallback: QML TitleBar has unnamed WindowButton as menu button.
+        try:
+            import pyatspi
+            desktop = pyatspi.Registry.getDesktop(0)
+            for i in range(desktop.childCount):
+                app = desktop[i]
+                if self.app_name and self.app_name.lower() in (app.name or "").lower():
+                    for j in range(app.childCount):
+                        child = app[j]
+                        if child.getRoleName() == "frame":
+                            for k in range(child.childCount):
+                                btn = child[k]
+                                if btn.getRoleName() == "button" and not btn.name:
+                                    action = btn.queryAction()
+                                    if action.get_nActions() > 0:
+                                        action.doAction(0)
+                                        time.sleep(0.5)
+                                        return
         except Exception:
             pass
 
