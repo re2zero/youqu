@@ -1046,7 +1046,22 @@ def layered_merge(
             for label, tree in state_snapshots[1:]:
                 _merge_persistent_state(base_tree, tree, label)
         else:
-            base_tree = []
+            # Third fallback: load raw runtime dump from dump/runtime.yaml
+            # (produced by `youqu at dump dtk` → dump/runtime.yaml).
+            # No record_session.yaml or state snapshots — use the raw
+            # runtime tree directly, then dedup before merging.
+            runtime_raw = record_dir / "runtime.yaml"
+            if runtime_raw.is_file():
+                with open(runtime_raw, encoding="utf-8") as f:
+                    raw = yaml.safe_load(f)
+                base_tree = raw["tree"] if raw and "tree" in raw else []
+                base_tree = dedup_runtime_tree(base_tree)
+                logger.info(
+                    "layered_merge: loaded raw runtime tree from %s (%d root nodes)",
+                    runtime_raw, len(base_tree),
+                )
+            else:
+                base_tree = []
         merged = merge_trees(base_tree, scan_classes)
         return merged, []
 
