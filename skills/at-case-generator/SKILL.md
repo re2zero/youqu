@@ -1,726 +1,272 @@
 ---
 name: at-case-generator
-version: "0.7.0"
+version: "2.0.0"
 description: >
   Use when generating AT-SPI test suites from xlsx/csv test case documents
-  for a Linux desktop application. Triggers: AT用例生成, at-case generation,
-  AT suite generation, AT-SPI suite YAML, at-tree用例, 桌面应用AT测试,
-  AT自动化用例, youqu at parse, youqu at generate, youqu at tree-info.
+  or from feature requirements for a Linux desktop application. Generates
+  executable YAML suite files ready for `youqu at run`. Supports three modes:
+  standard (xlsx + scan + dump), auto/headless (no DISPLAY), and
+  feature-driven (no xlsx, from PR/issue). Triggers: AT用例生成, at-case
+  generation, AT suite generation, AT-SPI suite YAML, at-tree用例,
+  桌面应用AT测试, AT自动化用例, youqu at parse, youqu at generate,
+  youqu at tree-info, 自动生成, 无record, multica.
 ---
+# AT Case Generator v2.0
 
-# AT Case Generator
+## Overview
 
-Convert xlsx/csv test case documents into executable AT-SPI suite YAML.
-The AI does semantic mapping through understanding — not a CLI LLM call,
-not a regex script, not an external API request. **You (the agent reading
-this) are the AI.** Framework provides data tools; you provide understanding.
+**输入**: xlsx/csv 测试用例文档（或 feature 需求）+ 源代码 + 应用二进制
+**处理**: 确定性管线（pipeline_run.py）→ AI 子 agent 池（context-bundle + 每模块并行映射）→ 确定性验证（pipeline_assemble.py + Gate 3/4/5）
+**输出**: 可执行的 AT-SPI `*.suite.yaml` + `elements.yaml` + `cases_mapped.yaml`
 
-## When to Use
+**关键约束**:
+- 脚本做确定性操作，AI 只做语义理解。每阶段 AI 工作由独立的子 agent 执行，上下文零混杂。
+- 模块是语义映射的单位。每个模块 15-30 条用例，子 agent 独立映射，互不干扰。
 
-- xlsx/csv test case documents for a Linux desktop application
-- Need executable AT-SPI test suites from those documents
-- Input is a PR/issue/requirement and you want to generate cases directly
-- 当请求/环境带有 `auto`、`自动`、`无 record`、`不需要录制`、`multica`、headless/CI 等触发时，使用下方“场景变体：auto / 自动 / 无 record 模式”
-
-## Pipeline
-
-```
-Step 1: Pre-flight checks
-Step 2: Data preparation
-    youqu at parse <xlsx> → cases_raw.yaml (raw, format-only)
-    --- AT tree acquisition (requires user interaction) ---
-    youqu at scan --src <dir> --app <id> → scanned_ok.yaml + element_gaps.yaml
-    ⏸ STOP: ask user to run `youqu at record` and return with results
-        user runs: youqu at record --app <id> [--launch <cmd>]
-        user operates app (clicks, menus, dialogs), then finishes
-        user returns: record_session.yaml + states/*.yaml produced
-    youqu at merge --scan <scan_dir> --record <record_dir> → at-tree.yaml (v2.0)
-    ---
-    youqu at tree-info --format yaml <at-tree> → at-tree-annotated.yaml (structured, for AI)
-Step 2.5: AT tree annotation (AI session)
-    AI fills comment for each interactive element → at-tree-annotated.yaml (draft)
-    Human reviews → at-tree-annotated.yaml (reviewed)
-    youqu at validate --gate 1
-Step 2.6: Context bundle generation (AI session)
-    AI reads ui-map.md + docs/*.md + expected-at-spi-elements.md + at-tree-annotated.yaml
-    AI distills into context-bundle.md (three tables: element-function, interface-element, function-operation-assertion)
-Step 2.7: Case normalization (AI session)
-    AI groups cases by GUI interface → suite-cases.yaml + cases_non_gui.yaml
-    AI adds 4-field suite annotations (测试界面, 测试功能, 前置条件, AT元素引用)
-    youqu at validate --gate 2
-Step 2.8: Module split (optional, for large case sets)
-    youqu at split --cases <cases_raw> --at-tree <annotated> --output <dir>
-    youqu at docs <app> --output <docs_dir>  (optional: import help manual chapters)
-Step 3: AI semantic mapping (KEY STEP — AI does this through understanding)
-    AI reads at-tree-annotated.yaml + suite-cases.yaml (or per-module files)
-    AI also reads transient_contexts (if v2.0) to understand menu/dialog elements
-    AI fills action, element_ref, selector, items, key, text, assertion
-    AI writes cases_mapped.yaml with format example in header
-    youqu at validate --gate 3
-    youqu at validate --gate 5  (semantic safety: description-as-input, missing precondition, empty selector)
-Step 3.5: Precandidate (optional, for constraint-based selector pre-filtering)
-    youqu at precandidate --cases <cases_raw> --at-tree <annotated> --output <suite-cases.yaml>
-    (or per-module: youqu at precandidate --module-dir <dir>)
-Step 4: Generate + validate
-    youqu at generate --cases <mapped> --output <dir> --app <app> --at-tree <tree>
-    youqu at validate --gate 4
-    youqu at run --testdir <dir>  [NOT python -m src.yaml_test.suite]
-Step 5: Layered runtime verification (optional)
-    youqu at smoke --modules-dir <dir>   (L2: one representative case per module)
-    youqu at verify --suite <suite.yaml> --spec-id <id>  (L3: single case deep verify)
-```
-
-## 场景变体：auto / 自动 / 无 record 模式（通用）
-
-**触发条件（满足任一即进入本模式）**：
-
-- 用户/任务描述中出现 `auto`、`自动`、`自动生成`、`无 record`、`不需要录制`、`跳过 record`
-- 调用方是 Multica
-- 环境是 headless / CI / 无人工操作条件
-
-**唯一差异：AT 元树获取不需要人工 `record`。** 其余步骤（AI 标注、用例规范化、
-AI 语义映射、生成、校验、执行）与标准管线完全一致。
-
-```
-标准 AT 元树获取：scan → record（人工操作） → merge
-auto 模式获取：   scan + dump（自动启动应用） + merge
-                 或 scan → scan_to_atree.py（headless 静态合成）
-```
-
-推荐命令：
+## 用法
 
 ```bash
-# 有 DISPLAY / 可启动应用时
-youqu at scan --src <src_dir> --app <app> --output scan_output/
-youqu at dump dtk --app <app> --launch <binary> --output dump_output/   # 自动 dump，不需要人工 record
-youqu at merge --scan scan_output/ --record dump_output/ --output .
+# 标准模式（xlsx + 有 DISPLAY）
+python3 skills/at-case-generator/scripts/pipeline_run.py \
+    --app deepin-reader --src /path/to/source \
+    --xlsx tests/at/casefile/用例.xlsx \
+    --binary /usr/bin/deepin-reader \
+    --output tests/at/
 
-# 无 DISPLAY / headless 时
-youqu at scan --src <src_dir> --app <app> --output scan_output/
-python3 skills/at-case-generator/scripts/scan_to_atree.py scan_output/ <app> at-tree.yaml
+# headless 模式（无 DISPLAY）
+python3 skills/at-case-generator/scripts/pipeline_run.py \
+    --app deepin-reader --src /path/to/source \
+    --xlsx tests/at/casefile/用例.xlsx \
+    --output tests/at/ --headless
+
+# 复用已有 at-tree（跳过 scan/dump/merge）
+python3 skills/at-case-generator/scripts/pipeline_run.py \
+    --app deepin-reader --xlsx tests/at/casefile/用例.xlsx \
+    --at-tree tests/at/at-tree.yaml \
+    --output tests/at/
+
+# 仅 feature-driven（无 xlsx）
+python3 skills/at-case-generator/scripts/pipeline_run.py \
+    --app deepin-terminal --src /path/to/source \
+    --output tests/at/ --headless
 ```
 
-之后从 `youqu at tree-info` 开始，按标准管线继续：
-`tree-info → P2.5 AI 标注 → P2.6 上下文包 → P2.7 AI 规范化 → P3 AI 映射 → generate → validate → run`。
+## 模式判定
 
-**禁止**：不要因为“自动化”就把 P3 换成脚本/正则映射；AI 语义映射仍然是本技能的核心。
+| 条件 | 模式 | 跳过阶段 | 子 agent 数 |
+|------|------|----------|-------------|
+| 有 xlsx + 有 DISPLAY + 有 --binary | 标准 | 无 | 0-1 (UI图谱) + 1 (context) + N (模块数) |
+| 有 xlsx + 无 DISPLAY | auto / headless | dump | 0-1 (UI图谱) + 1 (context) + N (模块数) |
+| 无 xlsx | feature-driven | parse, docs, plan | 0-1 (UI图谱) + 1 (context) + 1 (合成) |
+| 有 --at-tree | 复用 AT 树 | scan, dump, merge | 0-1 (UI图谱) + 1 (context) + N (模块数) |
 
-`youqu at map` is **deprecated**. Mapping is done by you (the agent) in Step 3.
+## 主流程
 
-## Step 1: Pre-flight Checks
+### 前置阶段: UI 图谱推导（可选，子 agent 执行）
 
-- `youqu --version` — CLI installed
-- xlsx/csv input exists, columns match supported aliases (see pipeline-reference.md)
-- at-tree.yaml exists and is fresh (check `metadata.generated_at`)
+在管线启动前，可先执行 UI 图谱推导。启动一个 **子 agent** 执行 `at-spi-ui-map` 技能，通过 codebase MCP 从源码推导 UI 结构，产出三件套到 `tests/at/`：
+- `ui-map.md` — 组件 mermaid 图 + 控件表 + 菜单/对话框/快捷键索引
+- `expected-at-spi-elements.md` — 完整预期元素清单 + 推导链
+- `at-spi-implementation-checklist.md` — 缺口明细 + 修复代码模板
 
-## Step 2: Data Preparation
+三件套在 Stage 2 被 context-bundle 子 agent 读取，用于增强断言质量。
+MCP 不可用时跳过，不影响管线执行。
 
-### 2a: Parse xlsx → raw cases.yaml
-```bash
-youqu at parse --input <xlsx_or_csv> --output <cases_yaml>
-```
+子 agent 任务模板见 `at-spi-ui-map` 技能。本技能不重复其内容。
 
-Output: CaseStep entries with `step_type`, `description`, `element_hint`,
-`items` filled; `action`, `element_ref`, `selector` are null. Format-only.
+### 阶段 0: 模式判定（主 agent 执行）
 
-### 2b: Generate structured annotated tree for AI reading
+读取 `--at-tree`、`--xlsx`、`--binary`、`DISPLAY` 环境变量，判断当前模式。模式判定一次，贯穿全流程。
 
-```bash
-youqu at tree-info --at-tree <at_tree.yaml> --output <at-tree-annotated.yaml> --format yaml
-```
+### 阶段 1: 数据准备 — 确定性操作（由 `pipeline_run.py` 自动执行）
 
-Outputs structured YAML with `comment`, `annotation_status`, `classification` fields
-for each node. The AI fills `comment` in Step 2.5; `classification` is pre-set by
-the denoise filter (interactive/container). Replaces the old flat `compact_tree.txt`.
+见 `references/stage-1-prep.md`
 
-### 2c: Acquire at-tree.yaml (if not present)
+执行内容：
+- parse → cases_raw.yaml
+- docs → 帮助文档分章
+- scan → 静态源码扫描
+- dump → 运行时 AT-SPI 抓取（有 DISPLAY 时）
+- merge → at-tree.yaml
+- tree-info → at-tree-annotated.yaml
+- pipeline_prep.py → per-module input.json
 
-标准交互模式：
+### 阶段 2: 上下文包生成 — AI 子 agent（1 个子 agent）
 
-```bash
-youqu at dump dtk <app_name> --src <source_dir> --output <output_dir>
-```
+见 `references/stage-2-context.md`
 
-Requires desktop environment with target app running.
+启动一个子 agent，读取 `at-tree-annotated.yaml` + `ui-map.md` + `expected-at-spi-elements.md` + `docs/`，生成 `context-bundle.md`（三张表）。
 
-auto / 自动 / 无 record 模式：使用“场景变体：auto / 自动 / 无 record 模式”中的
-`scan + dump + merge` 或 `scan → scan_to_atree.py`，不需要人工 `record`。
+### 阶段 3: 语义映射 — AI 子 agent 池（N 个子 agent，并行）
 
-## Step 2.5: AT Tree Annotation (AI Session)
+见 `references/stage-3-mapping.md` + `templates/at-case-mapping-prompt-template.md`
 
-You (the agent) annotate each interactive element in `at-tree-annotated.yaml` with
-a `comment` field describing its GUI location and function.
+对于 `modules/` 目录下的每个 `*.input.json`，启动一个子 agent 执行语义映射。子 agent 读取：
+- `modules/<module_short>.input.json`（该模块的 cases，如 `交互_键盘.input.json`）
+- `context-bundle.md`（上下文包）
+- `at-tree-annotated.yaml`（AT 树）
 
-### Comment Format
+输出 `modules/<module_short>.output.json`。
 
-```
-GUI位置: <界面位置描述> | 功能: <功能描述>
-```
+**feature-driven 模式**：只有一个模块，子 agent 读取 `cases_raw.yaml` 替代 `input.json`。
 
-Examples:
-- `GUI位置: 工具栏第一个按钮 | 功能: 打开文件`
-- `GUI位置: 左侧导航栏 | 功能: 切换书架视图`
-- `GUI位置: 设置对话框-通用标签页 | 功能: 设置默认字号`
+### 阶段 4: 组装 + 校验 — 确定性操作（由 `pipeline_assemble.py` 自动执行）
 
-### Annotation Procedure
-
-1. Read `at-tree-annotated.yaml`
-2. For each node with `classification: interactive`:
-   - Infer the GUI location from parent chain (role/name hierarchy)
-   - Infer the function from `name`, `object_name`, `role`
-   - Write the `comment` field
-   - Set `annotation_status: draft`
-3. Human reviews and corrects annotations
-4. Set `annotation_status: reviewed` on corrected entries
-5. Run `youqu at validate --gate 1 --at-tree-annotated <path> --element-gaps <path>`
-
-### Element Gaps
-
-`element_gaps.yaml` lists interactive elements missing `object_name` and
-`accessible_id`. These need app-side `setAccessibleName()` to be fully
-AT-SPI addressable. Report gaps to the user — do not attempt to fix app source.
-
-## Step 2.6: Context Bundle Generation (AI Session)
-
-You (the agent) distill UI map, docs, and at-tree-annotated into a compact
-`context-bundle.md` with three tables. This is the **only** step that reads
-raw source files (ui-map.md, docs/*.md, expected-at-spi-elements.md).
-Subsequent steps (2.7, 3) consume only context-bundle.md.
-
-### Inputs
-
-- `ui-map.md` (if exists) — component graph, control table, menu index
-- `expected-at-spi-elements.md` (if exists) — expected element list with derivation chain
-- `docs/modules/*.md` (if exists) — help manual chapters
-- `at-tree-annotated.yaml` — current annotated tree
-
-### Output
-
-`tests/at/context-bundle.md` with three tables:
-
-1. **元素-功能对照表**: element name → Role → function description → visibility condition
-2. **界面-元素映射**: interface → contained elements
-3. **功能-操作-断言映射**: function → operation → assertion target
-
-### Format
-
-Tables only. No prose paragraphs. Each row is one fact.
-
-```
-## 元素-功能对照表
-| 元素名 | Role | 功能描述 | 可见条件 |
-
-## 界面-元素映射
-| 界面 | 包含元素 |
-
-## 功能-操作-断言映射
-| 功能 | 操作 | 断言目标 |
-```
-
-### Validation
-
-Row count in 元素-功能对照表 >= 80% of interactive nodes in at-tree.
-If not, stop and report error.
-
----
-
-## Step 2.7: Case Normalization (AI Session)
-
-You (the agent) normalize `cases_raw.yaml` into `suite-cases.yaml` with
-interface-based grouping and suite annotations.
-
-### Normalization Procedure
-
-1. Read `cases_raw.yaml`
-2. Separate non-GUI cases (terminal commands, DBus without UI, HTTP) into
-   `cases_non_gui.yaml` with `status: non_gui`
-3. Group remaining cases by GUI interface (not xlsx module path):
-   - Cases testing the same interface flow → one suite
-   - Cap: 15 cases per suite
-   - LLM-assisted grouping based on step descriptions
-4. For each suite, add 4 annotation fields:
-   - `测试界面`: which GUI interface this suite tests
-   - `测试功能`: what functionality this suite covers
-   - `前置条件`: setup requirements (moved from setup steps)
-   - `AT元素引用`: list of AT tree element names used by this suite
-5. Split compound steps (multiple operations in one step) into atomic steps
-6. Use short functional module names as the suite `module` value (e.g. `查找`,
-   `设置`, `远程管理`, `自定义命令`, `键盘交互-设置`), **not** the raw xlsx
-   module path. The `module` field becomes the generated suite directory/file
-   name, so long paths produce unreadable suites.
-7. Deduplicate repeated operations while mapping/normalizing:
-   - Common preconditions belong in the suite-level `前置条件` / setup, not
-     repeated in every case step.
-   - Do not emit duplicate identical assertions (same action + same selector)
-     in one suite case.
-   - Keep intentional repeated key presses (e.g. Tab Tab Tab) intact; do not
-     blindly collapse them.
-8. Run `youqu at validate --gate 2 --suite-cases <path> --at-tree-annotated <path>`
-
-### Suite Annotation Example
-
-```yaml
-cases:
-  - id: "suite_reader_toolbar"
-    name: "阅读器工具栏功能"
-    status: "active"
-    annotation:
-      测试界面: "主窗口-工具栏"
-      测试功能: "工具栏按钮操作（打开/保存/书签）"
-      前置条件: "应用已启动，文档已打开"
-      AT元素引用: ["open_button", "save_button", "bookmark_button"]
-    steps:
-      - step_type: "action"
-        description: "点击打开按钮"
-      - step_type: "assert"
-        description: "验证文件已打开"
-```
-
-## Step 3: AI Semantic Mapping (KEY STEP)
-
-**You (the agent executing this skill) do the mapping.** No external API
-calls, no scripts, no intermediate files. Read each case description from
-`suite-cases.yaml`, understand the intent, match against the annotated AT-SPI
-tree (`at-tree-annotated.yaml`) and the context bundle (`context-bundle.md`),
-and fill semantic fields directly in `cases_mapped.yaml`.
-
-Also read `context-bundle.md` for the 功能-操作-断言映射 table — it tells you
-which element to assert after each operation, preventing generic assertions.
-
-### CRITICAL: No Script-Based Mapping
-
-**DO NOT write Python scripts, regex matchers, or intermediate mapping files.**
-Do not create `map_cases.py`, `parse_cases.py`, or any script that uses pattern
-matching to fill semantic fields. Read each case description, understand the
-user's intent, match against the AT-SPI tree through semantic reasoning, and
-fill fields directly in cases.yaml.
-
-This is the single most important thing to get right. In a prior real-world
-deployment, the AI created a 1220-line regex script instead of doing the
-mapping through understanding. Result: 7% selector coverage, 0% assertion
-coverage, 0% execution success. The old pipeline (AI generates each YAML
-case individually) achieved 30%+ baseline on the same project.
-
-Script-based mapping is a known failure mode — do not repeat it.
-
-### Batch Processing
-
-For >20 cases, process in batches of ≤10:
-1. Read 10 case descriptions + relevant `at-tree-annotated.yaml` sections
-2. Map all 10 through understanding
-3. Append to `cases_mapped.yaml`
-4. Next 10
-
-### DTK Menu Actions (Core Rule)
-
-DTK menus create transient popups NOT in the AT-SPI tree. Menu items are
-NOT clickable via `element_action` — they require keyboard navigation:
-
-- **`dtk_main_menu`**: Alt → Down/Right → Enter. Uses `items: ["菜单项"]`.
-- **`dtk_context_menu`**: Right-click at target → keyboard navigate → Enter.
-  Needs `items` (menu path) + target (`ref`/`selector` or `x`/`y`).
-- **`element_action`**: Only for visible non-menu elements (buttons, tabs, fields).
-
-**NEVER use `element_action` for menu items.**
-
-**Localized menu/button labels**: Menu items and DTK buttons are displayed in
-the current language environment, so do not guess labels from test
-descriptions. Read the app's translation files (e.g.
-`translations/<app>_zh_CN.ts`) and use the actual translated strings for
-`items` and `selector.name`. DTK button labels often contain spaces
-(e.g. `取 消`, `确 定`, `保 存`), while menu items usually do not
-(e.g. `设置`, `远程管理`, `横向分屏`).
-
-### File Dialog Actions (Core Rule)
-
-File dialog operations (`file_dialog_select`, `file_dialog_cancel`) handle
-the native file picker dialog (deepin/UOS portal). Like DTK menus, they
-do NOT use AT-SPI element lookup — they use xdotool to simulate keyboard
-events directly on the dialog.
-
-**`file_dialog_select`**: Ctrl+L → Ctrl+A → Delete → type path → Return.
-Accepts a `path` field (string, required). Supports `${VAR}` variable
-substitution and `~` home expansion.
-
-```yaml
-- action: file_dialog_select
-  path: ${TEST_FILES_DIR}/album_test
-  wait: 3.0
-```
-
-Two modes:
-- **Directory mode** (path is a directory): navigates to the dir, Ctrl+A
-  selects all files, Return confirms open.
-- **Single file mode** (path is a file): navigates to the file, Return
-  confirms open.
-
-**`file_dialog_cancel`**: Escape. Closes the dialog without selecting.
-
-```yaml
-- action: file_dialog_cancel
-  wait: 1.0
-```
-
-**CRITICAL: CRITICAL: CRITICAL: You MUST trigger the file dialog first.**
-`file_dialog_select`/`file_dialog_cancel` only work when the modal file
-dialog is already open. Trigger it via:
-- `keyboard_hot_key` (e.g., `ctrl+o`)
-- `element_action` clicking an "Open" or "Import" button
-- `dtk_main_menu` selecting "导入" from the menu
-
-```yaml
-# Wrong — file_dialog_select without prior trigger
-- action: file_dialog_select
-  path: ${TEST_FILES_DIR}/file.png
-
-# Correct — trigger first
-- action: keyboard_hot_key
-  key: ctrl+o
-  wait: 1.0
-- action: file_dialog_select
-  path: ${TEST_FILES_DIR}/file.png
-  wait: 3.0
-```
-
-**NEVER use `element_action` to click file dialog elements.** The native
-file dialog is a separate process portal, not part of the app's AT-SPI tree.
-`element_action` on a file dialog element will fail.
-
-**Coverage scenarios**:
-| Scenario | Usage | Notes |
-|----------|-------|-------|
-| Batch import (directory) | `file_dialog_select` with dir path | Ctrl+A selects all files |
-| Single file import | `file_dialog_select` with file path | Direct file selection |
-| Cancel dialog | `file_dialog_cancel` | Escape closes |
-| Repeat import | Import same path twice | Verifies no duplicate |
-| Corrupt file | Import corrupt file path | Verifies app doesn't crash |
-
-**Limitations**:
-- Depends on xdotool (X11 only). Wayland needs ydotool/wtype adapter.
-- File dialog must already be open (modal), otherwise keys go to main window.
-- Each `file_dialog_select` starts from the path bar — do NOT call Ctrl+L
-  manually before it.
-
-### How to Map Each Step
-
-Read each step description and understand:
-1. **What action is the user performing?** (click, type, press key, open menu, assert)
-2. **What element is the target?** (extract name and role from the description)
-3. **Is this a compound step?** (multiple actions in one description → split into separate CaseSteps)
-4. **Is the action a file dialog operation?** (descriptions containing "打开文件", "选择文件", "导入", "取消" in context of file picker → use `file_dialog_select`/`file_dialog_cancel` with `path`, not `element_action`)
-
-Write `selector: {name, role}` from the description for runtime AT-SPI lookup.
-Do NOT rely on static at-tree node IDs (only ~3.6% coverage). The executor
-discovers elements dynamically at runtime by searching the live AT-SPI tree.
-
-**`assert_element` uses `name` only** — the executor constructs dogtail search
-expressions like `$//<name>/`, which search by element name. `role` is stored
-as metadata but NOT included in the search expression (dogtail parses
-`$//name/role/` as hierarchical path traversal, not attribute combination).
-
-**Element Target Priority** (executor checks in this order):
-1. **`selector.name`** — runtime AT-SPI lookup by name. Primary for assert_element.
-2. **`ref`** — at-tree node ID lookup in elements.yaml. Fallback when selector
-   is unavailable (e.g., element has no accessible name).
-3. **`x`/`y`** — coordinate-based click. Last resort when no AT-SPI metadata.
-
-For `mouse_click` and other coordinate-based actions, `resolve_coordinates`
-uses `name` first (dogtail search), then `role` (predicate search), then
-`ref` (elements.yaml), then `x`/`y` fallback.
-
-**Every `assert_element` MUST have a concrete `selector` with a `name`** — an
-assertion without a target is a vacuous no-op. If no AT-SPI element can serve
-as the assertion target (e.g., purely visual state change with no accessible
-element), **omit the assertion entirely** rather than creating one with an
-empty or unfindable selector.
-
-**Every `keyboard_type` text must be real input data** — not description
-fragments. If text is "任意长度字符" → use placeholder "test_input_123".
-If text contains "后" → it's a precondition, skip.
-
-See `references/pitfalls.md` for documented edge cases and their correct
-handling. Review pitfalls before starting Step 3 and verify
-output against them after mapping.
-
-### Writing the Mapped cases_mapped.yaml
-
-File header MUST include a `=== 格式范例 ===` comment block showing the
-exact structure for adding new cases. Each suite MUST retain its 4-field
-annotation from `suite-cases.yaml`.
-
-```yaml
-# === 格式范例 ===
-# metadata:
-#   generated_at: "2024-01-01T00:00:00"
-#   source: "input.xlsx"
-# cases:
-#   - id: "suite-id"
-#     name: "Suite name"
-#     status: "active"
-#     annotation:
-#       测试界面: "主窗口"
-#       测试功能: "工具栏操作"
-#       前置条件: "应用已启动"
-#       AT元素引用: ["open_button"]
-#     steps:
-#       - step_type: "action"
-#         action: "session_start"
-#         command: "app-name"           # full launch command incl. file args
-#       - step_type: "action"
-#         action: "dtk_main_menu"
-#         items: ["视图", "横向分屏"]
-#         wait: 0
-#       - step_type: "action"
-#         action: "file_dialog_select"
-#         path: "${TEST_FILES_DIR}/test.png"
-#         wait: 3.0
-#       - step_type: "action"
-#         action: "mouse_click"
-#         selector: {name: "打开", role: "push button"}
-#       - step_type: "assert"
-#         action: "assert_element"
-#         selector: {name: "文件内容", role: "text"}  # assert only uses name
-# === 格式范例结束 ===
-
-metadata:
-  generated_at: "2024-01-01T00:00:00"
-  source: "input.xlsx"
-cases:
-  - id: "suite-id"
-    name: "Suite name"
-    module: "module-name"
-    status: "active"
-    annotation:
-      测试界面: "主窗口"
-      测试功能: "工具栏操作"
-      前置条件: "应用已启动"
-      AT元素引用: ["open_button"]
-    steps:
-      - step_type: "action"
-        description: "打开终端"
-        action: "session_start"
-        command: "deepin-terminal"
-      - step_type: "action"
-        description: "主菜单点击某项，切换设置"
-        action: "dtk_main_menu"
-        items: ["菜单项A", "子菜单项"]
-      - step_type: "assert"
-        description: "验证设置已切换"
-        action: "assert_window"
-        assertion: "window_exists"
-```
-
-After mapping, run `youqu at validate --gate 3 --cases-mapped <path> --at-tree-annotated <path>`
-to verify format example exists, selectors cross-reference the annotated tree,
-and no noise selectors remain.
-
-**提交前人工检查**：确认 `cases_mapped.yaml` 文件头的 `=== 格式范例 ===`
-注释块包含以下关键字段的示例，缺一不可：
-- `action`（如 `session_start`、`mouse_click`、`dtk_main_menu`、`file_dialog_select`、`assert_element`）
-- `selector`（含 `name` 和 `role`）
-- `items`（菜单操作）
-- `assert_element` 或 `assert_window`（断言）
-- 4 字段注解（`测试界面`、`测试功能`、`前置条件`、`AT元素引用`）
-
-同时确认 `tests/at/at-tree.yaml`、`tests/at/suite-cases.yaml`、`tests/at/cases_mapped.yaml`
-三个中间产物已生成并纳入提交范围。
-
-Then run `youqu at validate --gate 5 --cases-mapped <path>` to verify semantic
-safety:
-- C1: no description text as keyboard input
-- C2: no keyboard_press / file_dialog action without a prior trigger
-- C3: no selector missing both name and accessible_id
-- C4: no uncategorized step_type (所有 step 必须有 action 映射)
-- C5: no `dtk_main_menu` misuse in right-click menu scenarios (cases with
-  "右键菜单" keywords should use `dtk_context_menu`, not `dtk_main_menu`)
-
-See `references/pipeline-reference.md` for full cases.yaml schema and
-`references/suite-format.md` for all action types and their fields.
-
-## Step 3.5: Assertion Coverage Gate (CRITICAL)
-
-**Before proceeding to Step 4, every suite in cases.yaml MUST have at least
-one assertion step.** A test case that performs actions without verifying the
-result is a no-op — it will execute steps but never fail, wasting runtime and
-providing no coverage signal.
-
-### Gate Procedure
-
-1. Scan every suite in cases.yaml:
-   ```
-   For each suite:
-     has_assert = any(
-       step.step_type == "assert" or
-       (step.action and step.action.startswith("assert_"))
-       for step in suite.steps
-     )
-     if not has_assert:
-         → FAILS quality gate
-   ```
-
-2. For each failing suite, read the raw descriptions from cases_raw.yaml
-   and identify verification intent (检查, 查看, 验证, 确认, 是否, 应该,
-   符合, 出现, 消失, 正确, 可见, etc.).
-
-3. Determine the appropriate assertion:
-   - **Automatable (AT-SPI findable element exists)**:
-     Insert a `step_type: assert` step with `action: assert_element` and
-     a concrete `selector: {name, role}` targeting the element or state
-     that the test description intended to verify.
-     
-     The `description` field of any assertion step MUST contain a
-     verification keyword (检查, 查看, 验证, 确认, 是否, 应该, 符合,
-     出现, 消失, 正确, 可见) so the parser can classify it correctly.
-     
-     Example: raw step "检查光标焦点" → insert `assert_element` with
-     `selector: {role: "text", name: "cursor"}` after the focus operation.
-     
-     Example: raw step "右键菜单显示" → insert `assert_element` with
-     `selector: {role: "menu", name: ""}` after the right-click.
-
-   - **Not automatable (purely visual, no AT-SPI element)**:
-     Mark the suite as `status: unsupported` and write the reason:
-     ```yaml
-     status: unsupported
-     reason: "纯视觉验证：<description of what cannot be automated>"
-     ```
-
-   - **No verification intent at all (bare functional operations)**:
-     If the case has only `session_start` + bare operations and no step
-     description contains verification language, add a basic assertion
-     at minimum: `assert_element` checking the application window exists
-     (e.g., `selector: {role: "frame", name: "deepin-terminal"}`).
-
-4. Re-verify after supplementing: the gate must pass with ALL suites having
-   at least one assertion before proceeding to Step 4.
-
-### Programmatic Enforcement
-
-Use `youqu at generate --assert-gate` to enforce the gate at generation
-time. The generator scans all generated SuiteCases and reports any without
-assert_steps. With `--assert-gate`, it exits with error if any are found.
-Without the flag, it prints warnings but proceeds.
-
-### Why This Matters
-
-Without this gate, many generated cases end up with zero assertion steps —
-every test executes actions but never verifies anything. The quality gate
-catches this gap before generation, ensuring every generated test case
-provides meaningful coverage signal. Cases that cannot supply an assertion
-are candidly marked `unsupported` rather than shipped as silent no-ops.
-
-## Step 4: Generate + Validate
-
-
-### 4a: Generate
+见 `references/stage-4-assemble.md`
 
 ```bash
-youqu at generate --cases <mapped_cases.yaml> --output <output_dir> \
-  --app <app_name> --at-tree <at_tree.yaml>
+python3 skills/at-case-generator/scripts/pipeline_assemble.py \
+    --modules tests/at/modules/ \
+    --output tests/at/ \
+    --at-tree tests/at/at-tree.yaml \
+    --generate-mapped tests/at/cases_mapped.yaml
 ```
 
-Output: `elements.yaml`, `<module>/<module>.suite.yaml`, `app-optimization.md`.
+### 阶段 5: 验证 + 交付
 
-The generated directory/file names come from the `module` field in
-`cases_mapped.yaml`. Keep `module` short and functional (e.g. `查找`, `设置`,
-`远程管理`) so the output stays readable; for deepin-terminal projects the
-conventional output root is `tests/at/yaml`.
+见 `references/stage-5-verify.md`
 
-### 4b: Validate
+执行 Gate 3/5/4 校验 → 运行时验证（有 DISPLAY 时）→ 覆盖率报告 → 交付
 
-**Structure checks**:
-- Suite files use `suites:` (NOT `specs:`)
-- `session_start.command` uses app launch command
-- `wait` values are in **seconds** (float: 0, 1.0, 3.0)
-- `dtk_main_menu` / `dtk_context_menu` for menu operations (NOT `element_action`)
-- Steps from the same test case are in the same SuiteCase
 
-**Quality checks**: Verify output against `references/pitfalls.md` — no empty
-selectors, no garbage keyboard_type text, no precondition fragments as steps.
-Re-verify the assertion coverage gate conditions still hold.
+## 管线纲领
 
-**Runtime validation** (requires desktop):
-```bash
-youqu at run --testdir <output_dir> [--suite <suite_file>]
+### 设计哲学
+
+**脚本做确定性操作，AI 只做语义理解。** 凡可脚本化的动作（抓取/校验/推送/状态）写成脚本，AI 不手做。
+AI 的职责仅限于：理解上下文、做语义映射、生成结构化输出。脚本的职责是：抓取数据、校验格式、组装产物、运行测试。
+
+### 上下文隔离原则
+
+每阶段 AI 工作由独立子 agent 执行，上下文零混杂：
+- 原始信息源（ui-map.md、docs/*.md、expected-at-spi-elements.md）**只在 Stage 2 读取一次**，蒸馏为 context-bundle.md
+- Stage 3 投入 context-bundle.md + at-tree-annotated.yaml 作为参考，LLM 自选相关行
+- context-bundle.md 格式以表格为主（token 效率高、歧义低），禁止大段 prose
+- 各模块间互不影响，一条映射错误不扩散
+- Stage 2 子 agent 不读 Stage 3 的映射规则，Stage 3 子 agent 不读 Stage 2 的上下文包生成规则
+
+### 可追溯性链
+
 ```
-**NOT** `python -m src.yaml_test.suite` — that is a different executor.
-The AT pipeline uses `AtSuiteExecutor` in `src/at/executor/`.
-
-### 4c: 覆盖率报告（独立脚本）
-
-```bash
-python3 skills/at-case-generator/scripts/coverage_report.py \
-  --testdir <output_dir> \
-  [--expected-names tests/at/spi/expected_names.yaml] \
-  [--cases-mapped tests/at/cases_mapped.yaml]
+at-tree.comment ↔ context-bundle.元素-功能对照表 ↔ output.json.suite.annotation.AT元素引用 ↔ suite.yaml.suites[].steps[].selector.name
 ```
 
-输出 `report.md`，包含：
-- 用例统计（总用例数、断言覆盖率、模块分布）
-- AT-SPI 元素覆盖率（口径 A/B）
-- 重复用例检测（相同操作序列分组）
-- 未覆盖元素清单
-- 不可自动化用例（条件性）
+每个环节的引用关系可双向回溯：从最终 suite.yaml 的 selector.name 可追溯到 at-tree 中的原始元素定义。
 
-报告是纯分析工具，不修改生成产物。generate 后、run 前或 run 后任意时刻执行。
+### 质量保障链
 
-## CLI Quick Reference
+四层防御：
+1. **语义层** — context-bundle 的元素-功能映射表确保断言有具体目标
+2. **规范层** — at-mapping-rules 确保四字段拆解、selector 优先级、菜单二分等规则被遵守
+3. **门禁层** — Gate 5 语义安全阀检测描述文本当输入、缺前置触发、缺 selector 等常见错误
+4. **代码层** — pipeline_assemble.py JSON Schema 校验 + 执行器 fail-fast
 
-| Command | Required Args | Optional Args |
-|---------|--------------|---------------|
-| `youqu at scan` | --src, --app | --output, --include-dirs |
-| `youqu at record` | --app | --launch, --output, --gui |
-| `youqu at merge` | --record | --scan, --app, --output |
-| `youqu at parse` | --input, --output | --at-tree (deprecated) |
-| `youqu at tree-info` | --at-tree, --output | --format (yaml\|text, default yaml) |
-| `youqu at split` | --cases, --at-tree, --output | --app |
-| `youqu at docs` | app | --output |
-| `youqu at precandidate` | — | --cases, --at-tree, --output, --module-dir |
-| `youqu at validate` | — | --gate (1\|2\|3\|4\|5\|all), --at-tree-annotated, --suite-cases, --cases-mapped, --generate-output, --element-gaps |
-| `youqu at generate` | --cases, --output | --app, --at-tree, --no-assert-gate |
-| `youqu at run` | — | --suite, --testdir, -k, --spec-ids, --tags, --skip-env-check, --multica-report, --issue-id, --app, --report-interval |
-| `youqu at smoke` | — | --modules-dir, --module-dir, --skip-env-check |
-| `youqu at verify` | --suite | --spec-id, --skip-env-check |
+### 通过率标准
 
-## at-tree.yaml v2.0 Format (scan + record + merge)
+运行时验证通过率 ≥80% 确认可执行；<80% 标注失败原因不阻塞。
 
-The `scan` + `record` + `merge` pipeline produces `at-tree.yaml` v2.0
-with two layers:
+## 产物清单
 
-```yaml
-version: "2.0"
-app: "deepin-screenshot"
-tree:                       # Persistent layer (always-visible elements)
-  - id: n0
-    role: frame
-    name: "截图区域"
-    children: [...]
-transient_contexts:         # Transient layer (menus, dialogs, child windows)
-  - id: right_click_menu_000
-    trigger:
-      type: right_click
-      element: {name: "View_ImageList", role: "list"}
-    items:
-      - {name: "复制", role: "menu item"}
-      - {name: "粘贴", role: "menu item"}
-    at_tree: "states/01_menu_open.yaml"
-```
+| 产物 | 路径 | 生成者 | 谁读 | 命名策略 |
+|------|------|--------|------|----------|
+| ui-map.md | `tests/at/ui-map.md` | 前置阶段子 agent | Stage 2 子 agent | 固定名覆盖 |
+| expected-at-spi-elements.md | `tests/at/expected-at-spi-elements.md` | 前置阶段子 agent | Stage 2 子 agent | 固定名覆盖 |
+| at-spi-implementation-checklist.md | `tests/at/at-spi-implementation-checklist.md` | 前置阶段子 agent | 报告摘要输出（主 agent） | 固定名覆盖 |
+| cases_raw.yaml | `tests/at/cases_raw.yaml` | `pipeline_run.py` | Stage 3（子 agent） | 固定名覆盖 |
+| plan.yaml | `tests/at/plan.yaml` | `pipeline_run.py` | pipeline_prep.py | 固定名覆盖 |
+| at-tree.yaml | `tests/at/at-tree.yaml` | `pipeline_run.py` | Stage 2/3（子 agent） | 固定名覆盖 |
+| at-tree-annotated.yaml | `tests/at/at-tree-annotated.yaml` | `pipeline_run.py` | Stage 2/3（子 agent） | 固定名覆盖 |
+| context-bundle.md | `tests/at/context-bundle.md` | Stage 2 子 agent | Stage 3 子 agent | 固定名覆盖 |
+| modules/*.input.json | `tests/at/modules/*.input.json` | `pipeline_run.py` | Stage 3 子 agent | 每次重生成 |
+| modules/*.output.json | `tests/at/modules/*.output.json` | Stage 3 子 agent | pipeline_assemble.py | 每次重生成 |
+| yaml/elements.yaml | `tests/at/yaml/elements.yaml` | `pipeline_assemble.py` | AT-SPI 执行器 | 固定名覆盖 |
+| yaml/<module>/*.suite.yaml | `tests/at/yaml/<module>/*.suite.yaml` | `pipeline_assemble.py` | AT-SPI 执行器 | 固定名覆盖 |
+| cases_mapped.yaml | `tests/at/cases_mapped.yaml` | `pipeline_assemble.py` | Gate 3/5 校验 | 固定名覆盖 |
 
-**AI mapper must read both layers:**
-- `tree`: same as v1.0, contains persistent elements for `element_action`/`assert_element`
-- `transient_contexts`: menu items, dialogs, child windows — these are NOT in the main tree
-  - Menu items → use `dtk_main_menu`/`dtk_context_menu` (NOT `element_action`)
-  - Dialog elements → reference via `at_tree` snapshot path
-  - Child window elements → separate app, may need separate handling
+| 阶段 | 文件 | 用途 |
+|------|------|------|
+| 前置 | `at-spi-ui-map` 技能 | UI 图谱推导（可选，子 agent 执行） |
+| 前置 | `tests/at/ui-map.md` | 组件图 + 控件表（前置阶段子 agent 产出） |
+| 前置 | `tests/at/expected-at-spi-elements.md` | 预期元素清单（前置阶段子 agent 产出） |
+| 前置 | `tests/at/at-spi-implementation-checklist.md` | 缺口清单（前置阶段子 agent 产出） |
+| 0 | 模式判定（主 agent 内置） | 读取 CLI args + DISPLAY 判断模式 |
+| 1 | `references/stage-1-prep.md` | 数据准备：脚本执行 + 手动 CLI 参考 |
+| 1 | `scripts/pipeline_run.py` | 确定性管线主脚本 |
+| 1 | `scripts/pipeline_prep.py` | 模块切分 |
+| 1 | `scripts/scan_to_atree.py` | headless 时静态合成 at-tree.yaml |
+| 2 | `references/stage-2-context.md` | 子 agent 任务模板 + 执行规则 |
+| 2 | `templates/context-bundle-prompt-template.md` | 子 agent 详细 prompt |
+| 3 | `references/stage-3-mapping.md` | 子 agent 任务模板 + 动作类型表 + 禁止清单 |
+| 3 | `templates/at-case-mapping-prompt-template.md` | 子 agent 详细 prompt |
+| 3 | `templates/at-case-mapping-output-schema.json` | 输出 JSON Schema |
+| 4 | `references/stage-4-assemble.md` | 组装 + 校验规则 |
+| 4 | `scripts/pipeline_assemble.py` | 组装主脚本 |
+| 5 | `references/stage-5-verify.md` | 验证 + 交付流程 |
+| 5 | `scripts/coverage_report.py` | 覆盖率报告 |
 
-The `merge` command always produces v2.0. If `record_session.yaml` is
-absent, it falls back to old-style state snapshots (v1.0 without
-`transient_contexts`).
+| 动作 | 工具 | 说明 |
+|------|------|------|
+| 运行 `pipeline_run.py` | `bash` | 确定性操作，子进程执行 |
+| 运行 `pipeline_assemble.py` | `bash` | 确定性操作，子进程执行 |
+| 运行 `youqu at validate` | `bash` | 确定性校验，子进程执行 |
+| 运行 `youqu at smoke/run` | `bash` | 运行时验证，子进程执行 |
+| 运行 `youqu at generate` | `bash` | 已废弃，仅作参考 |
+| 读文件 | `read` | 所有阶段 |
+| 写文件 | `write` | 仅子 agent 写 output.json |
+| 启动子 agent | `eval().agent()` | 前置阶段（UI 图谱）、Stage 2 和 Stage 3 |
 
-## Reference Files
+### 禁止清单
 
-| File | Purpose |
-|------|---------|
-| `references/pipeline-reference.md` | CLI commands, input/output formats, cases.yaml schema |
-| `references/suite-format.md` | Generated suite YAML structure, action fields, elements.yaml, action types |
-| `references/pitfalls.md` | 19 documented edge cases — review before Step 3, verify after |
+| 禁止动作 | 理由 |
+|----------|------|
+| 主 agent 直接读 `input.json` 做映射 | 上下文混杂，降低映射质量。必须用子 agent |
+| 跳过 `pipeline_run.py` 手动执行分段 CLI | 脚本确保确定性，手动执行易遗漏步骤 |
+| 在映射阶段写 Python 脚本做模式匹配 | 已知失败模式：7% selector 覆盖率、0% 断言覆盖率 |
+| 将 `modules/` 目录纳入交付物 | 中间产物，可重生成，不应包含在最终交付物中 |
+| 合并多个阶段的子 agent 到同一个 | 上下文混杂，Stage 2 和 Stage 3 的规则互相干扰 |
+| 在 `keyboard_type` 中使用描述文本 | 如 `text: "任意长度字符"` 应改为 `text: "test_input_123"` |
+| 使用 `element_action` 点击菜单项 | 菜单项瞬态弹出，运行时找不到 |
+| 修改 `pipeline_assemble.py` 的校验规则绕过 Gate 5 | 安全阀，不能绕过 |
+
+## 错误处理表
+
+| 失败点 | 行为 |
+|--------|------|
+| 前置阶段 UI 图谱子 agent 失败 | 不阻塞：跳过图谱，Stage 2 不使用 ui-map.md/expected-at-spi-elements.md |
+| MCP 不可用 | 不阻塞：跳过图谱，报告中标注 |
+| `pipeline_run.py` 执行失败 | 停止，检查错误输出 |
+| 无 xlsx 且无 plan.yaml | 降级为 feature-driven 模式 |
+| 无 DISPLAY 且无 at-tree.yaml | 降级：使用 `scan_to_atree.py` 静态合成 |
+| 无 at-tree-annotated.yaml | 降级：跳过 Stage 2，不使用 context-bundle |
+| 子 agent 映射失败（某模块） | 不阻塞：跳过该模块，标记为 `status: skipped` |
+| 某模块 output.json 校验失败 | 不阻塞：跳过该模块，打印错误 |
+| 某模块 0 条用例通过校验 | 停止：整模块映射失败，需要重试 |
+| Gate 3 校验失败 | 停止，修复 cases_mapped.yaml |
+| Gate 5 校验失败 | 停止，修复语义映射问题 |
+| Gate 4 校验失败 | 停止，检查生成产物 |
+| 运行时验证失败 | 降级：标记为 `status: unstable`，说明原因 |
+| 覆盖率报告异常 | 不阻塞，继续 |
+| 无 DISPLAY 无法运行 | 降级：跳过运行时验证，后续通知人工验证 |
+
+## 前置依赖
+
+| 依赖 | 安装命令 | 可选 |
+|------|----------|------|
+| Python >= 3.10 | 系统自带 | 必选 |
+| `youqu` CLI | `pip install youqu-ai` | 必选 |
+| PyYAML | `pip install pyyaml` | 必选 |
+| libclang Python 绑定 | `sudo apt install python3-clang-18 libclang-18-dev` | 可选（静态扫描用） |
+| python-xlib | `pip install python-xlib` | 可选（X11 录制用） |
+| evdev | `pip install evdev` | 可选（Wayland 录制用） |
+| xdotool | `sudo apt install xdotool` | 可选（X11 键鼠用） |
+| ydotool | `sudo apt install ydotool` | 可选（Wayland 键鼠用） |
+
+## Verification Checklist
+
+- [ ] frontmatter 合规（name/description/触发词位置）
+- [ ] 所有引用的 references/templates/scripts 存在且可读
+- [ ] 主文件无阶段细节，无模糊词（grep "尽量|适当|建议" 应为零命中）
+- [ ] 模拟正常路径走一遍：标准模式 → auto 模式 → feature-driven 模式
+- [ ] 错误处理表中无"提交"相关动作（git 操作不在技能范围内）
+- [ ] 核心原则、禁止清单、错误处理表三者无矛盾
+- [ ] 产物清单与 stages 中实际写入动作一一对应
