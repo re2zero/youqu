@@ -41,6 +41,9 @@ Step 2.5: AT tree annotation (AI session)
     AI fills comment for each interactive element → at-tree-annotated.yaml (draft)
     Human reviews → at-tree-annotated.yaml (reviewed)
     youqu at validate --gate 1
+Step 2.6: Context bundle generation (AI session)
+    AI reads ui-map.md + docs/*.md + expected-at-spi-elements.md + at-tree-annotated.yaml
+    AI distills into context-bundle.md (three tables: element-function, interface-element, function-operation-assertion)
 Step 2.7: Case normalization (AI session)
     AI groups cases by GUI interface → suite-cases.yaml + cases_non_gui.yaml
     AI adds 4-field suite annotations (测试界面, 测试功能, 前置条件, AT元素引用)
@@ -98,7 +101,7 @@ python3 skills/at-case-generator/scripts/scan_to_atree.py scan_output/ <app> at-
 ```
 
 之后从 `youqu at tree-info` 开始，按标准管线继续：
-`tree-info → P2.5 AI 标注 → P2.7 AI 规范化 → P3 AI 映射 → generate → validate → run`。
+`tree-info → P2.5 AI 标注 → P2.6 上下文包 → P2.7 AI 规范化 → P3 AI 映射 → generate → validate → run`。
 
 **禁止**：不要因为“自动化”就把 P3 换成脚本/正则映射；AI 语义映射仍然是本技能的核心。
 
@@ -113,7 +116,6 @@ python3 skills/at-case-generator/scripts/scan_to_atree.py scan_output/ <app> at-
 ## Step 2: Data Preparation
 
 ### 2a: Parse xlsx → raw cases.yaml
-
 ```bash
 youqu at parse --input <xlsx_or_csv> --output <cases_yaml>
 ```
@@ -178,6 +180,50 @@ Examples:
 `accessible_id`. These need app-side `setAccessibleName()` to be fully
 AT-SPI addressable. Report gaps to the user — do not attempt to fix app source.
 
+## Step 2.6: Context Bundle Generation (AI Session)
+
+You (the agent) distill UI map, docs, and at-tree-annotated into a compact
+`context-bundle.md` with three tables. This is the **only** step that reads
+raw source files (ui-map.md, docs/*.md, expected-at-spi-elements.md).
+Subsequent steps (2.7, 3) consume only context-bundle.md.
+
+### Inputs
+
+- `ui-map.md` (if exists) — component graph, control table, menu index
+- `expected-at-spi-elements.md` (if exists) — expected element list with derivation chain
+- `docs/modules/*.md` (if exists) — help manual chapters
+- `at-tree-annotated.yaml` — current annotated tree
+
+### Output
+
+`tests/at/context-bundle.md` with three tables:
+
+1. **元素-功能对照表**: element name → Role → function description → visibility condition
+2. **界面-元素映射**: interface → contained elements
+3. **功能-操作-断言映射**: function → operation → assertion target
+
+### Format
+
+Tables only. No prose paragraphs. Each row is one fact.
+
+```
+## 元素-功能对照表
+| 元素名 | Role | 功能描述 | 可见条件 |
+
+## 界面-元素映射
+| 界面 | 包含元素 |
+
+## 功能-操作-断言映射
+| 功能 | 操作 | 断言目标 |
+```
+
+### Validation
+
+Row count in 元素-功能对照表 >= 80% of interactive nodes in at-tree.
+If not, stop and report error.
+
+---
+
 ## Step 2.7: Case Normalization (AI Session)
 
 You (the agent) normalize `cases_raw.yaml` into `suite-cases.yaml` with
@@ -235,8 +281,11 @@ cases:
 **You (the agent executing this skill) do the mapping.** No external API
 calls, no scripts, no intermediate files. Read each case description from
 `suite-cases.yaml`, understand the intent, match against the annotated AT-SPI
-tree (`at-tree-annotated.yaml`), and fill semantic fields directly in
-`cases_mapped.yaml`.
+tree (`at-tree-annotated.yaml`) and the context bundle (`context-bundle.md`),
+and fill semantic fields directly in `cases_mapped.yaml`.
+
+Also read `context-bundle.md` for the 功能-操作-断言映射 table — it tells you
+which element to assert after each operation, preventing generic assertions.
 
 ### CRITICAL: No Script-Based Mapping
 

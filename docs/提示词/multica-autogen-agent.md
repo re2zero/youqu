@@ -35,7 +35,7 @@
 **场景一：全量生成（tests/at/ 为空）**
 - 用 multica repo checkout 获取源码。
 - 检查 tests/testcases.xlsx 或 tests/testcases.csv。存在则按管线 Step 0 解析。
-- 执行管线 Step 0~9。若前置已产出图谱，将 elements.yaml 与 expected-at-spi-elements.md 做差异对照。
+- 执行管线 Step 0~12。若前置已产出图谱，将 elements.yaml 与 expected-at-spi-elements.md 做差异对照。
 - 若 libclang 不可用或无源码，管线 Step 1 跳过 scan（仅 dump + merge）。
 
 **场景二：完善补全（tests/at/ 已有内容）**
@@ -49,8 +49,13 @@
 - 图谱增量更新（若 MCP 可用）：对变更目录做局部分析，更新三件套。
 - 增量用例生成：找到对应模块 suite.yaml，为新增/变更控件生成增量用例，追加并更新 elements.yaml。
 
-### 4. 管线流程（Step 0~11）
-**前置加载**：必须先加载 `at-mapping-rules` 技能，阅读完整步骤语义解析协议，再按 `at-case-generator` auto 模式的管线步骤执行。
+### 4. 管线流程（Step 0~12）
+**前置加载**：必须先加载 `at-mapping-rules` 技能，阅读完整步骤语义解析协议。
+
+**上下文隔离原则**：
+- 原始信息源（ui-map.md、docs/*.md、expected-at-spi-elements.md）**只在 Step 5 读取一次**，蒸馏为 context-bundle.md
+- Step 6~8 只读 context-bundle.md，不再读原始源，避免信息污染
+- context-bundle.md 格式以表格为主（token 效率高、歧义低），禁止大段 prose
 
 **Step 0：解析 + 文档 + 计划（有 xlsx/csv 时执行）**
 ```bash
@@ -60,7 +65,7 @@ youqu at plan --cases tests/at/cases_raw.yaml --docs tests/at/docs/ --app <app> 
 ```
 产出：`cases_raw.yaml`、`docs/modules/<slug>.md`、`plan.yaml`、`plan.md`。
 验证：`plan.yaml` 存在且含 `modules` 列表，否则停止报告错误。
-无 xlsx/csv 文档时跳过 Step 0 和 Step 5~6，从 Step 1 开始，直接进入 Step 7。
+无 xlsx/csv 文档时跳过 Step 0 和 Step 6~7，从 Step 1 开始，直接进入 Step 8。
 
 **Step 1：数据准备**
 ```bash
@@ -78,7 +83,9 @@ youqu at tree-info --at-tree tests/at/at-tree.yaml --output tests/at/at-tree-ann
 产出：`at-tree-annotated.yaml`（每节点含 classification/comment/annotation_status）。
 
 **Step 3：AI 标注**（AI session）
-逐个为 `classification: interactive` 的元素填写 `comment`，格式：`GUI位置: <描述> | 功能: <描述>`，设 `annotation_status: draft`。
+读取 `at-tree-annotated.yaml`：
+- 若有 `classification: interactive` 的节点 → 逐个填写 `comment`，格式：`GUI位置: <描述> | 功能: <描述>`，设 `annotation_status: draft`
+- 若全部为 `classification: container` → 打印"无需 AI 标注，已自动跳过"，直接进入 Step 4
 
 **Step 4：Gate 1 验证**
 ```bash
@@ -86,20 +93,52 @@ youqu at validate --gate 1 --at-tree-annotated tests/at/at-tree-annotated.yaml -
 ```
 校验：每个 interactive 元素必须有 comment、无噪声名称、annotation_status 已设置。
 
-**Step 5：用例规范化**（AI session）
-理解 `cases_raw.yaml`，生成 `suite-cases.yaml`：非 GUI 用例分离到 `cases_non_gui.yaml`（status: non_gui），按 GUI 界面分组（每 suite 最多 15 条），每 suite 4 字段注释（测试界面/测试功能/前置条件/AT元素引用），拆分复合步骤。
+**Step 5：生成上下文包**（AI session）
+输入（仅在此步读取原始源）：
+- `ui-map.md`（若存在）、`expected-at-spi-elements.md`（若存在）、`docs/modules/*.md`（若存在）、`at-tree-annotated.yaml`
 
-**Step 6：Gate 2 验证**
+输出：`tests/at/context-bundle.md`
+
+格式要求（三张表，禁止 prose）：
+```
+# 上下文包 — <app_name>
+
+## 元素-功能对照表
+| 元素名 | Role | 功能描述 | 可见条件 |
+
+## 界面-元素映射
+| 界面 | 包含元素 |
+
+## 功能-操作-断言映射
+| 功能 | 操作 | 断言目标 |
+```
+验证：元素-功能对照表行数 ≥ at-tree 中 interactive 节点数的 80%，否则停止报告错误。
+
+**Step 6：用例规范化**（AI session）
+输入：`cases_raw.yaml` + `context-bundle.md`
+理解 `cases_raw.yaml`，生成 `suite-cases.yaml`：非 GUI 用例分离到 `cases_non_gui.yaml`（status: non_gui），按 GUI 界面分组（每 suite 最多 15 条），每 suite 4 字段注释（测试界面/测试功能/前置条件/AT元素引用），拆分复合步骤。
+AT元素引用字段必须引用 context-bundle.md 中存在的元素名。
+
+**Step 7：Gate 2 验证**
 ```bash
 youqu at validate --gate 2 --suite-cases tests/at/suite-cases.yaml --at-tree-annotated tests/at/at-tree-annotated.yaml
 ```
 校验：非 GUI 已分离、每个 active case 有 assert、suite 有 4 字段注释、AT元素引用在 at-tree 中存在。
 
-**Step 7：AI 语义映射（核心步骤）**
-严格遵循 `at-mapping-rules` 每条规则：四字段拆解不混淆、selector 优先级（accessible_id → name → role → parent → index）、菜单二分（dtk_main_menu / dtk_context_menu）、预期结果→assert 不输入、前置条件→前置 action 不描述、assert 具体不全是 assert_window、瞬态元素处理、不可自动化标记 unsupported + reason、禁止 no-op YAML。
+**Step 8：AI 语义映射（核心步骤）**
+输入：`suite-cases.yaml` + `at-tree-annotated.yaml` + `context-bundle.md`
+严格遵循 `at-mapping-rules` 每条规则：四字段拆解不混淆、selector 优先级（accessible_id → name → role → parent → index）、菜单二分（dtk_main_menu / dtk_context_menu）、预期结果→assert 不输入、前置条件→前置 action 不描述、瞬态元素处理、不可自动化标记 unsupported + reason、禁止 no-op YAML。
+
+断言质量规则：
+- 每个 case 至少有一个 assert 验证操作**结果**，而非仅验证通用元素存在
+- 禁止：`assert_element PagingWidget`（文档打开后始终存在，不验证任何操作）
+- 推荐：`assert_element` 验证特定元素出现/消失、`assert_text` 验证文本变化、`assert_window` 验证窗口状态
+- 不可自动化用例（触屏/触控板/物理设备/视觉检查）必须标记 `status: unsupported` + `reason`
+- 使用 context-bundle.md 的功能-操作-断言映射表指导断言选择
+
 禁止：不加载 at-mapping-rules 就做映射、用脚本/正则替代 AI 语义理解。
 
-**Step 8：语义安全门禁（Gate 5）**
+**Step 9：语义安全门禁（Gate 5）**
 ```bash
 youqu at validate --gate 5 --cases-mapped tests/at/cases_mapped.yaml
 ```
@@ -110,7 +149,7 @@ youqu at validate --gate 5 --cases-mapped tests/at/cases_mapped.yaml
 - C5: `dtk_main_menu` 在右键菜单场景中误用
 **0 errors 才能继续**，warnings 需人工确认。
 
-**Step 9：Gate 3 验证 + 生成**
+**Step 10：Gate 3 验证 + 生成**
 ```bash
 youqu at validate --gate 3 --cases-mapped tests/at/cases_mapped.yaml --at-tree-annotated tests/at/at-tree-annotated.yaml
 youqu at generate --cases tests/at/cases_mapped.yaml --output tests/at/yaml --app <app> --at-tree tests/at/at-tree.yaml
@@ -118,26 +157,26 @@ youqu at validate --gate 4 --generate-output tests/at/yaml
 ```
 校验：selectors 交叉引用 at-tree、无噪声 selector、有效 action 值、suite 文件存在。
 
-**Step 10：覆盖率报告**
+**Step 11：覆盖率报告**
 ```bash
 python3 skills/at-case-generator/scripts/coverage_report.py --testdir tests/at/yaml
 ```
 输出 `tests/at/yaml/report.md`：用例统计、AT-SPI 元素覆盖率（口径 A/B）、重复用例检测、未覆盖元素清单、不可自动化用例。
 
-**Step 11：运行时验证（可选，需桌面环境）**
+**Step 12：运行时验证（可选，需桌面环境）**
 ```bash
 youqu at run --testdir tests/at/yaml/
 ```
 通过率 ≥80% 确认可执行；<80% 标注失败原因不阻塞。桌面环境不可用时标注"需在有桌面环境后执行验收"。
 
-**可追溯性链**：`at-tree.comment ↔ suite-cases.AT元素引用 ↔ cases_mapped.selector.name`
-**质量保障链**：三层防御——规范层（at-mapping-rules）、门禁层（Gate 5）、代码层（执行器 fail-fast + accessible_id + 层级消歧）。
-
+**可追溯性链**：`at-tree.comment ↔ context-bundle.元素-功能对照表 ↔ suite-cases.AT元素引用 ↔ cases_mapped.selector.name`
+**质量保障链**：四层防御——语义层（context-bundle 元素-功能映射）、规范层（at-mapping-rules）、门禁层（Gate 5）、代码层（执行器 fail-fast + accessible_id + 层级消歧）。
 ### 5. 提交与推送
 **提交范围**（随 git 提交）：
 - `tests/at/yaml/elements.yaml`
 - `tests/at/yaml/**/*.suite.yaml`
 - `tests/at/at-tree.yaml`
+- `tests/at/context-bundle.md`
 - `tests/at/suite-cases.yaml`
 - `tests/at/cases_mapped.yaml`
 - `tests/at/ui-map.md`（若存在）
