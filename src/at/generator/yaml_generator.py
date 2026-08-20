@@ -114,15 +114,26 @@ def _extract_elements_from_at_tree(at_tree_path: str) -> dict[str, dict]:
             if not isinstance(node, dict):
                 continue
             nid = node.get("id", "")
-            if nid:
-                # 只收录可交互控件（interactive）作为元素目录
-                # 非交互节点若被 selector.name 引用，由
-                # _extract_elements_from_cases 单独收录，不会丢失
-                if node.get("classification") == "interactive":
-                    name = node.get("name", "")
-                    role = node.get("role", "")
-                    if name or role:
-                        elements[nid] = {"name": name, "role": role}
+            if not nid:
+                children = node.get("children", [])
+                if children:
+                    _walk(children)
+                continue
+            # 收录条件：
+            # 1. classification 已设置且为 interactive → 收录
+            # 2. classification 未设置（原始 dump）→ 收录所有有 name/role 的节点
+            # 3. classification 为 container → 跳过（非交互节点若被引用，由
+            #    _extract_elements_from_cases 单独收录）
+            classification = node.get("classification", "")
+            if classification and classification != "interactive":
+                children = node.get("children", [])
+                if children:
+                    _walk(children)
+                continue
+            name = node.get("name", "")
+            role = node.get("role", "")
+            if name or role:
+                elements[nid] = {"name": name, "role": role}
             children = node.get("children", [])
             if children:
                 _walk(children)

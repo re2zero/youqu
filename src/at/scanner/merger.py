@@ -680,7 +680,7 @@ def write_at_tree_yaml(
     path = Path(output_path)
     path.parent.mkdir(parents=True, exist_ok=True)
 
-    if transient_contexts is not None:
+    if transient_contexts:
         doc: dict[str, Any] = {
             "version": "2.0",
             "app": app_name,
