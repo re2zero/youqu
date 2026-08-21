@@ -639,11 +639,14 @@ def handle_file_dialog_select(step: SuiteActionStep, context: dict) -> None:
       4. Ctrl+A to select all files
       5. Presses Enter to confirm
 
-    Single file mode:
+    File mode (path is a file):
       1. Ctrl+L to focus path bar, Ctrl+A select all, Delete clear
-      2. Types the full file path
-      3. Presses Enter to navigate
-      4. Presses Enter again to confirm
+      2. Types the parent directory path
+      3. Presses Enter to navigate into the directory
+      4. Ctrl+L to focus path bar, Ctrl+A select all, Delete clear
+      5. Types the filename
+      6. Presses Enter to open the file
+         (if dialog doesn't close, file type is unsupported)
     """
     import os
     import subprocess
@@ -659,52 +662,71 @@ def handle_file_dialog_select(step: SuiteActionStep, context: dict) -> None:
     # Wait for dialog to appear
     time.sleep(1.0)
 
-    # Focus the path bar via Ctrl+L, then clear existing text
-    subprocess.run(
-        ["xdotool", "key", "--clearmodifiers", "ctrl+l"],
-        capture_output=True, timeout=5
-    )
-    time.sleep(0.3)
-    subprocess.run(
-        ["xdotool", "key", "--clearmodifiers", "ctrl+a"],
-        capture_output=True, timeout=5
-    )
-    time.sleep(0.1)
-    subprocess.run(
-        ["xdotool", "key", "--clearmodifiers", "Delete"],
-        capture_output=True, timeout=5
-    )
-    time.sleep(0.1)
+    def _focus_and_clear():
+        """Focus path bar (Ctrl+L) and clear existing text."""
+        subprocess.run(
+            ["xdotool", "key", "--clearmodifiers", "ctrl+l"],
+            capture_output=True, timeout=5
+        )
+        time.sleep(0.3)
+        subprocess.run(
+            ["xdotool", "key", "--clearmodifiers", "ctrl+a"],
+            capture_output=True, timeout=5
+        )
+        time.sleep(0.1)
+        subprocess.run(
+            ["xdotool", "key", "--clearmodifiers", "Delete"],
+            capture_output=True, timeout=5
+        )
+        time.sleep(0.1)
 
-    # Type the path
-    subprocess.run(
-        ["xdotool", "type", "--clearmodifiers", path],
-        capture_output=True, timeout=5
-    )
-    time.sleep(0.3)
-
-    # Navigate to the location
-    subprocess.run(
-        ["xdotool", "key", "--clearmodifiers", "Return"],
-        capture_output=True, timeout=5
-    )
-    time.sleep(0.5)
+    def _type_and_enter(text: str):
+        """Type text and press Enter."""
+        subprocess.run(
+            ["xdotool", "type", "--clearmodifiers", text],
+            capture_output=True, timeout=5
+        )
+        time.sleep(0.3)
+        subprocess.run(
+            ["xdotool", "key", "--clearmodifiers", "Return"],
+            capture_output=True, timeout=5
+        )
+        time.sleep(0.5)
 
     if is_dir:
+        # Directory mode: navigate to dir, select all, confirm
+        _focus_and_clear()
+        _type_and_enter(path)
         # Select all files in the directory
         subprocess.run(
             ["xdotool", "key", "--clearmodifiers", "ctrl+a"],
             capture_output=True, timeout=5
         )
         time.sleep(0.3)
-
-    # Press Enter to confirm/open
-    subprocess.run(
-        ["xdotool", "key", "--clearmodifiers", "Return"],
-        capture_output=True, timeout=5
-    )
-    time.sleep(0.5)
-
+        # Press Enter to confirm
+        subprocess.run(
+            ["xdotool", "key", "--clearmodifiers", "Return"],
+            capture_output=True, timeout=5
+        )
+        time.sleep(0.5)
+    else:
+        # File mode: navigate to parent dir, then type filename
+        parent = os.path.dirname(path)
+        filename = os.path.basename(path)
+        _focus_and_clear()
+        _type_and_enter(parent)
+        # Now inside the directory — file list is focused.
+        # Type the filename (dialog highlights the matching file), then Enter to open.
+        subprocess.run(
+            ["xdotool", "type", "--clearmodifiers", filename],
+            capture_output=True, timeout=5
+        )
+        time.sleep(0.3)
+        subprocess.run(
+            ["xdotool", "key", "--clearmodifiers", "Return"],
+            capture_output=True, timeout=5
+        )
+        time.sleep(0.5)
 
 def handle_file_dialog_cancel(step: SuiteActionStep, context: dict) -> None:
     """Cancel the native file dialog by pressing Escape."""
