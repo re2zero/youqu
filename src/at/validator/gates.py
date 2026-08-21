@@ -35,41 +35,48 @@ _INTERACTIVE_ROLES = frozenset(
 
 _COMMENT_FORMAT_RE = re.compile(r"GUI位置:\s*.+\|\s*功能:\s*.+")
 
-_VALID_ACTIONS = frozenset(
-    {
-        "mouse_click",
-        "mouse_double_click",
-        "mouse_right_click",
-        "mouse_scroll",
-        "mouse_drag",
-        "keyboard_type",
-        "keyboard_type_text",
-        "keyboard_press",
-        "keyboard_hot_key",
-        "element_action",
-        "element_set_value",
-        "wait",
-        "assert_element",
-        "assert_file_exists",
-        "assert_file_not_exists",
-        "assert_image_exists",
-        "assert_image_not_exists",
-        "assert_not_exists",
-        "assert_ocr_exists",
-        "assert_ocr_not_exists",
-        "assert_process_running",
-        "assert_process_not_running",
-        "assert_window",
-        "assert_window_count",
-        "dbus_call",
-        "dbus_get_property",
-        "screenshot",
-        "dtk_main_menu",
-        "dtk_context_menu",
-        "session_start",
-        "session_stop",
-    }
-)
+try:
+    from src.at.executor.handlers import HANDLERS
+
+    _VALID_ACTIONS = frozenset(HANDLERS.keys())
+except ImportError:
+    _VALID_ACTIONS = frozenset(
+        {
+            "mouse_click",
+            "mouse_double_click",
+            "mouse_right_click",
+            "mouse_scroll",
+            "mouse_drag",
+            "keyboard_type",
+            "keyboard_type_text",
+            "keyboard_press",
+            "keyboard_hot_key",
+            "element_action",
+            "element_set_value",
+            "wait",
+            "assert_element",
+            "assert_file_exists",
+            "assert_file_not_exists",
+            "assert_image_exists",
+            "assert_image_not_exists",
+            "assert_not_exists",
+            "assert_ocr_exists",
+            "assert_ocr_not_exists",
+            "assert_process_running",
+            "assert_process_not_running",
+            "assert_window",
+            "assert_window_count",
+            "dbus_call",
+            "dbus_get_property",
+            "screenshot",
+            "dtk_main_menu",
+            "dtk_context_menu",
+            "session_start",
+            "session_stop",
+            "file_dialog_select",
+            "file_dialog_cancel",
+        }
+    )
 
 
 def _load_yaml(path: str) -> dict | None:

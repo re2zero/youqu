@@ -299,6 +299,7 @@
 | `do` | `value` 且值为 click/clear/set | 操作类型 |
 | `key` | — | 键盘按键 |
 | `items` | — | 菜单路径 |
+| `action` | `mouse_wheel`（禁止） | 必须使用 `mouse_scroll` |
 
 **错误（会被 pipeline_assemble.py 过滤为空步骤）：**
 ```json
@@ -326,8 +327,13 @@
 | "从文件管理器拖拽/双击" | `keyboard_hot_key ctrl+o` + `file_dialog_select` | 应用内打开文件 |
 | "右键点击" | `mouse_right_click` + `dtk_context_menu` | 右键菜单可用 |
 | "点击X关闭" | `element_action` + selector (close button) | 关闭按钮在 AT 树中 |
-| "滚动页面" | `mouse_wheel` | 滚轮操作可用 |
+| "滚动页面" | `mouse_scroll` | 滚轮操作可用 |
 | "按文件名搜索" | `keyboard_type` + `keyboard_press Enter` | 搜索框输入
+
+unsupported suite 的输出格式：
+- 必须保留 `status: "unsupported"` + `reason: "..."` 字段
+- steps 必须为空数组 `steps: []`
+- 禁止在 unsupported suite 中包含任何操作步骤或断言步骤
 
 ### 7. 输出约束
 
@@ -337,6 +343,7 @@
 4. 每个 suite 的第一个 step 必须是 `session_start`
 5. 每个 suite 的最后一个 step 必须是 `assert_*`
 6. 输出 JSON 格式，禁止 YAML 锚点/别名
+7. 输出 JSON 的顶层结构必须是 `{"meta": {...}, "suites": [...]}`。**禁止**使用 `cases`、`mapped_steps` 或其他字段名作为顶层键
 
 ### 8. 禁止清单
 
@@ -363,4 +370,6 @@
 - [ ] suite id 使用 `suite_<模块短名>_XXX` 格式？
 - [ ] 所有 `selector.name` 的值来自 at-tree-annotated.yaml（不是中文描述，不是虚构名）？
 - [ ] 不可自动化的 case 已标记 `unsupported` + `reason`？
+- [ ] 所有 `status: unsupported` 的 suite 的 steps 为空数组 `steps: []`
+- [ ] 输出 JSON 的顶层结构是 `{"meta": {...}, "suites": [...]}`
 - [ ] JSON 格式正确，无 YAML 语法？

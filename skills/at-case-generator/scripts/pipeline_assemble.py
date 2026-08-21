@@ -228,7 +228,7 @@ def _build_suite_cases(suite: dict, session_cmd: str) -> list[dict]:
     Returns list of SuiteCase-compatible dicts.
     """
     # Normalize all steps first (handle old schema field names)
-    steps = [_normalize_step(s) for s in steps]
+    steps = _normalize_steps(suite.get("steps", []))
     # Filter out completely empty steps
     steps = [s for s in steps if s.get("action")]
 
