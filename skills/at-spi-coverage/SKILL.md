@@ -1,182 +1,165 @@
 ---
 name: at-spi-coverage
-description: >
-  Assess AT-SPI element name coverage for Qt/DTK/QML desktop apps (static
-  source scan vs codebase graph) and produce a coverage report.
-  Triggers: AT-SPI覆盖率, 评估覆盖率, coverage report, 控件缺口.
-version: "0.1.0"
+description: Use when you need to measure AT-SPI name coverage of a Qt/DTK C++ or QML project — count already-named interactive widgets vs. widgets that still need names, compute coverage %, and list gaps by file/type. Reuses the at-spi-completion scanners (scan_gaps.py / scan_qml.py) with per-file progress and compile_commands.json auto-detection. Use to verify coverage before/after an AT-SPI completion pass, or to triage which files/types most need work.
+version: "0.2.0"
 license: MIT
 author: Uniontech
 ---
 
+# AT-SPI Coverage Statistics
+
+## Overview
+
+Measures AT-SPI name coverage for a Qt/DTK C++ and/or QML project:
+
+- **已编写 (ok)** — interactive widgets that already have `setObjectName()` + `setAccessibleName()` (C++) or `Accessible.name`/`Accessible.role` (QML)
+- **应编写 (total)** — all interactive widgets found in source (ok + gap)
+- **覆盖率 (coverage)** — `ok / total × 100%`
+
+Reuses the at-spi-completion skill's scanners (`scan_gaps.py` for C++ via libclang AST, `scan_qml.py` for QML via tokenizer) so the numbers are consistent with the completion workflow's own `quality_gate.py`.
+
+The script (`scripts/coverage_stats.py`) improves on a raw `scan_source` call by:
+
+1. **Per-file progress** — dispatches single-file tasks to a process pool so `imap_unordered` yields per file, instead of the skill's coarse 25-file batches that make large projects look hung.
+2. **`compile_commands.json` auto-detection + `arguments` normalization** — finds `compile_commands.json` under any `build*/` dir and converts CMake's `arguments` (list) form to `command` (string) form, which the skill's `_load_compile_commands` reads.
+3. **Standard output products** — writes `pre_scan_ok.yaml` / `pre_scan_gaps.yaml` compatible with the `--from-yaml` path, so you can re-view results without re-scanning.
+
 ## When to Use
 
-- Asked to "check AT-SPI coverage" or "评估 AT-SPI 覆盖率" for a desktop app
-- Need to compare static source scan vs codebase graph inference results
-- Need a filed coverage report with gap details and root cause analysis
-- Project has C++ (Qt/DTK) and/or QML source code
+- Verify AT-SPI coverage before a completion pass (baseline)
+- Verify coverage after a completion pass (did it go up? did ok count rise?)
+- Triage which files / widget types most need AT-SPI names
+- CI gate: fail when coverage < threshold (default 80%)
 
-**Don't use when:**
-- Need to **fix** missing AT-SPI names → use `at-spi-completion` skill
-- Need to **derive** UI map from source → use `at-spi-ui-map` skill
-- Quick one-off check → run `scan_cpp.py` directly
+## When NOT to Use
 
-## Critical Patterns
+- You want to *fix* missing AT-SPI names — use the `at-spi-completion` skill instead. This skill only *measures*.
+- Decorative-only review (labels, frames, progress bars) — the scanner already excludes non-interactive types.
 
-### 1. Two Isolated Pipelines
-
-Spawn two independent sub-agents via `task` — they MUST NOT share intermediate state. Communication only through `local://` URIs.
-
-| Pipeline | Method | Granularity |
-|----------|--------|-------------|
-| A (Static Scan) | `scan_cpp.py` + `scan_qml.py` | Instance-level (each `m_xxx` variable) |
-| B (Codebase Graph) | codebase MCP `query_graph` + `search_code` | Class-level (each widget class) |
-
-### 2. Unified Classification
-
-Both pipelines MUST use the same classification from `assets/scripts/classify.py`:
-
-| Category | Included in Element A | Examples |
-|----------|----------------------|----------|
-| Interactive | **Yes** — must have AT-SPI name | Button, LineEdit, Slider, Menu, List, Tree, Tab, ComboBox |
-| Decorative | **No** — filtered out | Label, ProgressBar, Frame, GroupBox, Splitter, ToolBar |
-| Layout | **No** — filtered out | QHBoxLayout, QVBoxLayout, QGridLayout |
-| Non-widget interactive | **Yes** — objectName only | QAction, QShortcut, QActionGroup |
-
-### 3. Coverage Formula
-
-```
-Element A = all interactive widgets (after filtering decorative/layout)
-Element B = Element A widgets that have complete AT-SPI names
-Coverage = |B| / |A| × 100%
-```
-
-**QWidget subclass**: needs BOTH `setObjectName()` + `setAccessibleName()` — missing either = gap.
-**QAction/QShortcut**: only `setObjectName()` is possible — having it = ok.
-
-### 4. Pipeline A: Scan Mode Auto-Fallback
-
-`scan_cpp.py` supports three modes via `--mode`:
-
-| Mode | Behavior | When to use |
-|------|----------|-------------|
-| `auto` (default) | Try libclang; if ABI incompatible → fallback to text grep | General use |
-| `libclang` | Only libclang AST scan; fail if unavailable | Debug/verify AST results |
-| `grep` | Text grep only, no libclang needed | Headless/CI without libclang |
-
-The grep fallback scans `.h` files for widget member declarations via regex and `.cpp` files for `setObjectName`/`setAccessibleName` calls. Less precise than libclang (no template/typedef resolution) but works without any C++ parser.
-
-### 5. Pipeline B: MCP Endpoint Fallback
-
-codebase MCP 服务提供固定 HTTP 端点（`/projects`、`/index`、`/mcp`），不支持 OAuth 动态客户端注册。
-
-| 步骤 | 动作 | 失败处理 |
-|------|------|---------|
-| 1 | 尝试 OAuth 注册（`/register`） | 404 → 跳过，直接调固定端点 |
-| 2 | 调 `list_projects`（`/projects`） | 失败 → 报错退出 |
-| 3 | 调 `index_status`（`/index`） | 失败 → 报错退出 |
-| 4 | 调 `get_architecture`（`/mcp`） | 失败 → 报错退出 |
-
-
-**关键规则：** 认证方式失败（404）不降级到 grep。直接调固定端点。端点调用失败才报错退出。
-
-## Code Examples
-
-### Spawn two isolated pipelines
-
-```python
-# Main agent dispatches both pipelines in parallel
-context = """
-# Goal
-Assess AT-SPI coverage for {project_path}
-
-# Constraints
-- Element A = interactive widgets only (filter decorative/layout)
-- Element B = widgets with complete AT-SPI names
-- Coverage = |B| / |A| * 100
-- Each pipeline works independently
-"""
-
-tasks = [
-    {
-        "name": "PipelineA_StaticScan",
-        "task": """
-# Target
-{project_path}
-Run assets/scripts/scan_cpp.py for C++, assets/scripts/scan_qml.py for QML.
-
-# Change
-1. Run scan_cpp.py --mode auto --src {project_path} --build <build_dir> --output <out>
-   (--mode auto: try libclang, fallback to grep if ABI incompatible)
-2. Run scan_qml.py --src {project_path} --output <out>
-3. Calculate coverage from output files
-4. Write report to local://a_report.md
-
-# Acceptance
-local://a_report.md contains total, ok, coverage%, module breakdown, gap list
-"""
-    },
-    {
-        "name": "PipelineB_CodebaseMCP",
-        "task": """
-# Target
-{project_name} in codebase MCP.
-Use query_graph + search_code to derive coverage.
-
-# Change
-1. Try OAuth register → 404? Skip, call fixed endpoints directly
-2. list_projects → confirm indexed
-3. index_status → confirm head_sha current
-4. get_architecture → find gui/ directories
-5. query_graph → find QWidget/DWidget subclasses
-6. search_code → find setAccessibleName/setObjectName calls
-7. Classify, calculate coverage, write local://b_report.md
-
-# Acceptance
-local://b_report.md contains total, ok, coverage%, module breakdown, gap list
-"""
-    }
-]
-```
-
-### Generate final report
+## Prerequisites
 
 ```bash
-python3 assets/scripts/generate_report.py \
-  --project-name <name> \
-  --project-path <path> \
-  --pipeline-a-dir <output_dir> \
-  --pipeline-b-data <b_data.json> \
-  --output <project_root>/tests/at/coverage/
+# C++ scanning needs libclang Python bindings + the .so
+sudo apt install python3-clang libclang-18-dev   # match your system's libclang version (e.g. libclang-17-dev)
+pip install pyyaml
+
+# QML scanning needs only Python stdlib (tokenizer-based)
 ```
 
-## Commands
+## Built-in Environment Check
+
+The script runs an environment check before any scanning and exits with code 1 + install hints if a required dependency is missing. You don't need to pre-verify — just run it; the check is automatic.
+
+What it checks, by mode:
+
+| Dependency | C++ scan | QML scan | `--from-yaml` |
+|-----------|----------|----------|----------------|
+| pyyaml | required | required | required (reads YAML) |
+| python `clang` module | required | — | — |
+| libclang `.so` | required | — | — |
+| libclang binding init (scan_gaps) | required | — | — |
+
+Example output when everything is present:
+
+```
+============================================================
+环境检测
+============================================================
+  [✓] pyyaml                     已安装
+  [✓] python clang 模块          已安装
+  [✓] libclang 动态库            /usr/lib/x86_64-linux-gnu/libclang-17.so
+  [✓] libclang 绑定可用          scan_gaps 可用
+============================================================
+[PASS] 环境检测通过
+============================================================
+```
+
+When something is missing, each failing item prints its install command, plus a one-liner covering all C++ deps:
+
+```
+  [✗] python clang 模块          未安装
+      sudo apt install python3-clang
+============================================================
+[FAIL] 环境检测未通过, 请按上述提示安装缺失依赖后重试。
+       一键安装 (C++ 模式):  sudo apt install python3-clang libclang-18-dev && pip install pyyaml
+============================================================
+```
+
+
+## Usage
 
 ```bash
-# Initialize workflow state
-python3 assets/scripts/workflow_state.py init <project_path> <project_name>
+# Full scan (auto-detects compile_commands.json under build*/)
+python3 scripts/coverage_stats.py --src /path/to/repo
 
-# C++ scan (auto mode: try libclang, fallback to grep)
-python3 assets/scripts/scan_cpp.py --mode auto --src <project_root> --build <build_dir> --output <dir>
+# C++ only (skip QML search — for pure-C++ projects this silences the "no .qml" warning)
+python3 scripts/coverage_stats.py --src /path/to/repo --cpp-only
 
-# C++ scan (grep only, no libclang needed)
-python3 assets/scripts/scan_cpp.py --mode grep --src <project_root> --output <dir>
+# QML only (no libclang needed)
+python3 scripts/coverage_stats.py --src /path/to/repo --qml-only
 
-# QML scan (standalone)
-python3 assets/scripts/scan_qml.py --src <project_root> --output <dir>
+# Explicit build dir / compile_commands
+python3 scripts/coverage_stats.py --src /path/to/repo --build /path/to/build
+python3 scripts/coverage_stats.py --src /path/to/repo --compile-commands /path/to/compile_commands.json
 
-# Generate coverage report
-python3 assets/scripts/generate_report.py \
-  --project-name <name> --project-path <path> \
-  --pipeline-a-dir <dir> --pipeline-b-data <json> \
-  --output <project_root>/tests/at/coverage/
+# Breakdown by file and/or type
+python3 scripts/coverage_stats.py --src /path/to/repo --by-file --by-type
 
-# Check workflow state
-python3 assets/scripts/workflow_state.py status
+# Custom threshold (default 80)
+python3 scripts/coverage_stats.py --src /path/to/repo --threshold 90
+
+# Re-view from existing scan products (fast, no re-scan)
+python3 scripts/coverage_stats.py --from-yaml /path/to/coverage_scan/
 ```
-## Resources
 
-- **Scan scripts**: See [assets/scripts/](assets/scripts/) for `scan_cpp.py`, `scan_qml.py`, `classify.py`
-- **Report generator**: See [assets/scripts/generate_report.py](assets/scripts/generate_report.py)
-- **Workflow references**: See [assets/references/](assets/references/) for per-stage instructions
-- **Report templates**: See [assets/templates/](assets/templates/) for pipeline report templates
+## Output
+
+Console:
+
+```
+[C++]
+  已编写 (ok)   : 196
+  缺失   (gap)  : 33
+  应编写 (total): 229
+  覆盖率        : 85.6%
+
+[合计] 已编写: 196 / 应编写: 229 / 覆盖率: 85.6%
+       阈值: 80.0%  -> PASS
+```
+
+With `--by-file` / `--by-type`, a breakdown like `src/dialog/scheduledlg.cpp  14/4/18` (ok/gap/total) and `DIconButton  6/11/17`.
+
+Files written:
+- `coverage_scan/pre_scan_ok.yaml`, `coverage_scan/pre_scan_gaps.yaml` — skill-compatible scan products (re-viewable via `--from-yaml`)
+- `coverage_scan/pre_report.json` — skill's own summary
+- `coverage_report.json` — this skill's summary (cpp/qml/combined counts + coverage + pass/fail)
+
+Exit code: `0` if coverage ≥ threshold, `1` otherwise (CI-friendly).
+
+## How Coverage Is Computed
+
+Identical to `at-spi-completion/scripts/quality_gate.py`:
+
+- **C++**: `coverage = len(ok_widgets) / (len(ok_widgets) + len(gap_widgets))`
+- **QML**: `coverage = len(ok_elements) / (len(ok_elements) + len(gap_elements))`
+
+A widget is **ok** if it has both `setObjectName` and `setAccessibleName` (C++) or `Accessible.name` + `Accessible.role` (QML). A widget is a **gap** if the scanner classifies it as interactive (via `type_db.json` + hardcoded `_INTERACTIVE_CLASSES` + custom-type inheritance resolution) but lacks those calls.
+
+## Interpreting "only N files have widgets"
+
+For a large project you may scan 1000+ `.cpp` files but see only ~90 in the by-file breakdown. This is correct: only files that *instantiate interactive widget classes* (dialogs, widgets, views, main windows) contribute widgets. Model/data/business-logic/DBus files have none and are excluded from the breakdown.
+
+## Caveats
+
+- **`compile_commands.json` improves accuracy** for projects with deep custom widget hierarchies. Without it, the scanner falls back to system Qt/DTK include paths + `resolve_custom_types` (text grep of all `.h` files). The fallback is usually fine — verify by checking `parsed/failed` counts in the scan summary; `0 failed` means libclang didn't choke on missing includes.
+- **`examples/` and `tests/` are excluded by default** via `_SKIP_DIRS`. If you ship example code to users and want it covered, that's a policy call — the script excludes them to match the completion skill's behavior.
+- **Cross-file naming** is handled: if a widget is declared in `foo.h` and named in `foo.cpp`, the merge step promotes it from gap to ok.
+
+## Troubleshooting
+
+| Symptom | Cause / Fix |
+|---------|-------------|
+| `libclang not available` | `sudo apt install python3-clang libclang-18-dev` (match your system's libclang version) |
+| `compile_commands: 0 个文件` | No `compile_commands.json` under `build*/`. Pass `--compile-commands <path>` explicitly, or accept the fallback (check `0 failed` in summary). |
+| Scan seems hung | Large projects take 2-5 min. The script prints progress every 20 files; if you see no progress lines for >1 min, check that libclang imported cleanly. |
+| Coverage looks too low | Run `--by-type` and inspect whether a custom widget type is being misclassified as non-interactive. Custom types are registered by `resolve_custom_types` scanning `.h` files for `class X : public DPushButton` patterns. |
