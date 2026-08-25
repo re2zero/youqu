@@ -1,13 +1,13 @@
 ---
 name: at-mapping-rules
-version: "1.0.0"
 description: >
-  Step semantic parsing protocol for AT-SPI case mapping. Use when mapping
-  raw test case steps to executable YAML — the AI must parse each step's
-  operation/target/expected/precondition and never confuse them. Triggers:
-  AT用例映射, LLM map, cases_mapped, 步骤语义解析, selector填写, 映射规范,
-  AT case mapping, semantic parsing, precondition extraction, expected result
-  to assertion, UNSUPPORTED classification.
+  Step semantic parsing protocol for AT-SPI case mapping: parse each raw test
+  step's operation/target/expected/precondition and never confuse them.
+  Triggers: AT用例映射, LLM map, cases_mapped, 步骤语义解析, selector填写,
+  映射规范, AT case mapping, precondition extraction, UNSUPPORTED classification.
+version: "1.0.0"
+license: MIT
+author: Uniontech
 ---
 
 # AT Mapping Rules

@@ -1,6 +1,13 @@
 ---
 name: at-spi-completion
-description: Use when C++ Qt/DTK widgets lack AT-SPI setAccessibleName() or setObjectName() calls, typically found via libclang AST scan showing coverage <80%, or when QML elements lack Accessible.name / Accessible.role (scan_qml.py, tokenizer-based, no libclang needed), or when accessibility/automation test frameworks fail to locate interactive UI elements
+description: >
+  Add missing AT-SPI names to interactive Qt/DTK widgets and QML elements
+  (setAccessibleName/setObjectName, Accessible.name/role) so accessibility
+  tools and YouQu tests can locate them.
+  Triggers: no such node, name not found, setAccessibleName 缺口, 控件补全.
+version: "1.0.0"
+license: MIT
+author: Uniontech
 ---
 
 # AT-SPI API Completion
@@ -32,7 +39,8 @@ Scans C++ Qt/DTK source for missing `setAccessibleName()` / `setObjectName()` ca
 > need `setAccessibleName()` / `Accessible.name` (standard QML types auto-infer role; custom components need explicit `Accessible.role`). This spans both C++ and QML classification.
 > The skill's scanners (`scan_gaps.py`, `scan_qml.py`) and quality gate enforce this:
 > containers are never reported as gaps, coverage is calculated only over operable+assertion targets.
-| **Scan (C++)** | `scan_gaps.py --src <dir> --output tests/at/spi/` | `pre_scan_gaps.yaml` + `ok_widgets.yaml` |
+## Pipeline
+| **Scan (C++)** | `scan_gaps.py --src <dir> --output tests/at/spi/` | `pre_scan_gaps.yaml` + `pre_scan_ok.yaml` |
 | **Scan (QML)** | `scan_qml.py --src <dir> --output tests/at/spi/` | `qml_gaps.yaml` + `qml_ok.yaml` |
 | **Generate** | `naming.py pre_scan_gaps.yaml -o map.txt` | `name_map.txt` (with source_file:line info) |
 | **Apply (auto)** | `apply_fixes.py pre_scan_gaps.yaml --name-map map.txt --src-dir .` | `apply_fixes_report.json` + modified `.cpp` files |
@@ -80,14 +88,20 @@ Full naming rules: [naming_conventions.md](naming_conventions.md) (PascalCase, E
 # --src MUST be the repo root (contains src/ subdirectory) so that file paths
 # in output match those in .ts translation files.
 python3 scripts/scan_gaps.py --src /path/to/repo/root --build /path/to/build --output tests/at/spi/
-
-# Optional: Qt Designer .ui supplement (experimental, see ui_parser.py --help)
-python3 scripts/ui_parser_merge.sh tests/at/spi/
+# Optional: Qt Designer .ui supplement (experimental, library only, no CLI —
+# scan_ui_files() is not wired into scan_gaps.py)
 ```
+> 集成状态：`ui_parser.py` 提供 `scan_ui_files()` / `merge_ui_gaps()` 函数库，
+> 但尚未接入 `scan_gaps.py` 主流程。需要 .ui 覆盖时用 Python REPL 手动调用：
+> ```python
+> import sys; sys.path.insert(0, "scripts")
+> from ui_parser import scan_ui_files, merge_ui_gaps
+> results = scan_ui_files(".")
+> # merge_ui_gaps(results, existing_gaps) → 追加 gap 后写回 pre_scan_gaps.yaml
+> ```
 
 > ⚠️ `--src` must be the repository root, not `src/` subdirectory. The `.ts` translation files store paths relative to repo root (e.g. `src/views/w.cpp`); menu_extractor matches them by path suffix.
-
-**输出：** `pre_scan_gaps.yaml`（缺失 AT-SPI 调用的控件列表）+ `ok_widgets.yaml`（已有完整命名的控件列表）
+**输出：** `pre_scan_gaps.yaml`（缺失 AT-SPI 调用的控件列表）+ `pre_scan_ok.yaml`（已有完整命名的控件列表）+ `pre_report.json`（统计）
 
 ### Phase 2 — Generate Names
 
@@ -164,17 +178,17 @@ cat apply_fixes_report.json | python3 -m json.tool
 > ⚠️ **Phase 3a 完成后，必须继续执行 Phase 5（重新扫描验证）和 Phase 7（合并生成 expected_names.yaml）**。否则 `expected_names.yaml` 中的名字仍为空值，质量门禁无法正确检测回归。
 >
 > ```bash
-# 补全后立即执行 Phase 5 重新扫描
-python3 scripts/quality_gate.py --src . --build build/ \
-  --baseline tests/at/spi/pre_scan_gaps.yaml \
-  --threshold 80 --output tests/at/spi/
-
-# 然后执行 Phase 7 合并
-python3 scripts/merge_names.py \
-  --input tests/at/spi \
-  --scan-dir tests/at/spi/quality_gate_scan \
-  --output tests/at/spi/expected_names.yaml
-```
+> # 补全后立即执行 Phase 5 重新扫描
+> python3 scripts/quality_gate.py --src . --build build/ \
+>   --baseline tests/at/spi/pre_scan_gaps.yaml \
+>   --threshold 80 --output tests/at/spi/
+>
+> # 然后执行 Phase 7 合并
+> python3 scripts/merge_names.py \
+>   --input tests/at/spi \
+>   --scan-dir tests/at/spi/quality_gate_scan \
+>   --output tests/at/spi/expected_names.yaml
+> ```
 >
 > 验证方法：检查 `expected_names.yaml` 中所有条目的 `object_name` 和 `accessible_name` 字段是否都有非空值。如果仍有空值，说明 re-scan 未正确执行。
 
@@ -264,19 +278,8 @@ m_newAction->setObjectName("NewWindowAction");           // ← 新增
 >
 > ⚠️ **不能修改代码格式。** 不动缩进、空行、注释、括号风格、分号风格、命名风格。只做纯增量插入。
 >
-> ⚠️ **Phase 3b 全部完成后，必须重新扫描并更新 expected_names.yaml**（同 Phase 3a 警告）。执行：
-> ```bash
-> # Phase 5: 重新扫描验证
-> python3 scripts/quality_gate.py --src . --build build/ \
->   --baseline tests/at/spi/pre_scan_gaps.yaml \
->   --threshold 80 --output tests/at/spi/
-> 
-> # Phase 7: 合并生成 expected_names.yaml
-> python3 scripts/merge_names.py \
->   --input tests/at/spi \
->   --scan-dir tests/at/spi/quality_gate_scan \
->   --output tests/at/spi/expected_names.yaml
-> ```
+> ⚠️ **Phase 3b 全部完成后，必须重新扫描并更新 expected_names.yaml** — 与 Phase 3a
+> 相同：执行 Phase 5 重新扫描验证 + Phase 7 合并（命令见上方 Phase 3a 警告块）。
 > 验证：`expected_names.yaml` 中所有 `object_name` 和 `accessible_name` 字段必须为非空值。
 
 #### Parallel Apply Strategy (for large projects)
@@ -592,7 +595,7 @@ cd /path/to/target/app        # e.g. deepin-terminal
 # Stage: modified .cpp/.h files + tests/at/spi/expected_names.yaml
 git add -A
 git commit
-
+```
 ## Common Mistakes
 | Mistake | Consequence | Fix |
 |---------|-------------|-----|
@@ -646,4 +649,9 @@ Run `python3 scripts/<name>.py --help` for per-script options.
 >
 > ⚠️ **Quality gate checks uniqueness on both `pre_scan_ok.yaml` AND `pre_scan_gaps.yaml`**. When coverage reaches 100% the gaps file is empty; without the ok-file check, duplicates would be invisible.
 
-Dependencies: `sudo apt install python3-clang-18 libclang-18-dev && pip install pyyaml`
+## Dependencies
+
+`sudo apt install python3-clang-18 libclang-18-dev && pip install pyyaml`
+
+C++ 扫描（`scan_gaps.py`、`menu_extractor.py`）需要 libclang Python 绑定；未安装时
+这些脚本会降级或报错。QML 扫描（`scan_qml.py`）纯 tokenizer 实现，无外部依赖。

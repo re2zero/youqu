@@ -1,12 +1,10 @@
 ---
 name: at-spi-coverage
-version: "0.1.0"
 description: >
-  Evaluate AT-SPI element coverage for desktop app projects via two
-  independent analysis pipelines (static source scan + codebase graph).
-  Trigger: When asked to assess AT-SPI name coverage, compare scan vs
-  graph results, or produce a coverage report for a Qt/DTK/QML desktop
-  application.
+  Assess AT-SPI element name coverage for Qt/DTK/QML desktop apps (static
+  source scan vs codebase graph) and produce a coverage report.
+  Triggers: AT-SPI覆盖率, 评估覆盖率, coverage report, 控件缺口.
+version: "0.1.0"
 license: MIT
 author: Uniontech
 ---

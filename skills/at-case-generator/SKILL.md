@@ -1,15 +1,14 @@
 ---
 name: at-case-generator
-version: "2.0.0"
 description: >
-  Use when generating AT-SPI test suites from xlsx/csv test case documents
-  or from feature requirements for a Linux desktop application. Generates
-  executable YAML suite files ready for `youqu at run`. Supports three modes:
-  standard (xlsx + scan + dump), auto/headless (no DISPLAY), and
-  feature-driven (no xlsx, from PR/issue). Triggers: AT用例生成, at-case
-  generation, AT suite generation, AT-SPI suite YAML, at-tree用例,
-  桌面应用AT测试, AT自动化用例, youqu at parse, youqu at generate,
-  youqu at tree-info, 自动生成, 无record, multica.
+  Generates executable AT-SPI YAML test suites for Linux desktop apps from
+  xlsx/csv case docs or feature requirements (PR/issue), ready for `youqu at
+  run`.
+  Triggers: AT用例生成, at-case generation, AT suite generation, AT-SPI
+  suite YAML, at-tree用例, 桌面应用AT测试, 自动生成, youqu at generate.
+version: "2.0.0"
+license: MIT
+author: Uniontech
 ---
 # AT Case Generator v2.0
 

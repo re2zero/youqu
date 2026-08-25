@@ -1,6 +1,13 @@
 ---
 name: at-spi-ui-map
-description: "Use when deriving AT-SPI UI structure or expected element names for desktop apps (Qt/DTK/GTK) from source via a remote-codebase MCP server, to produce a UI map, expected element list, and source-code implementation checklist for AT test baselines. Triggers: UI图谱, AT-SPI, 预期AT元素, 控件缺口, setAccessibleName 缺口, ui map, AT测试基线."
+description: >
+  Derive AT-SPI UI structure and expected element names for desktop apps
+  (Qt/DTK/GTK) from source via a codebase MCP server, producing a UI map and
+  implementation checklist for AT test baselines.
+  Triggers: UI图谱, AT-SPI, 预期AT元素, 控件缺口, setAccessibleName 缺口, AT测试基线.
+version: "1.0.0"
+license: MIT
+author: Uniontech
 ---
 
 # AT-SPI UI Map (via Codebase MCP)
