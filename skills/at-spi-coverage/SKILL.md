@@ -1,35 +1,74 @@
 ---
 name: at-spi-coverage
-description: Use when you need to measure AT-SPI name coverage of a Qt/DTK C++ or QML project — count already-named interactive widgets vs. widgets that still need names, compute coverage %, and list gaps by file/type. Reuses the at-spi-completion scanners (scan_gaps.py / scan_qml.py) with per-file progress and compile_commands.json auto-detection. Use to verify coverage before/after an AT-SPI completion pass, or to triage which files/types most need work.
-version: "0.2.0"
+description: >
+  Measure AT-SPI coverage of a Qt/DTK C++/QML project in two modes:
+  (a) source-scan coverage — interactive widgets named vs. still needing names,
+  gaps by file/type; (b) AT 用例覆盖率 (atcase) =
+  min(covered_refs, scan_total)/scan_total, where covered_refs = suite refs
+  (selector ∪ menu items), scan_total = interactive widgets from the source scan
+  (coverage_stats.py), capped at 100%.
+  Triggers: AT-SPI覆盖率, 覆盖率, coverage, AT 用例覆盖率, atcase, 控件缺口, gap 分析.
+version: "0.4.0"
 license: MIT
 author: Uniontech
 ---
 
 # AT-SPI Coverage Statistics
 
-## Overview
+Two measurement modes, both via bundled scripts (self-contained, no repo-external deps):
 
-Measures AT-SPI name coverage for a Qt/DTK C++ and/or QML project:
+| Mode | Script | Measures | Needs libclang? |
+|------|--------|----------|-----------------|
+| **源码扫描覆盖率** | `scripts/coverage_stats.py` | interactive widgets named vs. missing (ok/gap/total) | yes (C++) |
+| **AT 用例覆盖率** | `scripts/coverage_atcase.py` | UI elements exercised by AT test cases (elements/total) | no (pyyaml only) |
 
-- **已编写 (ok)** — interactive widgets that already have `setObjectName()` + `setAccessibleName()` (C++) or `Accessible.name`/`Accessible.role` (QML)
-- **应编写 (total)** — all interactive widgets found in source (ok + gap)
-- **覆盖率 (coverage)** — `ok / total × 100%`
+## Default path: source-scan coverage
 
-Reuses the at-spi-completion skill's scanners (`scan_gaps.py` for C++ via libclang AST, `scan_qml.py` for QML via tokenizer) so the numbers are consistent with the completion workflow's own `quality_gate.py`.
+```bash
+# Full scan (auto-detects compile_commands.json under build*/)
+python3 scripts/coverage_stats.py --src /path/to/repo
 
-The script (`scripts/coverage_stats.py`) improves on a raw `scan_source` call by:
+# C++ only (pure-C++ projects: silences "no .qml" warning)
+python3 scripts/coverage_stats.py --src /path/to/repo --cpp-only
 
-1. **Per-file progress** — dispatches single-file tasks to a process pool so `imap_unordered` yields per file, instead of the skill's coarse 25-file batches that make large projects look hung.
-2. **`compile_commands.json` auto-detection + `arguments` normalization** — finds `compile_commands.json` under any `build*/` dir and converts CMake's `arguments` (list) form to `command` (string) form, which the skill's `_load_compile_commands` reads.
-3. **Standard output products** — writes `pre_scan_ok.yaml` / `pre_scan_gaps.yaml` compatible with the `--from-yaml` path, so you can re-view results without re-scanning.
+# QML only (no libclang needed)
+python3 scripts/coverage_stats.py --src /path/to/repo --qml-only
+
+# Re-view from existing scan products (fast, no re-scan)
+python3 scripts/coverage_stats.py --from-yaml /path/to/coverage_scan/
+```
+
+Output: `ok / total × 100%` where `total = ok + gap`. Exit `0` if coverage ≥ threshold (default 80), else `1` (CI-friendly). Full usage, breakdowns, and output products: read `references/coverage-stats.md`.
+
+## AT 用例覆盖率 (atcase)
+
+接力 `coverage_stats.py`, 分母 = 源码扫描的交互控件总数。公式:
+
+```
+coverage = min(covered_refs, scan_total) / scan_total × 100%   (封顶 100%)
+covered_refs = selector.name ∪ items: 菜单项 (去重去噪)   # 分子, 用例引用全集
+scan_total   = coverage_stats.py 扫描的交互控件数          # 分母, 源码扫描产物
+```
+
+瞬态菜单项 (主/右键菜单) 也算覆盖; `elements.yaml` 仅用于辅助报告 (清单内覆盖/清单缺口), 不决定分子分母。
+
+```bash
+# 1. 先扫描得到 total (产物写入 coverage_scan/)
+python3 scripts/coverage_stats.py --src /path/to/repo --cpp-only -o coverage_report.json
+
+# 2. 接力计算 AT 用例覆盖率 (自动发现 <repo>/coverage_scan/ 或 ./coverage_scan/)
+python3 scripts/coverage_atcase.py --src /path/to/repo
+```
+
+Semantics, total-source precedence, noise filter, and output: read `references/atcase-coverage.md`.
 
 ## When to Use
 
 - Verify AT-SPI coverage before a completion pass (baseline)
-- Verify coverage after a completion pass (did it go up? did ok count rise?)
+- Verify coverage after a completion pass (did ok count rise?)
 - Triage which files / widget types most need AT-SPI names
-- CI gate: fail when coverage < threshold (default 80%)
+- Measure how much of the UI element set the AT test cases exercise
+- CI gate: fail when coverage < threshold
 
 ## When NOT to Use
 
@@ -43,117 +82,21 @@ The script (`scripts/coverage_stats.py`) improves on a raw `scan_source` call by
 sudo apt install python3-clang libclang-18-dev   # match your system's libclang version (e.g. libclang-17-dev)
 pip install pyyaml
 
-# QML scanning needs only Python stdlib (tokenizer-based)
+# QML scanning and AT 用例覆盖率 need only Python stdlib (+ pyyaml)
 ```
 
-## Built-in Environment Check
+The scripts run an automatic environment check before scanning and print install hints on failure — no manual pre-verification needed.
 
-The script runs an environment check before any scanning and exits with code 1 + install hints if a required dependency is missing. You don't need to pre-verify — just run it; the check is automatic.
+## Gotchas
 
-What it checks, by mode:
+- **`elements.yaml` ≠ source scan.** `elements.yaml` is a manually-maintained UI element list (includes `Form_*` containers, `Label_*` labels, menu items); `coverage_stats.py` counts only interactive widgets instantiated in source. Different dimensions — do not expect them to match. The atcase formula counts **all** suite refs (incl. transient menu items) against the scan total, so coverage can hit 100% even when the inventory is incomplete. See "Interpreting results" in `references/atcase-coverage.md`.
+- **Dynamic names are invisible to static scan.** `setAccessibleName("Button_" + objName)` (string concatenation) cannot be resolved by libclang — those widgets appear as gaps even though they get names at runtime. Verify with a live AT-SPI dump, not the static scan alone.
 
-| Dependency | C++ scan | QML scan | `--from-yaml` |
-|-----------|----------|----------|----------------|
-| pyyaml | required | required | required (reads YAML) |
-| python `clang` module | required | — | — |
-| libclang `.so` | required | — | — |
-| libclang binding init (scan_gaps) | required | — | — |
+## Verification
 
-Example output when everything is present:
-
-```
-============================================================
-环境检测
-============================================================
-  [✓] pyyaml                     已安装
-  [✓] python clang 模块          已安装
-  [✓] libclang 动态库            /usr/lib/x86_64-linux-gnu/libclang-17.so
-  [✓] libclang 绑定可用          scan_gaps 可用
-============================================================
-[PASS] 环境检测通过
-============================================================
-```
-
-When something is missing, each failing item prints its install command, plus a one-liner covering all C++ deps:
-
-```
-  [✗] python clang 模块          未安装
-      sudo apt install python3-clang
-============================================================
-[FAIL] 环境检测未通过, 请按上述提示安装缺失依赖后重试。
-       一键安装 (C++ 模式):  sudo apt install python3-clang libclang-18-dev && pip install pyyaml
-============================================================
-```
-
-
-## Usage
-
-```bash
-# Full scan (auto-detects compile_commands.json under build*/)
-python3 scripts/coverage_stats.py --src /path/to/repo
-
-# C++ only (skip QML search — for pure-C++ projects this silences the "no .qml" warning)
-python3 scripts/coverage_stats.py --src /path/to/repo --cpp-only
-
-# QML only (no libclang needed)
-python3 scripts/coverage_stats.py --src /path/to/repo --qml-only
-
-# Explicit build dir / compile_commands
-python3 scripts/coverage_stats.py --src /path/to/repo --build /path/to/build
-python3 scripts/coverage_stats.py --src /path/to/repo --compile-commands /path/to/compile_commands.json
-
-# Breakdown by file and/or type
-python3 scripts/coverage_stats.py --src /path/to/repo --by-file --by-type
-
-# Custom threshold (default 80)
-python3 scripts/coverage_stats.py --src /path/to/repo --threshold 90
-
-# Re-view from existing scan products (fast, no re-scan)
-python3 scripts/coverage_stats.py --from-yaml /path/to/coverage_scan/
-```
-
-## Output
-
-Console:
-
-```
-[C++]
-  已编写 (ok)   : 196
-  缺失   (gap)  : 33
-  应编写 (total): 229
-  覆盖率        : 85.6%
-
-[合计] 已编写: 196 / 应编写: 229 / 覆盖率: 85.6%
-       阈值: 80.0%  -> PASS
-```
-
-With `--by-file` / `--by-type`, a breakdown like `src/dialog/scheduledlg.cpp  14/4/18` (ok/gap/total) and `DIconButton  6/11/17`.
-
-Files written:
-- `coverage_scan/pre_scan_ok.yaml`, `coverage_scan/pre_scan_gaps.yaml` — skill-compatible scan products (re-viewable via `--from-yaml`)
-- `coverage_scan/pre_report.json` — skill's own summary
-- `coverage_report.json` — this skill's summary (cpp/qml/combined counts + coverage + pass/fail)
-
-Exit code: `0` if coverage ≥ threshold, `1` otherwise (CI-friendly).
-
-## How Coverage Is Computed
-
-Identical to `at-spi-completion/scripts/quality_gate.py`:
-
-- **C++**: `coverage = len(ok_widgets) / (len(ok_widgets) + len(gap_widgets))`
-- **QML**: `coverage = len(ok_elements) / (len(ok_elements) + len(gap_elements))`
-
-A widget is **ok** if it has both `setObjectName` and `setAccessibleName` (C++) or `Accessible.name` + `Accessible.role` (QML). A widget is a **gap** if the scanner classifies it as interactive (via `type_db.json` + hardcoded `_INTERACTIVE_CLASSES` + custom-type inheritance resolution) but lacks those calls.
-
-## Interpreting "only N files have widgets"
-
-For a large project you may scan 1000+ `.cpp` files but see only ~90 in the by-file breakdown. This is correct: only files that *instantiate interactive widget classes* (dialogs, widgets, views, main windows) contribute widgets. Model/data/business-logic/DBus files have none and are excluded from the breakdown.
-
-## Caveats
-
-- **`compile_commands.json` improves accuracy** for projects with deep custom widget hierarchies. Without it, the scanner falls back to system Qt/DTK include paths + `resolve_custom_types` (text grep of all `.h` files). The fallback is usually fine — verify by checking `parsed/failed` counts in the scan summary; `0 failed` means libclang didn't choke on missing includes.
-- **`examples/` and `tests/` are excluded by default** via `_SKIP_DIRS`. If you ship example code to users and want it covered, that's a policy call — the script excludes them to match the completion skill's behavior.
-- **Cross-file naming** is handled: if a widget is declared in `foo.h` and named in `foo.cpp`, the merge step promotes it from gap to ok.
+- Source scan: check `parsed/failed` counts in the scan summary; `0 failed` means libclang didn't choke on missing includes.
+- AT case coverage: confirm `elements_source` in the JSON report is `elements.yaml` (or `*.suite.yaml` fallback) and that `noise_removed` lists only filename-like names.
+- Cross-check: run `--by-type` to verify custom widget types aren't misclassified as non-interactive.
 
 ## Troubleshooting
 
@@ -161,5 +104,6 @@ For a large project you may scan 1000+ `.cpp` files but see only ~90 in the by-f
 |---------|-------------|
 | `libclang not available` | `sudo apt install python3-clang libclang-18-dev` (match your system's libclang version) |
 | `compile_commands: 0 个文件` | No `compile_commands.json` under `build*/`. Pass `--compile-commands <path>` explicitly, or accept the fallback (check `0 failed` in summary). |
-| Scan seems hung | Large projects take 2-5 min. The script prints progress every 20 files; if you see no progress lines for >1 min, check that libclang imported cleanly. |
-| Coverage looks too low | Run `--by-type` and inspect whether a custom widget type is being misclassified as non-interactive. Custom types are registered by `resolve_custom_types` scanning `.h` files for `class X : public DPushButton` patterns. |
+| Scan seems hung | Large projects take 2-5 min. The script prints progress every 20 files; if no progress lines for >1 min, check libclang imported cleanly. |
+| Coverage looks too low | Run `--by-type` and inspect whether a custom widget type is misclassified as non-interactive. Custom types are registered by `resolve_custom_types` scanning `.h` files for `class X : public DPushButton` patterns. |
+| atcase: "未找到扫描产物" | Run `coverage_stats.py` first (or pass `--total <N>` / `--scan-dir <dir>`). |
