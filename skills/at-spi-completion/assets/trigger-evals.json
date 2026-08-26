@@ -1,0 +1,76 @@
+{
+  "skill": "at-spi-completion",
+  "description": "Trigger evals. should_trigger=true means at-spi-completion should load; should_trigger=false means the user wants coverage measurement (at-spi-coverage) or something unrelated. Run each query 3x and record trigger rate.",
+  "queries": [
+    {
+      "id": "t01",
+      "query": "给这个 Qt 项目补全缺失的 setAccessibleName",
+      "should_trigger": true
+    },
+    {
+      "id": "t02",
+      "query": "控件补全",
+      "should_trigger": true
+    },
+    {
+      "id": "t03",
+      "query": "AT-SPI 名称缺失，测试找不到控件",
+      "should_trigger": true
+    },
+    {
+      "id": "t04",
+      "query": "运行报 no such node，按钮没有可访问名称",
+      "should_trigger": true
+    },
+    {
+      "id": "t05",
+      "query": "QML 里那些元素没有 Accessible.name，帮我加上",
+      "should_trigger": true
+    },
+    {
+      "id": "t06",
+      "query": "deepin-terminal 的 pre_scan_gaps.yaml 有 30 个缺口，补全它们",
+      "should_trigger": true
+    },
+    {
+      "id": "t07",
+      "query": "accessibility 控件缺口修复",
+      "should_trigger": true
+    },
+    {
+      "id": "t08",
+      "query": "算一下这个仓库的 AT-SPI 覆盖率是多少",
+      "should_trigger": false
+    },
+    {
+      "id": "t09",
+      "query": "跑 at-spi-coverage 扫描并给我覆盖率报告，不要改代码",
+      "should_trigger": false
+    },
+    {
+      "id": "t10",
+      "query": "atcase 覆盖率多少",
+      "should_trigger": false
+    },
+    {
+      "id": "t11",
+      "query": "scan_qml 看看 QML 覆盖情况",
+      "should_trigger": false
+    },
+    {
+      "id": "t12",
+      "query": "写一个 Python 函数排序数组",
+      "should_trigger": false
+    },
+    {
+      "id": "t13",
+      "query": "把 ui_*.h 改成自动生成的样式",
+      "should_trigger": false
+    },
+    {
+      "id": "t14",
+      "query": "只测量，不修：帮我统计每个文件的控件缺口",
+      "should_trigger": false
+    }
+  ]
+}

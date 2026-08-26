@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """AT-SPI coverage statistics.
 
-Reuses the at-spi-completion skill scanners to count, for a target project:
+This skill owns the scanners (scan_gaps.py / scan_qml.py / type_db.json) and
+counts, for a target project:
   - 已编写 (already named): interactive widgets with AT-SPI names
   - 应编写 (should be named): all interactive widgets (ok + gap)
   - 覆盖率 (coverage): ok / total
 
-Coverage formula matches quality_gate.py:
+Coverage formula:
   C++ : ok_widgets / (ok_widgets + gap_widgets)
   QML : ok_elements / (ok_elements + gap_elements)
 
@@ -40,20 +41,12 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 def _add_scripts_to_path() -> None:
     """Make scan_gaps / scan_qml importable.
 
-    This skill ships its own copies of scan_gaps.py / scan_qml.py / type_db.json
-    (self-contained). Prefer the bundled copies so the skill works when moved
-    to another machine. As a convenience, also append any sibling
-    at-spi-completion-*/scripts/ to sys.path as a fallback — this lets a shared
-    install track the completion skill's scanner updates without editing this
-    skill. The bundled copies win because they're inserted at position 0.
+    This skill owns the scanners (scan_gaps.py / scan_qml.py / type_db.json)
+    and ships them here (self-contained), so the skill is portable on its own.
     """
-    # Bundled scanners first (highest priority)
+    # Bundled scanners (single owner)
     if str(SCRIPT_DIR) not in sys.path:
         sys.path.insert(0, str(SCRIPT_DIR))
-    # Sibling completion skill as low-priority fallback (append, not insert)
-    for sibling in SCRIPT_DIR.parent.parent.glob("at-spi-completion-*/scripts"):
-        if sibling.is_dir() and str(sibling) not in sys.path:
-            sys.path.append(str(sibling))
 
 
 def _normalize_compile_commands(cc_path: str, out_dir: Path) -> str | None:

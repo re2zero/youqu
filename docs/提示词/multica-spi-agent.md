@@ -17,10 +17,11 @@
 ### 1. 环境准备
 用 multica 拉取仓库，使用 worktree 中 git 身份。
 
-### 2. 扫描（at-spi-ui-map）
-- 扫描组件清单（控件、属性、层级、accessibleName 缺口），保存产出，记录补全前覆盖率（libclang AST）。
+### 2. 扫描（at-spi-coverage）
+- 先运行 `at-spi-coverage` 技能（`coverage_stats.py`）扫描，得到
+  `pre_scan_gaps.yaml` / `pre_scan_ok.yaml` / `qml_gaps.yaml` / `qml_ok.yaml`，
+  记录补全前覆盖率。
 - 有历史产出则先读参考，注明复用。
-- `expected_names.yaml` 随代码提交。
 
 ### 3. 补全（at-spi-completion）
 - 按清单逐条补全，记录文件、位置、内容、原因。
@@ -29,7 +30,7 @@
 - 新增非源码文件需在 `.reuse/dep5` 加声明。
 
 ### 4. 提交与推送
-- 用 worktree git 身份提交：代码 + `expected_names.yaml`；报告仅 issue 附件。
+- 用 worktree git 身份提交补全后的代码；报告仅 issue 附件。
 - commit message 用 git-commit-workflow 生成，遵守规范（80 字符、PMS）。
 - 分支名：`fix/at-spi-completion-<日期>`。
 - **GitHub：** 先 fork 到个人账号，修改后创建 draft PR。

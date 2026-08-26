@@ -8,7 +8,9 @@ Measures AT-SPI name coverage for a Qt/DTK C++ and/or QML project:
 - **应编写 (total)** — all interactive widgets found in source (ok + gap)
 - **覆盖率 (coverage)** — `ok / total × 100%`
 
-Reuses the at-spi-completion skill's scanners (`scan_gaps.py` for C++ via libclang AST, `scan_qml.py` for QML via tokenizer) so the numbers are consistent with the completion workflow's own `quality_gate.py`.
+This skill owns the scanners (`scan_gaps.py` for C++ via libclang AST,
+`scan_qml.py` for QML via tokenizer) and ships them self-contained, so the
+skill is portable on its own.
 
 The script (`scripts/coverage_stats.py`) improves on a raw `scan_source` call by:
 
@@ -68,7 +70,7 @@ Exit code: `0` if coverage ≥ threshold, `1` otherwise (CI-friendly).
 
 ## How Coverage Is Computed
 
-Identical to `at-spi-completion/scripts/quality_gate.py`:
+Coverage formula:
 
 - **C++**: `coverage = len(ok_widgets) / (len(ok_widgets) + len(gap_widgets))`
 - **QML**: `coverage = len(ok_elements) / (len(ok_elements) + len(gap_elements))`

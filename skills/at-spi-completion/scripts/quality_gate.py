@@ -184,11 +184,21 @@ def run_quality_gate(
     Returns:
         Dict with passed, coverage, threshold, and detailed results.
     """
-    # Import scan_gaps from the same directory
+    # at-spi-coverage skill — the single owner of the scanners. This skill
+    # (at-spi-completion) only consumes their scan products and re-runs them
+    # for post-fix validation; it no longer ships its own copies.
     script_dir = Path(__file__).parent
-    sys.path.insert(0, str(script_dir))
-    from scan_gaps import scan_source  # type: ignore
-
+    coverage_scripts = script_dir.parent.parent / "at-spi-coverage" / "scripts"
+    if str(coverage_scripts) not in sys.path:
+        sys.path.insert(0, str(coverage_scripts))
+    try:
+        from scan_gaps import scan_source  # type: ignore
+    except ImportError as e:
+        sys.exit(
+            f"[ERROR] 无法导入 at-spi-coverage/scripts/scan_gaps.py: {e}\n"
+            "        扫描器由 at-spi-coverage 技能持有。请确认该技能存在，"
+            "或先运行 at-spi-coverage 的 coverage_stats.py 完成环境检测。"
+        )
     # Run fresh scan
     scan_output = Path(output_dir) / "quality_gate_scan"
     scan_output.mkdir(parents=True, exist_ok=True)

@@ -129,16 +129,17 @@ Container types and decorative elements — tests never directly operate or asse
 - Tool bars (QToolBar, DToolBar, ToolBar)
 - Rectangles, Items, Text, Images — purely decorative QML elements
 - Spacers, separators, tool separators
+
 ## Quality Gate
 
-After applying fixes, run the quality gate to verify:
+After applying fixes, run the quality gate (`scripts/quality_gate.py`) to verify:
 
 | Check | Threshold | Description |
 |-------|-----------|-------------|
-| **Coverage** | ≥80% | Percentage of widgets with names |
+| **Coverage** | ≥80% (完整补全 100%) | Percentage of widgets with names |
 | **New gaps** | 0 | No new gaps introduced |
-| **Regression** | 0 | Previously-named widgets (from `expected_names.yaml`) still have names |
-| **Uniqueness** | 0 issues | No duplicate objectName values |
+| **Regression** | 0 | Previously-named widgets (from `pre_scan_ok.yaml`) still have names |
+| **Uniqueness** | 0 issues | No duplicate objectName values (checked on `ok` and `gaps` files) |
 | **Conventions** | 0 issues | All names follow PascalCase, English only |
 
 ## References
@@ -146,13 +147,12 @@ After applying fixes, run the quality gate to verify:
 - [AT-SPI Documentation](https://www.freedesktop.org/wiki/Accessibility/AT-SPI2/)
 - [Qt Accessibility](https://doc.qt.io/qt-6/accessible.html)
 - [DTK Accessibility Guidelines](https://github.com/linuxdeepin/dtkwidget)
-## Transient Elements — Translation + Naming (menu_extractor.py)
+
+## Transient Elements — Translation + Naming
 
 **All `tr()`-sourced display text must have a `.ts`-resolved Chinese translation.**
 This is mandatory — not just for menus. Every user-visible string wrapped in
 `tr()` corresponds to a `.ts` entry that provides `text_zh` for test matching.
-The `menu_extractor.py` script resolves translations by `(file, line)` match
-against the app's `.ts` file.
 
 Menu items created via `addAction(tr(...))` have no variable names. Name them
 hierarchically:

@@ -1,0 +1,57 @@
+{
+  "skill": "at-spi-completion",
+  "description": "Output-quality evals for the AT-SPI name completion workflow. Each prompt is a realistic task; the grader checks the agent followed the default path (consume at-spi-coverage scan products, use name_map.txt verbatim, incremental-only inserts, quality_gate validation) and produced correct names.",
+  "evals": [
+    {
+      "id": "cpp-gap-both-missing",
+      "prompt": "deepin-terminal 的 pre_scan_gaps.yaml 显示 m_nameLineEdit (DLineEdit) 在 src/mainwindow.cpp:120 处 new 创建后缺 setObjectName 和 setAccessibleName。请补全。",
+      "expected": [
+        "run scripts/naming.py to get the canonical name from name_map.txt (NameLineEdit, not an invented variant)",
+        "insert both setObjectName and setAccessibleName AFTER the new expression in src/mainwindow.cpp",
+        "do not modify existing code/format",
+        "re-validate with quality_gate.py (Phase 5)"
+      ]
+    },
+    {
+      "id": "qml-custom-component-role",
+      "prompt": "qml_gaps.yaml 列出 MyWidget.qml 里的自定义组件 customWidget 缺 Accessible.role，但已有 Accessible.name。请修复。",
+      "expected": [
+        "open qml_gaps.yaml and read the suggested_name / existing accessible fields",
+        "append only Accessible.role into the existing Accessible { } block",
+        "keep the existing Accessible.name untouched",
+        "not add Accessible.role to standard Qt Quick Controls types"
+      ]
+    },
+    {
+      "id": "qaction-only-objectname",
+      "prompt": "pre_scan_gaps.yaml 里 m_newAction 是 QAction 类型，缺 setObjectName。请补全。不要给 QAction 加 setAccessibleName。",
+      "expected": [
+        "recognize is_action=true / type contains QAction → only setObjectName() is legal",
+        "insert setObjectName after the new QAction(...) expression",
+        "do NOT insert setAccessibleName() (compile error)",
+        "use the canonical name from name_map.txt"
+      ]
+    },
+    {
+      "id": "collision-dedup-suffix",
+      "prompt": "两个不同文件里都有 m_okButton，name_map.txt 已给出 OkButton 和 OkButton_2 两个规范名。补全时如何区分？",
+      "expected": [
+        "use the # {src}:{line} suffix in name_map.txt to match each gap to its canonical name",
+        "apply OkButton in one file and OkButton_2 in the other",
+        "check uniqueness against pre_scan_ok.yaml too (not just gaps)",
+        "never invent a new name"
+      ]
+    },
+    {
+      "id": "mixed-cpp-qml-full-flow",
+      "prompt": "一个混合仓库（C++ 对话框 + QML 设置页）刚跑完 at-spi-coverage，覆盖率为 62%。请完成 AT-SPI 名称补全。",
+      "expected": [
+        "run the full flow: Phase 1 → 2 → 3 → 4 → 5 → 6",
+        "consume both pre_scan_gaps.yaml and qml_gaps.yaml",
+        "C++ via apply_fixes.py + LLM; QML via Accessible attached property",
+        "validate with quality_gate.py passing --qml-baseline",
+        "commit to the target app repo, not the skill repo"
+      ]
+    }
+  ]
+}

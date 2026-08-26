@@ -8,7 +8,7 @@ description: >
   (selector ∪ menu items), scan_total = interactive widgets from the source scan
   (coverage_stats.py), capped at 100%.
   Triggers: AT-SPI覆盖率, 覆盖率, coverage, AT 用例覆盖率, atcase, 控件缺口, gap 分析.
-version: "0.4.0"
+version: "0.5.0"
 license: MIT
 author: Uniontech
 ---
@@ -17,10 +17,10 @@ author: Uniontech
 
 Two measurement modes, both via bundled scripts (self-contained, no repo-external deps):
 
-| Mode | Script | Measures | Needs libclang? |
-|------|--------|----------|-----------------|
-| **源码扫描覆盖率** | `scripts/coverage_stats.py` | interactive widgets named vs. missing (ok/gap/total) | yes (C++) |
-| **AT 用例覆盖率** | `scripts/coverage_atcase.py` | UI elements exercised by AT test cases (elements/total) | no (pyyaml only) |
+> **独立可迁移技能。** 本技能自带全部扫描器（`scan_gaps.py` / `scan_qml.py` /
+> `type_db.json`）与统计脚本，可独立复制到任意环境运行，不依赖其他技能。
+> 扫描产物（`pre_scan_gaps.yaml` / `pre_scan_ok.yaml` / `qml_gaps.yaml` /
+> `qml_ok.yaml`）是标准格式，可被任何下游消费。
 
 ## Default path: source-scan coverage
 
@@ -64,15 +64,14 @@ Semantics, total-source precedence, noise filter, and output: read `references/a
 
 ## When to Use
 
-- Verify AT-SPI coverage before a completion pass (baseline)
-- Verify coverage after a completion pass (did ok count rise?)
+- Verify AT-SPI coverage of a project (baseline)
 - Triage which files / widget types most need AT-SPI names
 - Measure how much of the UI element set the AT test cases exercise
 - CI gate: fail when coverage < threshold
 
 ## When NOT to Use
 
-- You want to *fix* missing AT-SPI names — use the `at-spi-completion` skill instead. This skill only *measures*.
+- You want to *fix* missing AT-SPI names — this skill only *measures*.
 - Decorative-only review (labels, frames, progress bars) — the scanner already excludes non-interactive types.
 
 ## Prerequisites
