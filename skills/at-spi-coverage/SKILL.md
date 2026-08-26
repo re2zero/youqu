@@ -1,12 +1,10 @@
 ---
 name: at-spi-coverage
 description: >
-  Measure AT-SPI coverage of a Qt/DTK C++/QML project in two modes:
-  (a) source-scan coverage — interactive widgets named vs. still needing names,
-  gaps by file/type; (b) AT 用例覆盖率 (atcase) =
-  min(covered_refs, scan_total)/scan_total, where covered_refs = suite refs
-  (selector ∪ menu items), scan_total = interactive widgets from the source scan
-  (coverage_stats.py), capped at 100%.
+  Measure AT-SPI coverage of a Qt/DTK C++/QML app: source-scan coverage
+  (interactive widgets named vs. gaps, by file/type) and AT 用例覆盖率
+  (elements exercised by *.suite.yaml vs. scan total, transient menu items
+  excluded). Auto-detects the AT case dir under tests/at/.
   Triggers: AT-SPI覆盖率, 覆盖率, coverage, AT 用例覆盖率, atcase, 控件缺口, gap 分析.
 version: "0.5.0"
 license: MIT
@@ -46,11 +44,13 @@ Output: `ok / total × 100%` where `total = ok + gap`. Exit `0` if coverage ≥ 
 
 ```
 coverage = min(covered_refs, scan_total) / scan_total × 100%   (封顶 100%)
-covered_refs = selector.name ∪ items: 菜单项 (去重去噪)   # 分子, 用例引用全集
-scan_total   = coverage_stats.py 扫描的交互控件数          # 分母, 源码扫描产物
+covered_refs = selector.name (去重去噪)                 # 分子, 持久元素引用
+scan_total   = coverage_stats.py 扫描的交互控件数        # 分母, 源码扫描产物
 ```
 
-瞬态菜单项 (主/右键菜单) 也算覆盖; `elements.yaml` 仅用于辅助报告 (清单内覆盖/清单缺口), 不决定分子分母。
+瞬态菜单项 (主/右键菜单 `items`) **不计入覆盖**, 仅在报告 (`transient_items`) 中列出供查看。
+`elements.yaml` 仅用于辅助报告 (清单内覆盖/清单缺口), 不决定分子分母; 无 `elements.yaml` 时直接从 `*.suite.yaml` 计算分子。
+AT 用例目录自动发现 `<src>/tests/at/` 下任意含 `*.suite.yaml` 的子目录 (支持 `yaml`, `yaml_xxx` 等命名)。
 
 ```bash
 # 1. 先扫描得到 total (产物写入 coverage_scan/)
@@ -84,17 +84,17 @@ pip install pyyaml
 # QML scanning and AT 用例覆盖率 need only Python stdlib (+ pyyaml)
 ```
 
-The scripts run an automatic environment check before scanning and print install hints on failure — no manual pre-verification needed.
-
 ## Gotchas
 
-- **`elements.yaml` ≠ source scan.** `elements.yaml` is a manually-maintained UI element list (includes `Form_*` containers, `Label_*` labels, menu items); `coverage_stats.py` counts only interactive widgets instantiated in source. Different dimensions — do not expect them to match. The atcase formula counts **all** suite refs (incl. transient menu items) against the scan total, so coverage can hit 100% even when the inventory is incomplete. See "Interpreting results" in `references/atcase-coverage.md`.
+- **`elements.yaml` ≠ source scan.** `elements.yaml` is a manually-maintained UI element list (includes `Form_*` containers, `Label_*` labels, menu items); `coverage_stats.py` counts only interactive widgets instantiated in source. Different dimensions — do not expect them to match. The atcase numerator counts **selector.name only** (transient menu items excluded, listed separately in `transient_items`), so coverage reflects persistent elements against the scan total. See "Interpreting results" in `references/atcase-coverage.md`.
+- **AT 用例目录不限于 `tests/at/yaml`.** 脚本自动发现 `<src>/tests/at/` 下任意含 `*.suite.yaml` 的子目录 (`yaml`, `yaml_xxx`, …)。若 AT 用例在别处, 用 `--at-dir` 显式指定。
+- **无 `elements.yaml` 不报 0.** 缺 `elements.yaml` 时分子直接取 `*.suite.yaml` 的持久 selector, 覆盖照常计算, 只是清单相关辅助指标为空。
 - **Dynamic names are invisible to static scan.** `setAccessibleName("Button_" + objName)` (string concatenation) cannot be resolved by libclang — those widgets appear as gaps even though they get names at runtime. Verify with a live AT-SPI dump, not the static scan alone.
 
 ## Verification
 
 - Source scan: check `parsed/failed` counts in the scan summary; `0 failed` means libclang didn't choke on missing includes.
-- AT case coverage: confirm `elements_source` in the JSON report is `elements.yaml` (or `*.suite.yaml` fallback) and that `noise_removed` lists only filename-like names.
+- AT case coverage: confirm `elements_source` in the JSON report is `elements.yaml` (or `*.suite.yaml` fallback), that `transient_items` lists the menu items, and that `noise_removed` lists only filename-like names.
 - Cross-check: run `--by-type` to verify custom widget types aren't misclassified as non-interactive.
 
 ## Troubleshooting

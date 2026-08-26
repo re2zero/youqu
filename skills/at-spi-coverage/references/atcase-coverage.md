@@ -5,10 +5,18 @@
 这是对 `coverage_stats.py` 的**接力**:
 
 - **scan_total (分母)** — 由 `coverage_stats.py` 扫描出的交互控件总数 (源码扫描结果), 本脚本不计算, 只从扫描产物读取
-- **covered_refs (分子)** — 本脚本计算: suite 引用全集 = `selector.name` ∪ `items:` 菜单项 (两者均去重去噪)。瞬态菜单项 (主菜单/右键菜单) 也算覆盖。
+- **covered_refs (分子)** — 本脚本计算: suite 持久元素引用全集 = `selector.name` (去重去噪)。**瞬态菜单项 (`dtk_main_menu` / `dtk_context_menu` 的 `items`) 不计入覆盖**, 仅在报告 `transient_items` 中列出供查看。
 - **覆盖率** — `min(covered_refs, scan_total) / scan_total × 100%`, 封顶 100%
 
-若项目不存在 AT 用例 (`tests/at/yaml/` 下无 `*.suite.yaml`), 覆盖率记为 0。
+若项目不存在 AT 用例 (`<src>/tests/at/` 下无含 `*.suite.yaml` 的子目录), 覆盖率记为 0。
+
+## AT 用例目录定位
+
+`tests/at/yaml` 只是常见命名, 不是硬编码。脚本按以下顺序定位:
+
+1. `--at-dir <dir>` 显式指定
+2. 自动发现 `<src>/tests/at/` 下第一个含 `*.suite.yaml` 的子目录 (支持 `yaml`, `yaml_xxx` 等任意命名, 递归 `rglob`)
+3. 均不存在 → 无 AT 用例, 覆盖率记为 0
 
 ## total 来源 (coverage_stats.py 扫描产物)
 
@@ -21,12 +29,12 @@
 ## covered_refs 计算
 
 递归遍历所有 `*.suite.yaml` (含 `steps` / `assert_steps` / `setup` / `teardown` / 嵌套 `suites`), 收集:
-- `selector.name` — 持久元素定位
-- `items:` 菜单项 — 主菜单 (`dtk_main_menu`) / 右键菜单 (`dtk_context_menu`) 的瞬态菜单项
+- `selector.name` — 持久元素定位 (计入覆盖)
+- `items:` 菜单项 — 仅在 `action` 为 `dtk_main_menu` / `dtk_context_menu` 时收集, 属**瞬态菜单项**, 不计入覆盖, 归入 `transient_items`
 
-两者去重并剔除文件名噪音 (含 `.`) 后取并集 = `covered_refs`。items 引用即视为覆盖对应功能, 即使该菜单项不在 `elements.yaml` 清单里。
+持久 `selector.name` 去重并剔除文件名噪音 (含 `.`) 后即 `covered_refs` (分子)。瞬态菜单项只在报告中单独列出, 反映"当前有哪些菜单动作被用例覆盖"。
 
-`elements.yaml` 仅用于辅助报告 (清单内覆盖 / 清单缺口), 不决定分子分母。若无 `elements.yaml`, 分子即 suite 引用全集。
+`elements.yaml` 仅用于辅助报告 (清单内覆盖 / 清单缺口), 不决定分子分母。若无 `elements.yaml`, 分子直接取 suite 持久引用全集, **不报覆盖为 0**。
 
 ## 噪音过滤
 
@@ -35,21 +43,21 @@
 ## Interpreting results
 
 覆盖率 `min(covered_refs, scan_total) / scan_total` 混合了两个不同口径的集合:
-- **分子 covered_refs** — suite 引用全集 (selector + 瞬态 items 菜单项)
+- **分子 covered_refs** — suite 持久 selector 引用全集 (瞬态菜单项已剔除)
 - **分母 scan_total** — 源码扫描的交互控件数 (不含菜单项)
 
-因为 items 菜单项 (主菜单/右键菜单) 不在扫描统计内, 分子常 ≥ 分母, 覆盖率**封顶 100%**。100% 的含义是"用例引用的去重元素数已覆盖扫描交互控件数", 不代表清单完整或所有 UI 元素都被测到。
+因为瞬态菜单项已从分子剔除, 分子与扫描口径更一致; 覆盖率达到或超过扫描交互控件数时仍**封顶 100%**。100% 的含义是"用例引用的持久去重元素数已覆盖扫描交互控件数", 不代表清单完整或所有 UI 元素都被测到。
 
 有区分度的指标在辅助报告:
-- **covered_in_inventory** — covered_refs 中落在 `elements.yaml` 清单内的数量 (本例 18/46)
-- **refs_not_in_inventory** — covered_refs 的清单外元素 (瞬态菜单项, 本例 25 个)
-- **scan_named_not_in_inventory** — 扫描已命名但清单缺失 (清单缺口, 本例 12 个)
-- **inventory_uncovered** — 清单中未被任何 covered_refs 覆盖 (用例缺口, 本例 28 个)
+- **covered_in_inventory** — covered_refs 中落在 `elements.yaml` 清单内的数量
+- **transient_items** — 瞬态菜单项清单 (主菜单/右键菜单, 不参与覆盖)
+- **refs_not_in_inventory** — covered_refs 的清单外元素
+- **scan_named_not_in_inventory** — 扫描已命名但清单缺失 (清单缺口)
+- **inventory_uncovered** — 清单中未被任何 covered_refs 覆盖 (用例缺口)
 
 解读覆盖率前先看 `elements_source` 与辅助指标, 区分"清单问题"与"用例缺口"。源码是 AT-SPI 树实际名称的权威, 清单与源码冲突时以源码为准。
 
 动态拼接名 (`setAccessibleName("Button_" + objName)`) 静态扫描无法解析, 运行时才生效 —— 这类控件报 gap 不代表真的缺名, 需用 AT-SPI 实况 dump 验证。
-
 
 ## 用法
 
@@ -63,6 +71,9 @@ python3 scripts/coverage_atcase.py --src /path/to/repo
 # 显式指定扫描产物目录 / 直接传 total
 python3 scripts/coverage_atcase.py --src /path/to/repo --scan-dir /path/to/coverage_scan
 python3 scripts/coverage_atcase.py --src /path/to/repo --total <N>
+
+# 显式指定 AT 用例目录 (跳过自动发现; 支持 tests/at/yaml_xxx 等)
+python3 scripts/coverage_atcase.py --src /path/to/repo --at-dir /path/to/tests/at/yaml_xxx
 
 # 打印已覆盖元素明细
 python3 scripts/coverage_atcase.py --src /path/to/repo --scan-dir /path/to/coverage_scan --list-elements
@@ -80,21 +91,22 @@ python3 scripts/coverage_atcase.py --src /path/to/repo -o coverage_atcase.json -
 AT 用例覆盖率统计
 ============================================================
   项目       : <project>
-  AT 用例目录: <repo>/tests/at/yaml
+  AT 用例目录: <repo>/tests/at/yaml_xxx   # 自动发现任意含 *.suite.yaml 的子目录
   total 来源 : <scan-dir>/pre_report.json
   suite 文件 : <suite-count>
   elements 来源: elements.yaml   # 或 *.suite.yaml (无 elements.yaml 时)
   扫描交互控件 (total) : <N>
-  用例覆盖引用 (covered): <M> (selector ∪ items 去重, 含瞬态 items)
+  用例覆盖引用 (covered): <M> (selector 去重, 不含瞬态 items)
   其中清单内           : <P> 个
   覆盖率               : <X>%
+  [INFO] 瞬态菜单项 (不计覆盖, <K> 个): ...
   [INFO] 已剔除文件名噪音: <noise...>
-  [INFO] 用例引用的清单外元素 (<n> 个, 瞬态菜单项等): ...
+  [INFO] 用例引用的清单外元素 (<n> 个): ...
        阈值: <threshold>%  -> PASS|FAIL
 ```
 
 生成文件:
-- `coverage_atcase.json` — 结构化结果 (`total` / `covered_refs` / `covered_in_inventory` / `refs_not_in_inventory` / `scan_named_not_in_inventory` / `inventory_uncovered` / `coverage` / `no_cases` / `passed` 等)
+- `coverage_atcase.json` — 结构化结果 (`total` / `covered_refs` / `covered_in_inventory` / `transient_items` / `refs_not_in_inventory` / `scan_named_not_in_inventory` / `inventory_uncovered` / `coverage` / `no_cases` / `passed` 等)
 - `coverage_atcase.md` — Markdown 报告
 
 退出码: `0` 表示覆盖率达到阈值且有 AT 用例, `1` 否则 (CI 友好)。无 AT 用例时始终返回 `1` 并报 0。未找到扫描产物时打印运行 `coverage_stats.py` 的提示并返回 `1`。
