@@ -6,7 +6,7 @@ description: >
   (elements exercised by *.suite.yaml vs. scan total, transient menu items
   excluded). Auto-detects the AT case dir under tests/at/.
   Triggers: AT-SPI覆盖率, 覆盖率, coverage, AT 用例覆盖率, atcase, 控件缺口, gap 分析.
-version: "0.5.1"
+version: "0.5.2"
 license: MIT
 author: Uniontech
 ---

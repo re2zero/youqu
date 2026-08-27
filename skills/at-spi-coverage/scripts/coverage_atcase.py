@@ -146,7 +146,7 @@ def _collect_elements_yaml(elements_yaml: Path) -> set[str]:
 def _collect_scan_named(scan_dir: Path) -> set[str]:
     """从扫描产物收集已命名控件名 (existing_accessible_name / existing_object_name), 用于清单缺口报告。"""
     names: set[str] = set()
-    for fname in ("pre_scan_ok.yaml", "pre_scan_gaps.yaml"):
+    for fname in ("pre_scan_ok.yaml", "pre_scan_gaps.yaml", "qml_ok.yaml", "qml_gaps.yaml"):
         p = scan_dir / fname
         if not p.is_file():
             continue
@@ -160,6 +160,10 @@ def _collect_scan_named(scan_dir: Path) -> set[str]:
             n = w.get("existing_accessible_name") or w.get("existing_object_name") or ""
             if isinstance(n, str) and n:
                 names.add(n.strip())
+            # QML 产物用 accessible_name 字段
+            n2 = w.get("accessible_name")
+            if isinstance(n2, str) and n2:
+                names.add(n2.strip())
     return names
 
 
@@ -175,35 +179,73 @@ def _denoise(names: set[str]) -> set[str]:
     return {n for n in names if n and not _is_noise(n)}
 
 
-def _load_scan_total(scan_dir: Path) -> int | None:
-    """从 coverage_stats.py 扫描产物读取 total (应编写元素总数)。
-
-    优先读 pre_report.json, 回退到 pre_scan_gaps.yaml 的 summary.total_widgets。
-    """
-    pre_report = scan_dir / "pre_report.json"
-    if pre_report.is_file():
-        data = _load_json(pre_report)
-        if isinstance(data, dict):
-            sm = data.get("summary") or {}
-            total = sm.get("total_widgets")
-            if isinstance(total, int) and total >= 0:
-                return total
-
-    pre_gaps = scan_dir / "pre_scan_gaps.yaml"
-    if pre_gaps.is_file():
-        data = _load_yaml(pre_gaps)
-        if isinstance(data, dict):
-            sm = data.get("summary") or {}
-            total = sm.get("total_widgets")
-            if isinstance(total, int) and total >= 0:
-                return total
+def _read_total_from(data: Any, keys: tuple[str, ...]) -> int | None:
+    """从扫描产物 dict 读取 total 字段 (C++: total_widgets, QML: total_elements)。"""
+    if not isinstance(data, dict):
+        return None
+    sm = data.get("summary") or {}
+    for k in keys:
+        v = sm.get(k)
+        if isinstance(v, int) and v > 0:
+            return v
     return None
 
 
+def _load_scan_total(scan_dir: Path) -> tuple[int | None, str]:
+    """从 coverage_stats.py 扫描产物读取 total (应编写元素总数)。
+
+    C++ 与 QML 分别读取后求和 (混合项目两者都有控件时 total = cpp + qml):
+    - C++: pre_report.json, 回退 pre_scan_gaps.yaml (summary.total_widgets)
+    - QML: qml_report.json, 回退 qml_gaps.yaml (summary.total_elements)
+    返回 (total, source_label); 无任何产物时返回 (None, "")。
+    """
+    cpp_total: int | None = None
+    cpp_src = ""
+    pre_report = scan_dir / "pre_report.json"
+    if pre_report.is_file():
+        t = _read_total_from(_load_json(pre_report), ("total_widgets",))
+        if t is not None:
+            cpp_total, cpp_src = t, "pre_report.json"
+    if cpp_total is None:
+        pre_gaps = scan_dir / "pre_scan_gaps.yaml"
+        if pre_gaps.is_file():
+            t = _read_total_from(_load_yaml(pre_gaps), ("total_widgets",))
+            if t is not None:
+                cpp_total, cpp_src = t, "pre_scan_gaps.yaml"
+
+    qml_total: int | None = None
+    qml_src = ""
+    qml_report = scan_dir / "qml_report.json"
+    if qml_report.is_file():
+        t = _read_total_from(_load_json(qml_report), ("total_elements",))
+        if t is not None:
+            qml_total, qml_src = t, "qml_report.json"
+    if qml_total is None:
+        qml_gaps = scan_dir / "qml_gaps.yaml"
+        if qml_gaps.is_file():
+            t = _read_total_from(_load_yaml(qml_gaps), ("total_elements",))
+            if t is not None:
+                qml_total, qml_src = t, "qml_gaps.yaml"
+
+    if cpp_total is None and qml_total is None:
+        return None, ""
+    total = (cpp_total or 0) + (qml_total or 0)
+    if cpp_total is not None and qml_total is not None:
+        label = f"{cpp_src}+{qml_src}"
+    else:
+        label = cpp_src or qml_src
+    return total, label
+
+
 def _find_scan_dir(src: Path) -> Path | None:
-    """自动发现扫描产物目录: <src>/coverage_scan, ./coverage_scan。"""
+    """自动发现扫描产物目录: <src>/coverage_scan, ./coverage_scan。
+
+    接受 C++ 产物 (pre_report.json / pre_scan_gaps.yaml) 或纯 QML 产物
+    (qml_report.json / qml_gaps.yaml)。
+    """
     for cand in (src / "coverage_scan", Path("coverage_scan")):
-        if (cand / "pre_report.json").is_file() or (cand / "pre_scan_gaps.yaml").is_file():
+        if (cand / "pre_report.json").is_file() or (cand / "pre_scan_gaps.yaml").is_file() \
+                or (cand / "qml_report.json").is_file() or (cand / "qml_gaps.yaml").is_file():
             return cand
     return None
 
@@ -254,14 +296,14 @@ def main() -> int:
     if total is None:
         scan_dir = Path(args.scan_dir) if args.scan_dir else _find_scan_dir(src)
         if scan_dir is None:
-            print("[FAIL] 未找到 coverage_stats.py 扫描产物 (coverage_scan/pre_report.json)。", file=sys.stderr)
+            print("[FAIL] 未找到 coverage_stats.py 扫描产物 (coverage_scan/pre_report.json 或 qml_report.json)。", file=sys.stderr)
             print("       请先运行: python3 scripts/coverage_stats.py --src <repo> -o coverage_report.json", file=sys.stderr)
             print("       或直接传入: --total <元素总数> / --scan-dir <coverage_scan 目录>", file=sys.stderr)
             return 1
-        total = _load_scan_total(scan_dir)
-        total_source = f"{scan_dir}/pre_report.json"
+        total, total_src = _load_scan_total(scan_dir)
+        total_source = f"{scan_dir}/{total_src}" if total_src else f"{scan_dir}/pre_report.json"
         if total is None:
-            print(f"[FAIL] 扫描产物 {scan_dir} 中未找到 total_widgets 字段。", file=sys.stderr)
+            print(f"[FAIL] 扫描产物 {scan_dir} 中未找到 total_widgets / total_elements 字段。", file=sys.stderr)
             return 1
 
     # ---- suite 引用: selector (持久) + items (瞬态, 不计覆盖) ----

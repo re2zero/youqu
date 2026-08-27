@@ -26,6 +26,14 @@
 2. `--scan-dir <dir>` 指定的扫描产物目录 (读取 `pre_report.json` 或 `pre_scan_gaps.yaml` 的 `summary.total_widgets`)
 3. 自动发现 `<src>/coverage_scan/` 或 `./coverage_scan/`
 
+**纯 QML 项目回退:** C++ 扫描产物 (pre_report.json / pre_scan_gaps.yaml) 的
+`total_widgets` 为 0 或不存在时, 自动回退到 QML 产物
+(`qml_report.json` / `qml_gaps.yaml` 的 `summary.total_elements`)。`--qml-only`
+扫描只生成 QML 产物 (无 pre_report.json), 同样被自动发现与读取。
+
+**混合项目求和:** C++ 与 QML 都有控件时, total = C++ total_widgets + QML
+total_elements (分别读取后求和)。
+
 ## covered_refs 计算
 
 递归遍历所有 `*.suite.yaml` (含 `steps` / `assert_steps` / `setup` / `teardown` / 嵌套 `suites`), 收集:
