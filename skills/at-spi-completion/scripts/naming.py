@@ -208,15 +208,20 @@ if __name__ == "__main__":
 
     instances = data if isinstance(data, list) else data.get("gaps", data.get("widgets", [data]))
     # QML gaps carry scan-time suggested_name (tokenizer-scoped naming).
-    # Honor it: regenerate only as a fallback when absent.
+    # Honor it; regenerate only as a fallback when absent. Generate the
+    # remaining instances together so batch_generate dedups project-wide
+    # with _2/_3 suffixes (per-instance calls would each start from an empty
+    # existing_names set and silently produce duplicate objectNames).
     resolved = []
+    needs_generate = []
     for inst in instances:
         suggested = inst.get("suggested_name", "")
         if suggested:
             resolved.append((inst.get("id") or inst.get("variable", ""),
                              suggested, inst.get("source_file", ""), inst.get("line", 0)))
         else:
-            resolved.extend(batch_generate([inst]))
+            needs_generate.append(inst)
+    resolved.extend(batch_generate(needs_generate))
     results = resolved
     output = "\n".join(f"{var:<30} -> {name:<30}  # {src}:{line}"
                        for var, name, src, line in results)

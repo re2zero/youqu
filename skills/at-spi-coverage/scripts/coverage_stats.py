@@ -171,11 +171,19 @@ def _run_cpp_scan(src: str, build: str | None, compile_commands: str | None,
     extra_args = ["-x", "c++", "-std=c++17", "-fPIC"]
     extra_args.extend(sg._get_cxx_stdlib_flags())
     extra_args.extend(sg._get_qt_dtk_include_flags())
-    extra_includes = [f for f in extra_args if f.startswith("-I") or f.startswith("-isystem")]
+    # Extract include flags as complete pairs: '-isystem' takes its path as a
+    # separate argv element, so a naive startswith filter would drop the paths
+    # and leave dangling '-isystem' flags that break TU parsing.
+    extra_includes: list[str] = []
+    for i, f in enumerate(extra_args):
+        if f == "-isystem" and i + 1 < len(extra_args):
+            extra_includes.extend(["-isystem", extra_args[i + 1]])
+        elif f.startswith("-I"):
+            extra_includes.append(f)
 
     tasks: list[tuple[str, str, list[str]]] = []
     for p in all_files:
-        abs_path = str(p)
+        abs_path = str(p.resolve())
         rel = str(p.relative_to(root))
         if file_flags and abs_path in file_flags:
             flags = list(file_flags[abs_path])
@@ -194,7 +202,7 @@ def _run_cpp_scan(src: str, build: str | None, compile_commands: str | None,
     t0 = __import__("time").time()
     all_ok: list = []
     all_gaps: list = []
-    global_named_vars: set[str] = set()
+    global_named_calls: dict[str, set[str]] = {}
     parsed = failed = done = 0
 
     with multiprocessing.Pool(n_workers) as pool:
@@ -207,33 +215,57 @@ def _run_cpp_scan(src: str, build: str | None, compile_commands: str | None,
                 parsed += 1
             all_ok.extend(ok_list)
             all_gaps.extend(gap_list)
-            global_named_vars.update(named_vars)
+            for _v, _calls in named_vars.items():
+                global_named_calls.setdefault(_v, set()).update(_calls)
             if done % 20 == 0 or done == total:
                 elapsed = __import__("time").time() - t0
                 print(f"  [{done}/{total}] {elapsed:.0f}s 已解析, "
                       f"ok={len(all_ok)} gap={len(all_gaps)} (失败 {failed})",
                       file=sys.stderr)
 
-    # 5.5) Dead-member filter: identifiers appearing in any scanned .cpp.
-    # A gap variable declared in a header but never referenced in any
-    # implementation file is never instantiated — not a real interactive
-    # widget, so drop it (e.g. 'QPushButton *splitLineGray').
-    cpp_identifiers: set[str] = set()
+    # 5.5) Gap filters (kept in parity with scan_gaps.scan_source so the
+    #   - text_named_calls: name calls caught by text regex (libclang may miss
+    #     pointer-member calls on unresolved types); maps var -> call types.
+    #   - newed_members: members actually instantiated via `new` somewhere.
+    #     Drops dead header-only members and externally-owned references
+    #     (m_var = ctorParam) that this class does not create.
+    _NEW_ASSIGN_RE = re.compile(r'(\w+)\s*=\s*new\s+')
+    _NEW_INIT_RE = re.compile(r'(\w+)\s*\(\s*new\s+')
+    _NAME_CALL_PATTERNS = [
+        (re.compile(r'(\w+)\s*->\s*setObjectName\s*\('), "setObjectName"),
+        (re.compile(r'(\w+)\s*->\s*setAccessibleName\s*\('), "setAccessibleName"),
+        (re.compile(r'(\w+)\s*\.\s*setObjectName\s*\('), "setObjectName"),
+        (re.compile(r'(\w+)\s*\.\s*setAccessibleName\s*\('), "setAccessibleName"),
+    ]
+    newed_members: set[str] = set()
+    text_named_calls: dict[str, set[str]] = {}
     for f in all_files:
         try:
-            cpp_identifiers.update(re.findall(r'[A-Za-z_]\w*', f.read_text(errors="replace")))
+            content = f.read_text(errors="replace")
+            for m in _NEW_ASSIGN_RE.finditer(content):
+                newed_members.add(m.group(1))
+            for m in _NEW_INIT_RE.finditer(content):
+                newed_members.add(m.group(1))
+            for rx, call_type in _NAME_CALL_PATTERNS:
+                for m in rx.finditer(content):
+                    text_named_calls.setdefault(m.group(1), set()).add(call_type)
         except Exception:
             continue
-
-    # 6) Cross-file merge: a gap may be named in another file
+    # 6) Cross-file merge: a gap may be named in another file. A gap is only
+    # rescued if actually fully named — interactive QWidgets need BOTH
+    # setObjectName AND setAccessibleName. Uses the shared helper from
+    # scan_gaps so baseline and quality-gate scans agree exactly.
     still_gaps = []
     for g in all_gaps:
-        if g.variable in global_named_vars:
+        if sg._gap_fully_named(g, global_named_calls, text_named_calls):
             all_ok.append(g)
-        elif g.variable not in cpp_identifiers:
-            continue  # dead header-only member, never used in any .cpp
-        else:
-            still_gaps.append(g)
+            continue
+        # Dead header-only member (never referenced in any .cpp) or
+        # externally-owned reference (m_var = ctorParam, never new-ed):
+        # not this class's responsibility to name.
+        if g.variable not in newed_members:
+            continue
+        still_gaps.append(g)
     all_gaps = still_gaps
     all_ok.sort(key=lambda w: (w.source_file, w.line, w.variable))
     all_gaps.sort(key=lambda w: (w.source_file, w.line, w.variable))

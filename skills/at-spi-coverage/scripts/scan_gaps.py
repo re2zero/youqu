@@ -98,6 +98,7 @@ class TypeDatabase:
     def __init__(self, db_path: str | Path | None = None) -> None:
         self._db: dict | None = None
         self._custom_types: dict[str, str] = {}  # name -> category
+        self._custom_bases: dict[str, str] = {}  # name -> direct base class
         self._load(db_path or _TYPE_DB_PATH)
 
     def _load(self, path: str | Path) -> None:
@@ -274,6 +275,7 @@ class TypeDatabase:
                             cat = self._classify(base_raw)
                             if cat != "unknown" and cls_name not in self._custom_types:
                                 self._custom_types[cls_name] = cat
+                                self._custom_bases[cls_name] = base_raw
                                 found += 1
                                 # No break — one file may have multiple custom types
             except Exception:
@@ -497,6 +499,24 @@ def _is_non_widget_interactive(type_name: str) -> bool:
     for cls in _NON_WIDGET_INTERACTIVE:
         if base.endswith(cls):
             return True
+    # Follow the inheritance chain (custom types + type DB) to a non-widget
+    # root, e.g. ColorWidgetAction -> QWidgetAction -> QAction.
+    current = _TYPE_DB._custom_bases.get(base, base)
+    classes = _TYPE_DB._db.get("classes", {}) if _TYPE_DB._db else {}
+    seen: set[str] = set()
+    while current and current not in seen:
+        seen.add(current)
+        if current in _NON_WIDGET_INTERACTIVE:
+            return True
+        info = classes.get(current)
+        if not info:
+            break
+        bases = info.get("bases", [])
+        if not bases:
+            break
+        current = bases[0]
+        if "::" in current:
+            current = current.split("::")[-1]
     return False
 
 
@@ -754,7 +774,7 @@ def _detect_call_in_unexposed(
     cursor,
     widgets: dict[str, WidgetInstance],
     name_calls: dict[str, set[tuple[str, str]]],
-    all_named_vars: set[str],
+    named_calls: dict[str, set[str]],
 ) -> None:
     """Detect setObjectName/setAccessibleName calls inside UNEXPOSED_EXPR nodes.
 
@@ -784,7 +804,7 @@ def _detect_call_in_unexposed(
                 name_value = child.spelling.strip('"')
 
         if callee_name and target_var:
-            all_named_vars.add(target_var)
+            named_calls.setdefault(target_var, set()).add(callee_name)
             if target_var in widgets:
                 if target_var not in name_calls:
                     name_calls[target_var] = set()
@@ -798,30 +818,64 @@ def _detect_call_in_unexposed(
 # ---------------------------------------------------------------------------
 
 
+def _gap_fully_named(
+    g: WidgetInstance,
+    global_named_calls: dict[str, set[str]],
+    text_named_calls: dict[str, set[str]],
+) -> bool:
+    """Decide whether a gap instance is actually fully named (cross-file merge).
+
+    A gap is only rescued when it is fully named across all files. For an
+    interactive QWidget that means BOTH setObjectName AND setAccessibleName
+    present (in this file or another); a partially-named interactive widget
+    would otherwise be silently dropped from the gap list. Non-widget
+    interactive (QAction, QShortcut, ...) and decorative types need only one.
+
+    Shared by scan_source and coverage_stats._run_cpp_scan so baseline and
+    quality-gate scans agree on the same merge semantics.
+    """
+    present: set[str] = set()
+    if g.has_object_name:
+        present.add("setObjectName")
+    if g.has_accessible_name:
+        present.add("setAccessibleName")
+    present |= global_named_calls.get(g.variable, set())
+    present |= text_named_calls.get(g.variable, set())
+    needs_both = _is_interactive_type(g.type_name) and not _is_non_widget_interactive(g.type_name)
+    if needs_both:
+        return {"setObjectName", "setAccessibleName"} <= present
+    return len(present) > 0
+
+
+# ---------------------------------------------------------------------------
+# Instance-level scan: one file
+# ---------------------------------------------------------------------------
+
+
 def _scan_one_file(
     file_path: str,
     rel_path: str,
     extra_args: list[str],
-) -> tuple[str, list[WidgetInstance], list[WidgetInstance], set[str], str | None]:
+) -> tuple[str, list[WidgetInstance], list[WidgetInstance], dict[str, set[str]], str | None]:
     """Scan a single source file for widget instances.
 
-    Returns (rel_path, ok_widgets, gap_widgets, named_vars, error_message).
-    named_vars is the set of ALL variable names that have setObjectName
-    or setAccessibleName calls in this file, even if the variable is
-    declared in another file (for cross-file merge).
+    Returns (rel_path, ok_widgets, gap_widgets, named_calls, error_message).
+    named_calls maps each variable name to the set of name-call types
+    (setObjectName / setAccessibleName) present in this file, even if the
+    variable is declared in another file (for cross-file merge).
     """
     try:
         index = Index.create()
         tu = index.parse(file_path, args=extra_args)
     except Exception as e:
-        return rel_path, [], [], set(), str(e)
+        return rel_path, [], [], {}, str(e)
 
     widgets: dict[str, WidgetInstance] = {}
     ok_widgets_list: list[WidgetInstance] = []
     gap_widgets_list: list[WidgetInstance] = []
     name_calls: dict[str, set[tuple[str, str]]] = {}
-    # Track ALL named variables, even those declared in other files
-    all_named_vars: set[str] = set()
+    # Track ALL named variables + which call types, even those declared in other files
+    named_calls: dict[str, set[str]] = {}
     class_name: str = ""
 
     # Locally-defined classes in this TU (real text-scanned bases). Prevents a
@@ -946,7 +1000,8 @@ def _scan_one_file(
 
 
                 if target_var and call_type:
-                    all_named_vars.add(target_var)
+                    _ct = "setObjectName" if call_type == "set_Object_Name" else call_type
+                    named_calls.setdefault(target_var, set()).add(_ct)
                     if target_var in widgets:
                         if target_var not in name_calls:
                             name_calls[target_var] = set()
@@ -957,7 +1012,7 @@ def _scan_one_file(
 
             # Handle UNEXPOSED_EXPR pattern (m_ptr->method() calls on pointer members)
             if cursor.kind == CursorKind.UNEXPOSED_EXPR:
-                _detect_call_in_unexposed(cursor, widgets, name_calls, all_named_vars)
+                _detect_call_in_unexposed(cursor, widgets, name_calls, named_calls)
 
             # Find QAction creation with tr() text
             if cursor.kind == CursorKind.CXX_NEW_EXPR:
@@ -1025,7 +1080,7 @@ def _scan_one_file(
                 # QWidget subclass: needs both
                 gap_widgets_list.append(inst)
 
-    return rel_path, ok_widgets_list, gap_widgets_list, all_named_vars, None
+    return rel_path, ok_widgets_list, gap_widgets_list, named_calls, None
 
 # ---------------------------------------------------------------------------
 # Worker with per-process clang init
@@ -1114,14 +1169,37 @@ def scan_source(
         all_files.append(p)
     all_files.sort()
 
-    # Collect every identifier appearing in the scanned .cpp files. Used later
-    # to drop "dead-member" gaps — fields declared only in a header but never
-    # referenced in any implementation file (never instantiated nor used),
-    # e.g. 'QPushButton *splitLineGray' that is never 'new'-ed anywhere.
-    cpp_identifiers: set[str] = set()
+    # Members actually instantiated via `new` in any .cpp file.
+    # Used to filter: (a) dead-code members (declared but never new-ed),
+    # and (b) external/parameter-assigned members (m_var = ctorParam or
+    # m_var = externalPtr) — not created by this class, so naming is not
+    # this class's responsibility.
+    newed_members: set[str] = set()
+    # Variables with setObjectName/setAccessibleName calls detected via text
+    # regex — catches pointer-member calls (m_ptr->setObjectName(...)) that
+    # libclang may miss when the pointer type is unresolved (UNEXPOSED_EXPR).
+    # Maps variable -> set of call types present.
+    text_named_calls: dict[str, set[str]] = {}
+
+    _NEW_ASSIGN_RE = re.compile(r'(\w+)\s*=\s*new\s+')
+    _NEW_INIT_RE = re.compile(r'(\w+)\s*\(\s*new\s+')
+    _NAME_CALL_PATTERNS = [
+        (re.compile(r'(\w+)\s*->\s*setObjectName\s*\('), "setObjectName"),
+        (re.compile(r'(\w+)\s*->\s*setAccessibleName\s*\('), "setAccessibleName"),
+        (re.compile(r'(\w+)\s*\.\s*setObjectName\s*\('), "setObjectName"),
+        (re.compile(r'(\w+)\s*\.\s*setAccessibleName\s*\('), "setAccessibleName"),
+    ]
+
     for f in all_files:
         try:
-            cpp_identifiers.update(re.findall(r"[A-Za-z_]\w*", Path(f).read_text(errors="replace")))
+            content = Path(f).read_text(errors="replace")
+            for m in _NEW_ASSIGN_RE.finditer(content):
+                newed_members.add(m.group(1))
+            for m in _NEW_INIT_RE.finditer(content):
+                newed_members.add(m.group(1))
+            for rx, call_type in _NAME_CALL_PATTERNS:
+                for m in rx.finditer(content):
+                    text_named_calls.setdefault(m.group(1), set()).add(call_type)
         except Exception:
             continue
 
@@ -1130,15 +1208,24 @@ def scan_source(
         return ScanResult(source_dir=src_dir)
 
 
+    # Extract include flags as complete pairs: '-isystem' takes its path as a
+    # separate argv element, so a naive startswith filter would drop the paths
+    # and leave dangling '-isystem' flags that break TU parsing.
+    extra_includes: list[str] = []
+    for i, f in enumerate(extra_args):
+        if f == "-isystem" and i + 1 < len(extra_args):
+            extra_includes.extend(["-isystem", extra_args[i + 1]])
+        elif f.startswith("-I"):
+            extra_includes.append(f)
+
     task_items: list[tuple[str, str, list[str]]] = []
     for p in all_files:
-        abs_path = str(p)
+        abs_path = str(p.resolve())
         rel_path = str(p.relative_to(root))
         if file_flags and abs_path in file_flags:
-            flags = file_flags[abs_path]
+            flags = list(file_flags[abs_path])
             # Merge extra include flags (DTK/Qt) into compile_commands flags
             # to ensure headers are found even if compile_commands is incomplete
-            extra_includes = [f for f in extra_args if f.startswith("-I") or f.startswith("-isystem")]
             for inc in extra_includes:
                 if inc not in flags:
                     flags.append(inc)
@@ -1153,8 +1240,8 @@ def scan_source(
 
     all_ok: list[WidgetInstance] = []
     all_gaps: list[WidgetInstance] = []
-    # Collect ALL named variables across all files for cross-file merge
-    global_named_vars: set[str] = set()
+    # Collect ALL named variables + call types across all files for cross-file merge
+    global_named_calls: dict[str, set[str]] = {}
     parsed = 0
     failed = 0
     done = 0
@@ -1169,7 +1256,8 @@ def scan_source(
                     parsed += 1
                 all_ok.extend(ok_list)
                 all_gaps.extend(gap_list)
-                global_named_vars.update(named_vars)
+                for _v, _calls in named_vars.items():
+                    global_named_calls.setdefault(_v, set()).update(_calls)
                 done += 1
                 if progress_cb:
                     progress_cb(done, total, rel_path)
@@ -1183,27 +1271,29 @@ def scan_source(
                     parsed += 1
                 all_ok.extend(ok_list)
                 all_gaps.extend(gap_list)
-                global_named_vars.update(named_vars)
+                for _v, _calls in named_vars.items():
+                    global_named_calls.setdefault(_v, set()).update(_calls)
                 done += 1
                 if progress_cb:
                     progress_cb(done, total, rel_path)
 
-    # Cross-file merge: a gap may have setObjectName in another file
-    # (e.g. commonpanel.h fields named in remotemanagementpanel.cpp)
-    # Use global_named_vars (collected from ALL files) instead of just
-    # the ok_widgets list, because the widget may not be in the current
-    # file's widget list at all.
+    # Cross-file merge: a gap may be named in another file
+    # (e.g. commonpanel.h fields named in remotemanagementpanel.cpp).
+    # A gap is only rescued if it is actually fully named — for interactive
+    # QWidgets that means BOTH setObjectName AND setAccessibleName present
+    # (in this file or another), otherwise a partially-named interactive
+    # widget would be silently dropped from the gap list.
     still_gaps: list[WidgetInstance] = []
     for g in all_gaps:
-        if g.variable in global_named_vars:
+        if _gap_fully_named(g, global_named_calls, text_named_calls):
             all_ok.append(g)
             continue
-        # Dead-member filter: a field declared in a header but never referenced
-        # in any scanned .cpp is never instantiated — not a real interactive
-        # widget, so it must not be reported as a gap. (gap.source_file always
-        # points at a .cpp, so judge purely by identifier presence: any real
-        # widget is `new`-ed and thus referenced in some implementation file.)
-        if g.variable not in cpp_identifiers:
+        # Dead-member / external-assignment filter: only report a gap if the
+        # member is actually instantiated via `new` in some .cpp file.
+        # - Dead code (declared but never new-ed) → not a real widget, skip.
+        # - Parameter-assigned (m_var = ctorParam or externalPtr) → not this
+        #   class's responsibility to name, skip.
+        if g.variable not in newed_members:
             continue
         still_gaps.append(g)
     all_gaps = still_gaps

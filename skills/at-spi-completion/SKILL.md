@@ -11,7 +11,7 @@ description: >
   setAccessibleName 缺口, 控件补全, 控件无名称, AT-SPI 名称缺失,
   or wants to fix accessibility gaps after a coverage scan.
   For measuring coverage only (no fixing), use at-spi-coverage instead.
-version: "1.1.0"
+version: "1.1.1"
 license: MIT
 author: Uniontech
 ---
