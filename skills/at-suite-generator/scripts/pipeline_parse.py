@@ -243,12 +243,60 @@ def _merge_small_slices(slices: list[dict], budget: int) -> list[dict]:
     return merged
 
 
-
-
 # ─── Output ─────────────────────────────────────────────────────────────
+_SUFFIX_RE = re.compile(r"\(#.*\)\s*$")
+
+
 def _short_name(name: str) -> str:
-    """Short human-readable module name for file naming."""
-    return _slugify(name)
+    """Short human-readable module name for file naming.
+
+    Module names are hierarchical (e.g. "/终端/103X/键盘交互(#116109)").
+    Use only the LAST path segment so file names stay readable and save
+    tokens: "键盘交互" instead of
+    "V25_2500_测试部专用_B类解耦商店应用_终端_103X_键盘交互_116109".
+    The "(#id)" suffix (unique per module) is dropped from the base slug.
+    """
+    base = _SUFFIX_RE.sub("", name or "")
+    parts = [p for p in base.split("/") if p.strip()]
+    last = parts[-1] if parts else (name or "misc")
+    return _slugify(last)
+
+
+def _disambiguate_slugs(groups: list[dict]) -> dict[str, str]:
+    """Map each group -> a unique short slug.
+
+    Last-segment names can collide (e.g. two "工作区" modules under different
+    parents). The "(#id)" suffix is unique per module, so when a base slug is
+    shared by multiple distinct modules, append the id to disambiguate.
+    Returns {group name: unique slug}.
+    """
+    by_base: dict[str, list[tuple[str, str]]] = {}  # base -> [(group, id)]
+    for g in groups:
+        name = g.get("name") or g.get("module") or "未分类"
+        base = _short_name(name)
+        m = re.search(r"\(#([^)]+)\)", name or "")
+        gid = m.group(1) if m else ""
+        by_base.setdefault(base, []).append((name, gid))
+    result: dict[str, str] = {}
+    for base, entries in by_base.items():
+        if len(entries) == 1:
+            result[entries[0][0]] = base
+        else:
+            for name, gid in entries:
+                # dedupe by unique id; fall back to parent segment if no id
+                if gid:
+                    result[name] = f"{base}_{gid}"
+                else:
+                    parent = _parent_segment(name)
+                    result[name] = f"{base}_{parent}" if parent else f"{base}_{len(result)}"
+    return result
+
+
+def _parent_segment(name: str) -> str:
+    """Second-to-last path segment for disambiguation (e.g. "102X")."""
+    base = _SUFFIX_RE.sub("", name or "")
+    parts = [p for p in base.split("/") if p.strip()]
+    return _slugify(parts[-2]) if len(parts) >= 2 else ""
 
 
 def main() -> None:
@@ -302,13 +350,16 @@ def main() -> None:
         all_slices.extend(_slice_group(g, args.budget))
     all_slices = _merge_small_slices(all_slices, args.budget)
 
+    # Unique short slugs per module group (collision-aware)
+    slug_map = _disambiguate_slugs(groups)
+
     out_dir = Path(args.output)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     slice_stats: list[dict] = []
     written_cases = 0
     for i, s in enumerate(all_slices, 1):
-        short = _short_name(s["name"])
+        short = slug_map.get(s["name"], _short_name(s["name"]))
         file_name = f"{short}_{s['seq']:03d}.input.json"
         input_data = {
             "meta": {

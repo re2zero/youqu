@@ -17,15 +17,41 @@
 - 格式：见 `templates/at-case-mapping-prompt-template.md`
 - 由 `pipeline_assemble.py` 在阶段 3 校验
 
-## 子 agent 调度
+## 子 agent 调度（硬约束：每批 ≤ 3）
 
-| 切片数 | 策略 |
-|--------|------|
-| ≤ 2 | 单 agent 顺序 |
-| 3-9 | 并行，上限 3 |
-| > 9 | 分批并行，每批 ≤ 3，批间串行 |
+**上限 3 是硬约束，不是建议。** 先运行确定性调度脚本生成批次计划，
+主 agent 严格按计划分批派发，批间串行。禁止一次性派发全部切片。
 
-上限 3：并行过多时协调开销 > 并行收益。
+```bash
+python3 <skill>/scripts/gen_schedule.py \
+    --modules tests/at/modules/ --max-parallel 3
+```
+
+输出批次计划（stdout 或 `--output` 文件），每批 ≤ 3 个切片：
+
+```json
+{
+  "max_parallel": 3,
+  "total_slices": 27,
+  "total_batches": 9,
+  "batches": [
+    {"batch": 1, "slices": [{"file": "...", "seq": 1, ...}]},
+    ...
+  ]
+}
+```
+
+派发规则：
+- 每批只派发该批内的切片（`batches[batch].slices`），**绝不超过 3 个**
+- 批内并行，批间串行：等上一批全部完成（`completed`）再派发下一批
+- 小切片合并已在 `pipeline_parse.py` 完成；若切片数 ≤ 2，单 agent 顺序处理
+- 若某批有切片失败，跳过该切片标记 `skipped`，继续后续批次
+
+**校验**：派发前对比 `gen_schedule.py` 的计划批次与当前派发的切片数，
+任何一批超过 `--max-parallel` 即为违规，必须重新分批。
+
+上限 3 的原因：并行过多时协调开销 > 并行收益（实测一次性派发 27 个
+agent 会让效率显著下降，且容易越过 token/上下文预算）。
 
 ## 核心原则（子 agent 必须遵守）
 
@@ -55,22 +81,23 @@
 
 ## 主 agent 执行
 
-对每个切片用 `templates/at-case-mapping-prompt-template.md` 构建 prompt，注入切片内容 + 元素清单白名单。自适应调度：
+对每个切片用 `templates/at-case-mapping-prompt-template.md` 构建 prompt，
+注入切片内容 + 元素清单白名单。**派发顺序必须来自 `gen_schedule.py` 的计划**：
 
 ```python
-summary = read("tests/at/modules/_summary.json")
-slices = summary["slices"]  # [ {file, module, case_count, est_tokens}, ... ]
+plan = read_json("tests/at/modules/_schedule.json")  # gen_schedule.py 输出
+for batch in plan["batches"]:
+    slices = batch["slices"]          # 本批 ≤ max_parallel(3)
+    results = parallel([run_slice(s) for s in slices])  # 批内并行
+    assert len(slices) <= plan["max_parallel"]          # 硬校验
+    # 等本批全部完成后，再进入下一批（批间串行）
 
 def run_slice(s):
     return agent(prompt=build_prompt(s))  # 写 tests/at/modules/<slice>.output.json
-
-if len(slices) <= 2:
-    for s in slices:
-        run_slice(s)          # 单 agent 顺序
-else:
-    for batch in chunks(slices, 3):
-        parallel([run_slice(s) for s in batch])  # 每批 ≤3，批间串行
 ```
+
+**禁止**：跳过 `gen_schedule.py` 直接派发全部切片；任何一批超过 3 个。
+切片数 ≤ 2 时单 agent 顺序处理（计划只有 1 批）。
 
 ## 子 agent 失败处理
 
@@ -86,4 +113,5 @@ else:
 |------|------|
 | 跳过元素清单 | selector 白名单是 100% 覆盖的基础 |
 | 合并多个切片到同一 agent | 上下文混杂，token 超预算 |
-| 并行 > 3 | 太多反而慢 |
+| 并行 > 3 | 太多反而慢；必须用 `gen_schedule.py` 分批 |
+| 跳过 `gen_schedule.py` 一次性派发全部切片 | 违反硬性 cap-3 |

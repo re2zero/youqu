@@ -66,7 +66,15 @@ def _file_exists(path: str) -> bool:
 
 
 def stage_scan(src: str, output_dir: str) -> str | None:
-    """Run at-spi-coverage scan → coverage_scan/."""
+    """Run at-spi-coverage scan → coverage_scan/.
+
+    Success is judged by the scan PRODUCTS existing (pre_scan_ok.yaml /
+    qml_ok.yaml), NOT by coverage_stats.py's exit code. coverage_stats.py
+    exits non-zero when the coverage is below its threshold (default 80%) or
+    when a pure-C++ project has no QML files — in both cases the scan itself
+    succeeded and the ok/gap YAMLs are written. Treating that as failure
+    wrongly aborts the whole pipeline for any low-coverage project.
+    """
     if not COVERAGE_STATS.is_file():
         print(f"  ⚠ at-spi-coverage scan script not found: {COVERAGE_STATS}")
         print("    Install the at-spi-coverage skill, set AT_SPI_COVERAGE_SCRIPT,")
@@ -78,12 +86,25 @@ def stage_scan(src: str, output_dir: str) -> str | None:
         print(f"  ⏩ coverage_scan/ exists, skip scan (use --force to redo)")
         return scan_dir
     report = os.path.join(output_dir, "coverage_report.json")
-    if _run(
+    _run(
         ["python3", str(COVERAGE_STATS), "--src", src, "-o", report],
         label="at-spi-coverage scan",
-    ):
+    )
+    # Success = scan products written (coverage_stats exit code reflects
+    # threshold/QML absence, not scan failure).
+    if _scan_products_exist(scan_dir):
         return scan_dir
+    print(f"  ✗ scan produced no products in {scan_dir}")
     return None
+
+
+def _scan_products_exist(scan_dir: str) -> bool:
+    """True if at least one scan product (ok set) was written."""
+    ok_paths = [
+        os.path.join(scan_dir, "pre_scan_ok.yaml"),
+        os.path.join(scan_dir, "qml_ok.yaml"),
+    ]
+    return any(_file_exists(p) for p in ok_paths)
 
 
 def stage_manifest(scan_dir: str | None, output_dir: str) -> str | None:
@@ -195,7 +216,8 @@ def main() -> None:
     print("  Phase 2 (AI):")
     print("    For each modules/*.input.json, run LLM mapping → *.output.json")
     print("    Use stage-2-generate reference + at-case-mapping-prompt-template.")
-    print("    Adaptive sub-agent pool, max 3 parallel.")
+    print("    First: gen_schedule.py --modules tests/at/modules/ --max-parallel 3")
+    print("    Dispatch strictly by batches (≤3 parallel, serial between batches).")
     print()
     print("  Phase 3 (Script):")
     print("    pipeline_assemble.py --modules tests/at/modules/ \\")

@@ -29,21 +29,26 @@ except ImportError:
     sys.exit(1)
 
 
-# ─── Schema (mirror v1) ────────────────────────────────────────────────
+# ─── Schema (mirrors the installed youqu runtime HANDLERS) ──────────────
+# The runtime executor registers exactly these actions; anything else is
+# rejected at run time with "unknown action". Keep this in sync with
+# youqu/src/at/executor/handlers.py HANDLERS.
 ASSERT_ACTIONS = frozenset(
     {
         "assert_element",
         "assert_not_exists",
         "assert_window",
         "assert_window_count",
-        "assert_text",
-        "assert_ocr_exists",
-        "assert_image_exists",
-        "assert_process",
+        "assert_process_running",
+        "assert_process_not_running",
         "assert_file_exists",
+        "assert_file_not_exists",
+        "assert_image_exists",
+        "assert_image_not_exists",
+        "assert_ocr_exists",
+        "assert_ocr_not_exists",
     }
 )
-
 VALID_ACTIONS = frozenset(
     {
         "session_start",
@@ -51,6 +56,7 @@ VALID_ACTIONS = frozenset(
         "element_action",
         "mouse_click",
         "mouse_right_click",
+        "mouse_double_click",
         "mouse_drag",
         "mouse_scroll",
         "dtk_main_menu",
@@ -58,14 +64,13 @@ VALID_ACTIONS = frozenset(
         "keyboard_press",
         "keyboard_hot_key",
         "keyboard_type",
+        "keyboard_type_text",
         "file_dialog_select",
         "file_dialog_cancel",
-        "wait",
-        "wait_for",
         "element_set_value",
-        "hide_window",
-        "show_window",
-        "clipboard_input",
+        "dbus_call",
+        "dbus_get_property",
+        "screenshot",
     }
     | ASSERT_ACTIONS
 )
@@ -165,6 +170,11 @@ def _inject_session_start(suite: dict, app: str) -> dict:
 def _validate_suite(suite: dict) -> list[str]:
     errors: list[str] = []
     sid = suite.get("id", "(no id)")
+    # Unsupported suites are intentionally skipped: template rule 8 requires
+    # status:"unsupported" + empty steps. Do NOT flag them for missing
+    # assertions — that is by design, not an error.
+    if suite.get("status") == "unsupported":
+        return errors
     steps = suite.get("steps", [])
     has_assert = False
     for i, step in enumerate(steps):

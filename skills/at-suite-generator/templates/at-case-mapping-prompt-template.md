@@ -94,12 +94,15 @@
 
 ### 4. 关于 wait 的严格约束
 
-`wait` **只能**用于：
+`wait` **只能作为 step 的字段**（`wait: 3.0` / `wait: 1.0`），用在：
 - 文件对话框操作后（`wait: 3.0`）
 - 应用启动后（`wait: 3.0`，已在 `session_start` 中隐式处理）
 - 动画/渲染完成后（`wait: 1.0`）
 
-**禁止**：用 `wait` 替代键盘操作或断言。
+**禁止**：
+- 用 `wait` 替代键盘操作或断言
+- 产出 `action: "wait"` 的独立步骤——运行时无 `wait` 动作，会报
+  `unknown action 'wait'`。等待只能作为已有动作步骤上的 `wait` 字段。
 
 ### 5. 菜单项 → dtk_main_menu / dtk_context_menu
 
@@ -109,6 +112,16 @@
 
 - 每个 case 至少有一个 `assert_*` 步骤，且**不是** `assert_window`
 - `assert_element` 的 selector 必须有 `name`（从白名单选取）
+
+**`assert_not_exists` 只用于真正的瞬态元素**（临时弹窗、下拉列表等
+关闭后从 AT-SPI 树消失的元素）。**持久控件**（搜索框、主窗口、标签栏
+等常驻树中的元素——即使隐藏/关闭也仍在树里）**禁止**用
+`assert_not_exists`，运行时必然失败。隐藏类断言改断言其状态：
+- 可见性变化 → 用 `assert_element`（元素仍在）或 `assert_window_count`
+- 弹窗关闭 → 弹窗是瞬态，可用 `assert_not_exists`（弹窗名）
+
+判断标准：若元素是窗口/页面/搜索栏等常驻容器，优先 `assert_element`；
+仅当确定元素会在动作后从树中移除时才用 `assert_not_exists`。
 
 ### 7. 分组与去重
 
@@ -138,7 +151,21 @@ unsupported suite 输出格式：
 | `step_type` | `type` | `action` 或 `assert` |
 | `action` | `operation` | 动作类型 |
 | `selector.name` | `target` | 元素名称 |
-| `do` | `value` 且值为 click/clear/set | 操作类型 |
+| `do` | `value` 且值为 click | 操作类型 |
+
+**`element_action` 的 `do` 只支持运行时白名单**：`click` / `right_click` /
+`double_click` / `focus` / `point`。**禁止** `do: clear` / `do: set`——
+运行时直接报 `Unknown element action`。清空输入框用键盘
+（`keyboard_hot_key` `Ctrl+A` 全选后 `keyboard_press` `Delete`），
+赋值用 `element_set_value`（`selector` + `text`）。
+
+**断言动作必须使用运行时支持的名称**：`assert_element` /
+`assert_not_exists` / `assert_window` / `assert_window_count` /
+`assert_process_running` / `assert_process_not_running` /
+`assert_file_exists` / `assert_file_not_exists` /
+`assert_image_exists` / `assert_image_not_exists` /
+`assert_ocr_exists` / `assert_ocr_not_exists`。
+**禁止** `assert_process`（运行时无此动作，须用 `assert_process_running`）。
 
 ### 10. 输出约束
 

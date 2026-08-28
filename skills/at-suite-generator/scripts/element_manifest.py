@@ -49,12 +49,23 @@ def _collect_scan_ok(scan_dir: Path) -> dict[str, dict]:
         for w in ok.get("widgets", []) or []:
             if not isinstance(w, dict):
                 continue
-            name = w.get("existing_accessible_name") or w.get("existing_object_name") or ""
+            accessible = w.get("existing_accessible_name") or ""
+            name = accessible or w.get("existing_object_name") or ""
             if name:
                 elements[name] = {
                     "role": w.get("role", ""),
                     "source": w.get("source_file", ""),
                     "type": w.get("type", ""),
+                    # FACT, not inference: which source produced the name.
+                    #   accessible -> setAccessibleName() was found in source
+                    #   object     -> only setObjectName() was found
+                    # This is a static-scan fact. It does NOT claim runtime
+                    # locatability: how an element resolves at runtime depends
+                    # on widget type (QAction's objectName is a valid locator;
+                    # a QWidget's is not) and the Qt/DTK build. Downstream
+                    # steps must verify runtime locatability empirically, not
+                    # assume it from this field alone.
+                    "name_source": "accessible" if accessible else "object",
                 }
 
     qml = _load_yaml(scan_dir / "qml_ok.yaml")
@@ -68,6 +79,7 @@ def _collect_scan_ok(scan_dir: Path) -> dict[str, dict]:
                     "role": w.get("role", ""),
                     "source": w.get("source_file", ""),
                     "type": w.get("element_type", ""),
+                    "name_source": "accessible",
                 }
     return elements
 
