@@ -10,6 +10,16 @@
 
 若项目不存在 AT 用例 (`<src>/tests/at/` 下无含 `*.suite.yaml` 的子目录), 覆盖率记为 0。
 
+## 用例数统计口径
+
+用例数以 suite 内 `- id` 条目计: 一个 `*.suite.yaml` 含一个 `suites:` 列表,
+每个 `- id` 是一个独立 case。报告输出两个数:
+
+- **case_count** — 用例数: 所有 `*.suite.yaml` 的 `suites:` 列表下 `- id` 条目总数
+- **suite_files** — suite 文件数: `*.suite.yaml` 文件数 (仅辅助展示, 不是用例数)
+
+`no_cases` (无用例) 判定基于 `case_count == 0`。
+
 ## AT 用例目录定位
 
 `tests/at/yaml` 只是常见命名, 不是硬编码。脚本按以下顺序定位:
@@ -101,7 +111,8 @@ AT 用例覆盖率统计
   项目       : <project>
   AT 用例目录: <repo>/tests/at/yaml_xxx   # 自动发现任意含 *.suite.yaml 的子目录
   total 来源 : <scan-dir>/pre_report.json
-  suite 文件 : <suite-count>
+  suite 文件 : <suite-files>
+  用例 (case) : <case-count> 个 (suite 文件 <suite-files> 个)
   elements 来源: elements.yaml   # 或 *.suite.yaml (无 elements.yaml 时)
   扫描交互控件 (total) : <N>
   用例覆盖引用 (covered): <M> (selector 去重, 不含瞬态 items)
@@ -114,7 +125,7 @@ AT 用例覆盖率统计
 ```
 
 生成文件:
-- `coverage_atcase.json` — 结构化结果 (`total` / `covered_refs` / `covered_in_inventory` / `transient_items` / `refs_not_in_inventory` / `scan_named_not_in_inventory` / `inventory_uncovered` / `coverage` / `no_cases` / `passed` 等)
+- `coverage_atcase.json` — 结构化结果 (`total` / `case_count` / `suite_files` / `covered_refs` / `covered_in_inventory` / `transient_items` / `refs_not_in_inventory` / `scan_named_not_in_inventory` / `inventory_uncovered` / `coverage` / `no_cases` / `passed` 等)
 - `coverage_atcase.md` — Markdown 报告
 
 退出码: `0` 表示覆盖率达到阈值且有 AT 用例, `1` 否则 (CI 友好)。无 AT 用例时始终返回 `1` 并报 0。未找到扫描产物时打印运行 `coverage_stats.py` 的提示并返回 `1`。

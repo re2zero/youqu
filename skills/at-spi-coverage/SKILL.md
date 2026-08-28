@@ -6,7 +6,7 @@ description: >
   (elements exercised by *.suite.yaml vs. scan total, transient menu items
   excluded). Auto-detects the AT case dir under tests/at/.
   Triggers: AT-SPI覆盖率, 覆盖率, coverage, AT 用例覆盖率, atcase, 控件缺口, gap 分析.
-version: "0.5.2"
+version: "0.5.3"
 license: MIT
 author: Uniontech
 ---
@@ -50,7 +50,9 @@ scan_total   = coverage_stats.py 扫描的交互控件数        # 分母, 源�
 
 瞬态菜单项 (主/右键菜单 `items`) **不计入覆盖**, 仅在报告 (`transient_items`) 中列出供查看。
 `elements.yaml` 仅用于辅助报告 (清单内覆盖/清单缺口), 不决定分子分母; 无 `elements.yaml` 时直接从 `*.suite.yaml` 计算分子。
-AT 用例目录自动发现 `<src>/tests/at/` 下任意含 `*.suite.yaml` 的子目录 (支持 `yaml`, `yaml_xxx` 等命名)。
+用例数以 suite 内的 `- id` 条目计: 一个 `*.suite.yaml` 含一个 `suites:` 列表,
+每个 `- id` 是一个独立 case, 报告分别输出 `case_count` (用例数) 与 `suite_files`
+(suite 文件数)。
 
 ```bash
 # 1. 先扫描得到 total (产物写入 coverage_scan/)

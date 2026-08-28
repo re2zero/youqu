@@ -35,6 +35,11 @@ elements.yaml 仅用于辅助报告:
 
 若项目不存在 AT 用例 (找不到含 *.suite.yaml 的目录), 覆盖率记为 0。
 
+用例数统计:
+  用例数以 suite 内的 `- id` 条目计 (case_count), 一个 *.suite.yaml 可含
+  多个 case (suites: 列表下每个带 id 的条目算 1 个用例); suite 文件数
+  (suite_files) 仅作辅助展示, 不作为用例数。
+
 Usage:
     # 1. 先运行 coverage_stats.py 得到 scan_total (扫描产物写入 <outdir>/coverage_scan/)
     python3 scripts/coverage_stats.py --src /path/to/repo --cpp-only -o coverage_report.json
@@ -108,20 +113,46 @@ def _iter_suite_refs(node: Any, selectors: set[str], items: set[str]) -> None:
             _iter_suite_refs(v, selectors, items)
 
 
-def _collect_suite_refs(at_dir: Path) -> tuple[set[str], set[str], int]:
+def _count_suite_cases(node: Any) -> int:
+    """统计 suite 结构中的用例数: 每个 `suites:` 列表下的 `- id` 条目算 1 个 case。
+
+    一个 *.suite.yaml 可含多个 case (suites 列表的每个 - id)。递归处理
+    setup / teardown / 嵌套 suites, 只统计带 `id` 的用例条目。
+    """
+    count = 0
+    if isinstance(node, dict):
+        for k, v in node.items():
+            if k == "suites" and isinstance(v, list):
+                for c in v:
+                    if isinstance(c, dict) and isinstance(c.get("id"), str):
+                        count += 1
+                        count += _count_suite_cases(c)
+            else:
+                count += _count_suite_cases(v)
+    elif isinstance(node, list):
+        for v in node:
+            count += _count_suite_cases(v)
+    return count
+
+
+def _collect_suite_refs(at_dir: Path) -> tuple[set[str], set[str], int, int]:
     """收集所有 *.suite.yaml 的 selector (持久) 与 items (瞬态) 去重集合。
 
-    返回 (selectors, items, suite_count)。
+    返回 (selectors, items, case_count, suite_files):
+    - case_count  : 所有 suite 文件 `suites:` 列表下 `- id` 用例总数 (一个文件含多 case)
+    - suite_files : *.suite.yaml 文件数
     """
     selectors: set[str] = set()
     items: set[str] = set()
-    suite_count = 0
+    case_count = 0
+    suite_files = 0
     for sf in sorted(at_dir.rglob("*.suite.yaml")):
-        suite_count += 1
+        suite_files += 1
         data = _load_yaml(sf)
         if data is not None:
+            case_count += _count_suite_cases(data)
             _iter_suite_refs(data, selectors, items)
-    return selectors, items, suite_count
+    return selectors, items, case_count, suite_files
 
 
 def _collect_elements_yaml(elements_yaml: Path) -> set[str]:
@@ -308,9 +339,9 @@ def main() -> int:
 
     # ---- suite 引用: selector (持久) + items (瞬态, 不计覆盖) ----
     if at_dir is not None:
-        selectors_raw, items_raw, suite_count = _collect_suite_refs(at_dir)
+        selectors_raw, items_raw, case_count, suite_files = _collect_suite_refs(at_dir)
     else:
-        selectors_raw, items_raw, suite_count = set(), set(), 0
+        selectors_raw, items_raw, case_count, suite_files = set(), set(), 0, 0
 
     # ---- elements.yaml 权威清单 ----
     elements_yaml = at_dir / "elements.yaml" if at_dir is not None else None
@@ -342,7 +373,7 @@ def main() -> int:
     # 封顶 100%: 分子可能与扫描口径不完全一致
     eff_covered = min(covered_n, total)
     cov = _pct(eff_covered, total)
-    no_cases = suite_count == 0
+    no_cases = case_count == 0
     # ---- 辅助报告 ----
     transient_items = sorted(items)  # 瞬态菜单项, 不参与覆盖计算
     inventory_uncovered = sorted(ui_clean - covered_refs) if has_elements_yaml else []
@@ -358,7 +389,7 @@ def main() -> int:
     print(f"  项目       : {src.resolve().name}")
     print(f"  AT 用例目录: {at_dir}")
     print(f"  total 来源 : {total_source}")
-    print(f"  suite 文件 : {suite_count}")
+    print(f"  用例 (case) : {case_count} 个 (suite 文件 {suite_files} 个)")
     print(f"  elements 来源: {elements_source}")
 
     if no_cases:
@@ -398,7 +429,8 @@ def main() -> int:
         "project": src.name,
         "at_dir": str(at_dir) if at_dir is not None else None,
         "total_source": total_source,
-        "suite_count": suite_count,
+        "case_count": case_count,
+        "suite_files": suite_files,
         "elements_source": elements_source,
         "no_cases": no_cases,
         "total": total,
@@ -427,7 +459,7 @@ def main() -> int:
             f"- 生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
             f"- AT 用例目录: `{at_dir}`",
             f"- total 来源: `{total_source}`",
-            f"- suite 文件数: {suite_count}",
+            f"- 用例数 (case): {case_count} 个 (suite 文件 {suite_files} 个)",
             "",
             "## 覆盖率",
             "",
