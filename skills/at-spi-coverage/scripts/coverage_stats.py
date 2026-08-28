@@ -660,7 +660,7 @@ def _write_md_report(path: Path, ctx: dict) -> None:
     L.append("```")
     L.append("")
     L.append("---")
-    L.append(f"*报告由 at-spi-coverage-stats skill 自动生成*")
+    L.append(f"*报告由 at-spi-coverage skill 自动生成*")
 
     with open(path, "w", encoding="utf-8") as f:
         f.write("\n".join(L))

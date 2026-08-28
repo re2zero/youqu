@@ -1,0 +1,37 @@
+{
+  "skill_name": "at-suite-generator",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "为 deepin-reader 生成 AT 用例，源码在 /src/deepin-reader，测试用例文档在 tests/at/casefile/用例.xlsx（约 2000 条），输出到 tests/at/。要求所有扫描出来的 SPI 元素都要被覆盖到。",
+      "expected_output": "跑 pipeline_run.py（扫描+切片+元素清单）→ 子 agent 池生成 → pipeline_assemble.py 组装 → cover.py 100% 达标。产出 yaml/*.suite.yaml + elements.yaml，无全量 cases_raw.yaml。",
+      "files": [],
+      "assertions": [
+        "断言未生成全量 cases_raw.yaml（切片产物只有 modules/*.input.json）",
+        "断言 cover.py 报 100%（或未覆盖元素进入补漏循环）",
+        "断言 selector.name 全部来自 element-coverage-manifest.yaml"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "无 xlsx，只有源码 /src/deepin-terminal，feature-driven 生成 AT 用例到 tests/at/，headless 模式。",
+      "expected_output": "pipeline_run.py --src /src/deepin-terminal：扫描→元素清单。无 xlsx 时跳过切片（无源用例文档），生成由阶段 2 主 agent 从需求驱动（读 element-coverage-manifest.yaml 白名单构造 suite）。headless（无 DISPLAY）时阶段 4 跳过运行时验证，但 cover.py 门禁仍执行。",
+      "files": [],
+      "assertions": [
+        "断言无 xlsx 时 pipeline_run 跳过切片阶段（非报错）",
+        "断言 feature-driven 仍有元素全集（--src 或 --scan-dir 必需）",
+        "断言 headless 跳过运行时验证，cover.py 仍执行并报覆盖率"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "复用已有扫描产物：coverage_scan/ 已存在，重新用 tests/at/casefile/用例.xlsx 生成 deepin-reader 用例到 tests/at/。",
+      "expected_output": "pipeline_run.py --scan-dir tests/at/coverage_scan/：跳过重新扫描，直接切片+元素清单。",
+      "files": [],
+      "assertions": [
+        "断言 --scan-dir 存在时跳过扫描阶段",
+        "断言 element_manifest 从已有 coverage_scan/ 构建"
+      ]
+    }
+  ]
+}

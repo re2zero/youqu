@@ -1,0 +1,35 @@
+{
+  "skill_name": "at-suite-generator",
+  "trigger_evals": [
+    {
+      "id": 1,
+      "prompt": "帮我生成 deepin-reader 的 AT 自动化用例，要覆盖全部控件",
+      "should_trigger": true,
+      "reason": "AT用例生成 + 覆盖全部控件 → 元素驱动生成"
+    },
+    {
+      "id": 2,
+      "prompt": "这个 2000 条的用例文档怎么转成 youqu 能跑的 suite？",
+      "should_trigger": true,
+      "reason": "大规模用例切片 + 生成 suite"
+    },
+    {
+      "id": 3,
+      "prompt": "扫描出来的控件覆盖率要达到 100%，生成测试用例",
+      "should_trigger": true,
+      "reason": "100%覆盖 + 覆盖率门禁"
+    },
+    {
+      "id": 4,
+      "prompt": "帮我统计 deepin-reader 的 AT-SPI 覆盖率",
+      "should_trigger": false,
+      "reason": "仅度量不生成 → 归 at-spi-coverage"
+    },
+    {
+      "id": 5,
+      "prompt": "给控件补上 setAccessibleName",
+      "should_trigger": false,
+      "reason": "修复缺口 → 归 at-spi-completion"
+    }
+  ]
+}
