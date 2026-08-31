@@ -20,13 +20,15 @@ patterns, suggested-name priority, and QML gotchas.
 | `suggested_name` | 建议的 `Accessible.name` 值 | 直接使用，不要改 |
 | `accessible_name` | 已有的 `Accessible.name` 值 | 已有的话直接复用 |
 | `accessible_role` | 已有的 `Accessible.role` 值 | 已有的话直接复用 |
+| `qt_role` | 该元素应写入的 **Qt `QAccessible::Role` 枚举名**（如 `Pane`、`List`、`Graphic`） | 自定义组件补 role 时**必须**用此值写 `Accessible.role: Accessible.<qt_role>`；空值表示无有效 Qt 角色，不要补 role |
 | `source_file` / `line` | 文件路径和行号 | 定位元素位置 |
 
 ## QML element classification
 
 | Category | Types | Gate behavior |
 |----------|-------|---------------|
-| Standard interactive | `Button`, `TextField`, `ComboBox`, `Slider`, `CheckBox`, `RadioButton`, `Switch`, `SpinBox`, `TabBar`/`TabButton`, `Menu`/`MenuItem`, `ListView`/`GridView`/`TreeView`/`TableView`, delegates (`ItemDelegate`, `CheckDelegate`, …), DTK QML (`DButton`, `DTextField`, …) | **MUST have `Accessible.name`** → gap if missing. Role auto-inferred by C++ backend. |
+| Standard interactive | `Button`, `TextField`, `ComboBox`, `Slider`, `CheckBox`, `RadioButton`, `Switch`, `SpinBox`, `TabBar`/`TabButton`, `MenuBar`/`MenuItem`, `ListView`/`GridView`/`TreeView`/`TableView`, delegates (`ItemDelegate`, `CheckDelegate`, …), DTK QML (`DButton`, `DTextField`, …) | **MUST have `Accessible.name`** → gap if missing. Role auto-inferred by C++ backend. |
+| Non-`Item` root (`Menu`, `DialogWindow`, `Window`, `Popup`, `Dialog`, `Drawer`, `ToolTip`, …) | — | **Never a gap.** These roots are `QQuickPopup`/`QQuickWindow` (not `Item`/`Action`) — `Accessible` cannot attach to them. Name only their children. |
 | Custom component | `MyWidget { … }` matching a `<Name>.qml` file in the tree | **MUST have `Accessible.name` + `Accessible.role`** → gap if missing either |
 | Decorative | `Text`, `Label`, `Rectangle`, `Item`, layouts, `MouseArea`, `Flickable`, `ScrollView` | Only reported if explicitly named; never a gap |
 | Structural | `State`, `Transition`, `Binding`, `Connections`, `Component`, `Repeater`, `Loader`, `Timer`, `Action`, `Shortcut` | Skipped entirely |
@@ -79,7 +81,7 @@ MyWidget {
     id: customWidget
 
     Accessible.name: "CustomWidget"         // ← 新增
-    Accessible.role: Accessible.Panel       // ← 新增
+    Accessible.role: Accessible.Pane        // ← 新增
 }
 ```
 
@@ -102,7 +104,7 @@ MyWidget {
     id: customWidget
     Accessible {
         name: "CustomWidget"                 // ← 已有，不动
-        role: Accessible.Panel               // ← 新增
+        role: Accessible.Pane               // ← 新增
     }
 }
 ```
@@ -113,7 +115,7 @@ MyWidget {
 MyWidget {
     id: customWidget
     Accessible {
-        role: Accessible.Panel
+        role: Accessible.Pane
     }
 }
 
@@ -122,7 +124,7 @@ MyWidget {
     id: customWidget
     Accessible {
         name: "CustomWidget"                 // ← 新增
-        role: Accessible.Panel               // ← 已有，不动
+        role: Accessible.Pane               // ← 已有，不动
     }
 }
 ```
@@ -186,6 +188,7 @@ pass `--qml-baseline` only.
 | Delegates (`delegate: ItemDelegate { … }`) | Delegates are templates — name the delegate element itself; each instantiation inherits it |
 | `Loader { sourceComponent: … }` | The loaded component's elements are found by scanning the referenced file |
 | Same `id` reused across files | Names deduped project-wide with `_2`/`_3` |
+| Non-`Item` root (`Menu`, `DialogWindow`, `Window`, `Popup`, `Dialog`, `Drawer`, `ToolTip`, …) | These roots are `QQuickPopup`/`QQuickWindow` (not `Item`/`Action`) — `Accessible` cannot attach to them. Never add `Accessible` to such a component; name its children instead. Not a gap. |
 | Inline JS (`onClicked: { … }`) with braces | JS blocks never confuse the scope stack (only uppercase-element braces open elements) |
 | `Accessible.name` / `Accessible.role` set on a decorative element | Reported as ok (explicit naming is respected) |
 | Chinese matching | Same as C++ — test cases match the *translated* label (`qsTr` source + `.ts`) at runtime, while `Accessible.name` stays English PascalCase |

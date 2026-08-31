@@ -74,7 +74,7 @@ QML_INTERACTIVE_TYPES: frozenset[str] = frozenset({
     "CheckBox", "RadioButton", "Switch", "DelayButton",
     "Slider", "RangeSlider", "Dial", "ScrollBar",
     "TabBar", "TabButton",
-    "MenuBar", "Menu", "MenuItem",
+    "MenuBar", "MenuItem",
     "Calendar", "CalendarModel",
     "PageIndicator",
     "SwipeDelegate", "ItemDelegate", "CheckDelegate",
@@ -112,6 +112,9 @@ QML_DECORATIVE_TYPES: frozenset[str] = frozenset({
     "HeaderView", "FooterView",
     "Window", "ApplicationWindow", "Dialog",
     "Popup", "Pane", "Page", "Drawer",
+    # Menu/DMenu are QQuickPopup (not Item/Action) — Accessible cannot attach
+    # to them, so they are never nameable. Only MenuItem children carry names.
+    "Menu", "DMenu",
     "ToolTip", "ToolSeparator",
     "BusyIndicator", "ProgressBar",
     "GroupBox", "ScrollView",

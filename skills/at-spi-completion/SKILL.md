@@ -11,7 +11,7 @@ description: >
   setAccessibleName 缺口, 控件补全, 控件无名称, AT-SPI 名称缺失,
   or wants to fix accessibility gaps after a coverage scan.
   For measuring coverage only (no fixing), use at-spi-coverage instead.
-version: "1.1.1"
+version: "1.1.2"
 license: MIT
 author: Uniontech
 ---
@@ -261,6 +261,8 @@ git commit
 | Using `setAccessibleName()` on QML | Compile error — QML has no such method | Use the `Accessible` attached property (`Accessible.name` / `Accessible.role`) |
 | Forgetting `Accessible.role` on custom/decorative QML | Custom components / decorative-as-interactive expose wrong semantic role | Add `Accessible.role` for custom components and decorative elements used as interactive; standard Qt Quick Controls 2 / DTK types auto-infer role |
 | Adding `Accessible.role` to standard QML types | Unnecessary; role is auto-inferred by C++ backend | Only `Accessible.name` is needed for `Button`, `TextField`, `Slider`, etc. |
+| `Accessible.role` uses an AT-SPI role name (`Panel`, `ListBox`, `Image`, `Range`, `Menu`) | QML warning `Unable to assign [undefined] to QAccessible::Role`; role silently degrades to `NoRole` | Only write Qt `QAccessible::Role` enum members: `Pane`, `List`, `Graphic`, `Slider`, `MenuItem`, … Use the `qt_role` field from `qml_gaps.yaml` |
+| `Accessible` attached to a non-`Item` root (`Menu`, `DialogWindow`, `Window`, `Popup`, `Dialog`, `Drawer`, `ToolTip`, …) | QML warning `Accessible must be attached to an Item or an Action`; name never exposed | These roots are `QQuickPopup`/`QQuickWindow` (not `Item`/`Action`) — they cannot host `Accessible`. Name their children instead; such a component is not a gap. |
 
 **Red flags** — "setObjectName is enough" (QWidget subclasses need both);
 "I modified the ui_*.h" (auto-generated; edit the consuming `.cpp`);

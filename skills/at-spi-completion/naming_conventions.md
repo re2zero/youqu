@@ -224,13 +224,22 @@ Use the standard enum for the element type:
 | `Button`, `ToolButton` | `Accessible.Button` |
 | `TextField`, `TextArea` | `Accessible.EditableText` |
 | `ComboBox` | `Accessible.ComboBox` |
-| `Slider` | `Accessible.Range` |
+| `Slider` | `Accessible.Slider` |
 | `CheckBox` | `Accessible.CheckBox` |
 | `RadioButton` | `Accessible.RadioButton` |
-| `Switch` | `Accessible.CheckBox` (or `Accessible.ToggleButton` on newer Qt) |
+| `Switch` | `Accessible.CheckBox` |
 | `SpinBox`, `Tumbler` | `Accessible.SpinBox` |
 | `ListView`/`GridView`/`TableView`/`TreeView` | `Accessible.List`/`Table`/`Tree` |
-| `Menu`, `MenuItem` | `Accessible.Menu`/`MenuItem` |
+| `MenuItem` | `Accessible.MenuItem` |
+
+> ⚠️ **Only Qt `QAccessible::Role` enum members are valid** for
+> `Accessible.role`. AT-SPI role names (`panel`, `list`, `image`, `menu`) are
+> **not** Qt enum members — writing them makes QML emit
+> `Unable to assign [undefined] to QAccessible::Role` and silently degrade the
+> role to `NoRole`. Use the Qt names: `Pane` (not `Panel`), `List` (not
+> `ListBox`), `Graphic` (not `Image`), `MenuBar`/`PopupMenu` (not `Menu`).
+> The `Menu` container itself is a `QQuickPopup` (not an `Item`/`Action`) and
+> cannot host `Accessible` at all — only its `MenuItem` children are nameable.
 
 ### QML rules
 

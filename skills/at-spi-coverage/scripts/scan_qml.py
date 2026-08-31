@@ -47,7 +47,7 @@ _QML_INTERACTIVE_TYPES: frozenset[str] = frozenset({
     "CheckBox", "RadioButton", "Switch", "DelayButton",
     "Slider", "RangeSlider", "Dial", "ScrollBar",
     "TabBar", "TabButton",
-    "MenuBar", "Menu", "MenuItem",
+    "MenuBar", "MenuItem",
     "Calendar", "CalendarModel",
     "PageIndicator",
     "SwipeDelegate", "ItemDelegate", "CheckDelegate",
@@ -63,7 +63,7 @@ _QML_INTERACTIVE_TYPES: frozenset[str] = frozenset({
     "DSlider", "DSpinBox", "DTextArea",
     "DListView", "DTreeView", "DTableView",
     "DTabBar", "DTabButton",
-    "DMenu", "DMenuItem", "DMenuBar",
+    "DMenuBar", "DMenuItem",
     "DCalendarPicker", "DScrollBar",
 })
 
@@ -81,6 +81,11 @@ _QML_DECORATIVE_TYPES: frozenset[str] = frozenset({
     "HeaderView", "FooterView",
     "Window", "ApplicationWindow", "Dialog",
     "Popup", "Pane", "Page", "Drawer",
+    # Menu/DMenu are QQuickPopup (not Item/Action) — the Accessible attached
+    # property cannot be attached to them, so they are never nameable.
+    # Only their MenuItem children carry Accessible.name. Treat as decorative:
+    # unnamed menus are skipped (not gaps), named ones are respected.
+    "Menu", "DMenu",
     "ToolTip", "ToolSeparator",
     "BusyIndicator", "ProgressBar",
     "GroupBox", "ScrollView",
@@ -167,6 +172,75 @@ _QML_TO_ROLE: dict[str, str] = {
 }
 
 # ---------------------------------------------------------------------------
+# QML type → Qt QAccessible::Role enum name (for Accessible.role in QML)
+# ---------------------------------------------------------------------------
+# These are the *Qt* enum member names (QAccessible::Role), NOT AT-SPI role
+# strings. They are what QML's `Accessible.role: Accessible.<Name>` accepts.
+# Verified against Qt 6.8 qaccessible_base.h. Only members that exist there
+# are listed — writing an unknown name makes QML emit
+# "Unable to assign [undefined] to QAccessible::Role" and silently degrade
+# the role to NoRole.
+_QML_TO_QT_ROLE: dict[str, str] = {
+    "Button": "Button",
+    "ToolButton": "Button",
+    "RoundButton": "Button",
+    "DButton": "Button",
+    "DWarningButton": "Button",
+    "DSuggestButton": "Button",
+    "DSwitchButton": "Button",
+    "DIconButton": "Button",
+    "DFloatingButton": "Button",
+    "DCommandLinkButton": "Button",
+    "TextField": "EditableText",
+    "TextArea": "EditableText",
+    "TextInput": "EditableText",
+    "DTextField": "EditableText",
+    "DTextArea": "EditableText",
+    "ComboBox": "ComboBox",
+    "DComboBox": "ComboBox",
+    "SpinBox": "SpinBox",
+    "DSpinBox": "SpinBox",
+    "Tumbler": "SpinBox",
+    "CheckBox": "CheckBox",
+    "DCheckBox": "CheckBox",
+    "RadioButton": "RadioButton",
+    "DRadioButton": "RadioButton",
+    "Switch": "CheckBox",
+    "DSwitch": "CheckBox",
+    "DelayButton": "Button",
+    "Slider": "Slider",
+    "DSlider": "Slider",
+    "RangeSlider": "Slider",
+    "Dial": "Dial",
+    "ScrollBar": "ScrollBar",
+    "DScrollBar": "ScrollBar",
+    "TabBar": "PageTabList",
+    "TabButton": "PageTab",
+    "DTabBar": "PageTabList",
+    "DTabButton": "PageTab",
+    "MenuBar": "MenuBar",
+    "DMenuBar": "MenuBar",
+    "MenuItem": "MenuItem",
+    "DMenuItem": "MenuItem",
+    "TreeView": "Tree",
+    "DTreeView": "Tree",
+    "TableView": "Table",
+    "DTableView": "Table",
+    "ListView": "List",
+    "DListView": "List",
+    "GridView": "List",
+    "Calendar": "Table",
+    "DCalendarPicker": "Table",
+    "PageIndicator": "PageTabList",
+    "SwipeDelegate": "Button",
+    "ItemDelegate": "Button",
+    "CheckDelegate": "CheckBox",
+    "RadioDelegate": "RadioButton",
+    "SwitchDelegate": "CheckBox",
+    "SelectionRectangle": "Pane",
+}
+
+# ---------------------------------------------------------------------------
 # Data structures
 # ---------------------------------------------------------------------------
 
@@ -188,6 +262,7 @@ class QmlElement:
     object_name: str = ""
     text_property: str = ""
     role: str = ""
+    qt_role: str = ""
     suggested_name: str = ""
 
 
@@ -318,6 +393,16 @@ def _map_qml_role(elem_type: str) -> str:
     return _QML_TO_ROLE.get(elem_type, "")
 
 
+def _map_qml_qt_role(elem_type: str) -> str:
+    """Return the valid Qt QAccessible::Role enum name for a QML type.
+
+    The value is meant to be written verbatim as
+    `Accessible.role: Accessible.<Name>`. Empty for types with no Qt-valid
+    role (decorative/unknown) — for those no Accessible.role should be added.
+    """
+    return _QML_TO_QT_ROLE.get(elem_type, "")
+
+
 def _is_custom_component(elem_type: str, src_dir: str) -> bool:
     """Check if a type name corresponds to a custom QML component file."""
     if len(elem_type) > 1 and elem_type[0].isupper():
@@ -329,6 +414,41 @@ def _is_custom_component(elem_type: str, src_dir: str) -> bool:
     for _ in src.rglob(f"{elem_type}.qml"):
         return True
     return False
+
+
+def _custom_component_root_type(elem_type: str, src_dir: str) -> str:
+    """Return the root element type of a custom component's .qml file.
+
+    Empty if the file cannot be found or has no parseable root element.
+    """
+    src = Path(src_dir)
+    for f in src.rglob(f"{elem_type}.qml"):
+        try:
+            content = f.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            return ""
+        for line in content.splitlines():
+            stripped = line.strip()
+            if not stripped or stripped.startswith("//"):
+                continue
+            m = re.match(r"^([A-Za-z_][A-Za-z0-9_]*)\s*\{", stripped)
+            if m:
+                return m.group(1)
+        return ""
+    return ""
+
+
+# Root element types that are NOT an Item/Action, so the Accessible attached
+# property cannot be attached to them (Qt emits "Accessible must be attached
+# to an Item or an Action" and the name is never exposed). A custom component
+# whose root is one of these is itself unnameable — only its children are.
+# Verified against Qt 6.8:
+#   QQuickWindow : QWindow            (Window, ApplicationWindow, DialogWindow)
+#   QQuickPopup  : QObject            (Popup, Dialog, Drawer, ToolTip, Menu)
+_QML_NON_ITEM_ROOT_TYPES: frozenset[str] = frozenset({
+    "Window", "ApplicationWindow", "DialogWindow",
+    "Popup", "Dialog", "Drawer", "ToolTip", "Menu", "DMenu",
+})
 
 
 
@@ -526,6 +646,11 @@ def _finalize_scope(scope: "_Scope", rel_path: str, src_dir: str) -> QmlElement 
     if not is_interactive and not is_decorative:
         if not _is_custom_component(t, src_dir):
             return None  # unknown type — not a UI element
+        # A custom component whose root is a non-Item type (Window, Popup,
+        # Dialog, Drawer, ToolTip, Menu, …) is itself unnameable — Accessible
+        # cannot attach to it. Skip it; only its children are nameable.
+        if _custom_component_root_type(t, src_dir) in _QML_NON_ITEM_ROOT_TYPES:
+            return None
         is_interactive = True  # custom component → treat as interactive
 
     acc_ignored = scope.accessible.get("ignored", "").lower() in ("true", "1")
@@ -560,6 +685,7 @@ def _finalize_scope(scope: "_Scope", rel_path: str, src_dir: str) -> QmlElement 
         accessible_role=scope.accessible.get("role", ""),
         parent_type=_nearest_named_ancestor(scope, src_dir),
         role=_map_qml_role(t),
+        qt_role=_map_qml_qt_role(t),
     )
     return elem
 
@@ -793,6 +919,7 @@ def _element_to_dict(e: QmlElement) -> dict[str, Any]:
         "object_name": e.object_name,
         "text_property": e.text_property,
         "role": e.role,
+        "qt_role": e.qt_role,
         "suggested_name": e.suggested_name,
     }
 
