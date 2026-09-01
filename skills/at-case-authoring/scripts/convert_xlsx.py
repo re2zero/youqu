@@ -99,6 +99,25 @@ def extract_ui_targets(cases: list[dict]) -> list[str]:
     return seen
 
 
+def dump_yaml(doc: dict, yaml_mod) -> str:
+    """safe_dump 后在顶层序列项之间插入空行，提升可读性。
+
+    仅处理顶层（column 0 的 `- `）列表项：首个项不插，后续项前插空行。
+    嵌套列表（steps/precondition/elements 内的多级列表）不受影响。
+    """
+    text = yaml_mod.safe_dump(doc, allow_unicode=True, sort_keys=False)
+    lines = text.split("\n")
+    out: list[str] = []
+    seen_top_item = False
+    for line in lines:
+        if line.startswith("- ") and seen_top_item:
+            out.append("")
+        out.append(line)
+        if line.startswith("- "):
+            seen_top_item = True
+    return "\n".join(out)
+
+
 def read_xlsx(path: Path, app: str, out_dir: Path, budget: int) -> None:
     try:
         import openpyxl
@@ -164,7 +183,7 @@ def read_xlsx(path: Path, app: str, out_dir: Path, budget: int) -> None:
         "cases": cases,
     }
     full_path = out_dir / "cases_standard.yaml"
-    full_path.write_text(yaml.safe_dump(doc, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    full_path.write_text(dump_yaml(doc, yaml), encoding="utf-8")
 
     # ── 2. 切分：按模块分组 + token 预算 ──
     groups: dict[str, list[dict]] = {}
@@ -190,13 +209,13 @@ def read_xlsx(path: Path, app: str, out_dir: Path, budget: int) -> None:
             if current and cur_tokens + t > budget:
                 slug = _slugify(mod)
                 f = slices_dir / f"{slug}_{seq:03d}.yaml"
-                f.write_text(yaml.safe_dump({
+                f.write_text(dump_yaml({
                     "app": app,
                     "module": mod,
                     "seq": seq,
                     "case_count": len(current),
                     "cases": current,
-                }, allow_unicode=True, sort_keys=False), encoding="utf-8")
+                }, yaml), encoding="utf-8")
                 slice_meta.append({"module": mod, "seq": seq, "file": f.name, "case_count": len(current)})
                 current = []
                 cur_tokens = 0
@@ -206,13 +225,13 @@ def read_xlsx(path: Path, app: str, out_dir: Path, budget: int) -> None:
         if current:
             slug = _slugify(mod)
             f = slices_dir / f"{slug}_{seq:03d}.yaml"
-            f.write_text(yaml.safe_dump({
+            f.write_text(dump_yaml({
                 "app": app,
                 "module": mod,
                 "seq": seq,
                 "case_count": len(current),
                 "cases": current,
-            }, allow_unicode=True, sort_keys=False), encoding="utf-8")
+            }, yaml), encoding="utf-8")
             slice_meta.append({"module": mod, "seq": seq, "file": f.name, "case_count": len(current)})
 
     # ── 3. element-map.yaml 初稿 ──
@@ -228,7 +247,7 @@ def read_xlsx(path: Path, app: str, out_dir: Path, budget: int) -> None:
         ],
     }
     elem_path = out_dir / "element-map.yaml"
-    elem_path.write_text(yaml.safe_dump(elem_doc, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    elem_path.write_text(dump_yaml(elem_doc, yaml), encoding="utf-8")
 
     print(f"转换完成: {len(cases)} 条 → {out_dir}")
     print(f"  全量: cases_standard.yaml ({len(cases)} 条)")
