@@ -1,0 +1,38 @@
+# 标准用例范本（at-case-authoring）
+# 模式 A 编写时复制此文件；模式 B 转换后按此格式校对。
+
+app: deepin-terminal          # 应用名
+element_map: element-map.yaml # 配套映射表（必填）
+
+cases:
+  - id: "1653625"                       # 保留原始用例编号
+    title: 【查找】向上查找_循环匹配      # 【模块】功能_场景
+    module: 查找
+    priority: "2"
+    precondition:                        # 只写状态；构造不了标 [手工]
+      - "终端已打开；查找框已通过右键-查找调出"
+    steps:                               # 一行一动作；动词+UI目标+参数
+      - "在查找输入框输入：测试文本"
+      - "按Enter"
+      - "点击\"向上搜索\"按钮"
+      - "按Shift+Enter"
+    expected:                            # 可断言的单行目标
+      - "从下往上检索"
+      - "关键字被高亮选中"
+      - "到达顶部后循环到末尾"
+    manual: false                        # 不可自动化标 true（标题加【人工】）
+
+  - id: "1653626"                        # 不可自动化用例示例
+    title: 【人工】语音朗读_音频设备缺失   # manual 用例标题前缀【人工】
+    module: 语音
+    priority: "2"
+    precondition:                        # 无法自动构造的状态标 [手工]
+      - "[手工] 缺失音频输出设备"
+    steps:                               # manual 用例保留原始描述步骤
+      - "打开文本编辑器"
+      - "全选文字"
+      - "右键-语音朗读"
+    expected:
+      - "提示音频设备缺失"
+    manual: true                         # 与标题【人工】必须同时存在
+    reason: 外部硬件-音频设备缺失          # spec §7 要求注明类别

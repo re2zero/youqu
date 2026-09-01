@@ -1,0 +1,29 @@
+# 界面元素映射表范本（at-case-authoring）
+# 字段顺序固定：desc → ui_name → id_name → role
+# desc/ui_name 测试人员填；id_name/role 开发人员填
+# 重名控件：开发改源码 AccessibleName 使其唯一，不加 parent 消歧
+
+app: deepin-reader
+version: "1.0"
+updated: 2026-09-01
+
+elements:
+  - desc: 无文档时打开文件选择对话框   # 测试人员填：功能说明
+    ui_name: 打开文件按钮             # 测试人员填：中文 UI 名（与步骤一致）
+    id_name: Button_SelectFile        # 开发人员填：AccessibleName（setAccessibleName 的值）
+    role: button                      # 开发人员填：AT-SPI 角色
+
+  - desc: 标题栏搜索框
+    ui_name: 搜索输入框
+    id_name: DLineEditChildLineEdit
+    role: text
+
+  - desc: 标题栏缩放比例输入
+    ui_name: 缩放输入框
+    id_name: DLineEditChildLineEdit
+    role: text
+
+  - desc: 切换到缩略图视图
+    ui_name: 缩略图按钮
+    id_name: Button_thumbnail
+    role: check box
