@@ -1,0 +1,39 @@
+{
+  "skill_name": "at-case-generator",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "deepin-screen-recorder 的规范用例在 tests/casefile/out/cases_standard.yaml，元素映射表在 tests/casefile/out/element-map.yaml，帮我生成 AT 测试套件到 tests/at/，白名单 100% 覆盖。",
+      "expected_output": "parse_cases_standard.py（规范产物→modules/*.input.json，不解析 xlsx、不扫描源码）→ element_manifest.py（element-map→element-coverage-manifest.yaml，菜单进 transient_items，TBD 进 unresolved）→ 主 agent 逐模块映射 output.json（manual→unsupported）→ pipeline_assemble.py 组装 → cover.py 100% 门禁。产出 yaml/*.suite.yaml + elements.yaml + cases_mapped.yaml。",
+      "files": [],
+      "assertions": [
+        "断言未运行源码扫描（coverage_stats.py / pipeline_run.py --src），白名单来自 element-map",
+        "断言未生成 cases_raw.yaml（输入直接是 cases_standard.yaml / normalized/）",
+        "断言菜单项不在 selector.name 中，在 transient_items 单列",
+        "断言 manual: true 用例输出 status: unsupported + reason + steps: []，且不产生可执行 case",
+        "断言 cover.py 报 100%（或未覆盖元素进入补漏循环）"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "直接用 tests/casefile/out/normalized/ 下已按模块规范化的用例 + element-map.yaml 生成 deepin-screen-recorder 的 AT suite。",
+      "expected_output": "parse_cases_standard.py --input tests/casefile/out/normalized/（整模块一片，不重复切分）→ 主 agent 逐模块映射 → pipeline_assemble.py → cover.py。",
+      "files": [],
+      "assertions": [
+        "断言模块数与 normalized/ 目录一致（无额外 token 重切）",
+        "断言每个模块一个 output.json，meta 沿用 input.json",
+        "断言 assemble 0 error，cover.py 门禁执行"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "at-case-authoring 刚产出的产物（cases_standard.yaml + element-map.yaml），主 agent 直接映射生成 AT 套件，不用子 agent。",
+      "expected_output": "主 agent 顺序映射每个模块（无子 agent、无 gen_schedule.py 调度）。",
+      "files": [],
+      "assertions": [
+        "断言未调用 gen_schedule.py / task 子 agent",
+        "断言主 agent 逐模块读 input.json + element-map 写 output.json"
+      ]
+    }
+  ]
+}

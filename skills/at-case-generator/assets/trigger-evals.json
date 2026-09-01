@@ -1,0 +1,41 @@
+{
+  "skill_name": "at-case-generator",
+  "trigger_evals": [
+    {
+      "id": 1,
+      "prompt": "我已经用 at-case-authoring 规范化好了 cases_standard.yaml 和 element-map.yaml，帮我生成 AT 测试套件",
+      "should_trigger": true,
+      "reason": "从规范产物生成 suite → 本技能"
+    },
+    {
+      "id": 2,
+      "prompt": "把 tests/casefile/out/normalized/ 下的用例转成可运行的 AT-SPI suite",
+      "should_trigger": true,
+      "reason": "normalized 已是规范产物 → 直接生成"
+    },
+    {
+      "id": 3,
+      "prompt": "element-map 的白名单要 100% 覆盖，生成测试用例",
+      "should_trigger": true,
+      "reason": "element-map 驱动 + 100% 门禁"
+    },
+    {
+      "id": 4,
+      "prompt": "这个 xlsx 用例文档帮我转成 youqu 能跑的 suite",
+      "should_trigger": false,
+      "reason": "xlsx 未规范化 → 先走 at-case-authoring 模式 B，再走本技能"
+    },
+    {
+      "id": 5,
+      "prompt": "帮我统计 deepin-screen-recorder 的 AT-SPI 覆盖率",
+      "should_trigger": false,
+      "reason": "仅度量不生成 → 归 at-spi-coverage"
+    },
+    {
+      "id": 6,
+      "prompt": "给控件补上 setAccessibleName",
+      "should_trigger": false,
+      "reason": "修复缺口 → 归 at-spi-completion"
+    }
+  ]
+}
