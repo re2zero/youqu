@@ -11,9 +11,10 @@ class AtMenuNotFoundError(Exception):
 class AtMenuNavigator:
     MAX_LOOP = 30
 
-    def __init__(self, app_name: str = "", desc: str = ""):
+    def __init__(self, app_name: str = "", desc: str = "", button_name: str = ""):
         self.app_name = app_name
         self.desc = desc
+        self.button_name = button_name
         self._mk_inst = None
         self._app_node = None
 
@@ -33,20 +34,29 @@ class AtMenuNavigator:
     def open_main_menu(self):
         self._get_mk().press_key("Alt")
         time.sleep(0.1)
-        try:
-            from src.dogtail_utils import DogtailUtils
-            dog = DogtailUtils(self.app_name, self.desc) if self.app_name else DogtailUtils()
-            btns = dog.find_elements_by_attr("$//DTitlebarDWindowOptionButton/")
-            if btns:
-                btn = btns[-1]
-                if "Press" in getattr(btn, "actions", {}):
-                    btn.doActionNamed("Press")
-                else:
-                    btn.click()
-                time.sleep(0.15)
-                return
-        except BaseException:
-            pass
+        # 主菜单按钮可被应用自定义 AccessibleName 覆盖默认的
+        # "DTitlebarDWindowOptionButton"。优先尝试用例 selector.name
+        # 指定的别名，再回退到默认名。
+        candidates = []
+        if self.button_name:
+            candidates.append(self.button_name)
+        if "DTitlebarDWindowOptionButton" not in candidates:
+            candidates.append("DTitlebarDWindowOptionButton")
+        for btn_name in candidates:
+            try:
+                from src.dogtail_utils import DogtailUtils
+                dog = DogtailUtils(self.app_name, self.desc) if self.app_name else DogtailUtils()
+                btns = dog.find_elements_by_attr(f"$//{btn_name}/")
+                if btns:
+                    btn = btns[-1]
+                    if "Press" in getattr(btn, "actions", {}):
+                        btn.doActionNamed("Press")
+                    else:
+                        btn.click()
+                    time.sleep(0.15)
+                    return
+            except BaseException:
+                continue
         # Fallback: QML TitleBar has unnamed WindowButton as menu button.
         try:
             import pyatspi

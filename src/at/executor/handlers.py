@@ -525,7 +525,7 @@ def handle_dtk_main_menu(step: SuiteActionStep, context: dict) -> None:
         if name and "menu" in role.lower():
             items = [name]
 
-    nav = AtMenuNavigator(context.get("app", ""))
+    nav = AtMenuNavigator(context.get("app", ""), button_name=attrs.get("name") or "")
     nav.open_main_menu()
     if items:
         try:

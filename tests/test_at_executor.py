@@ -1132,3 +1132,80 @@ class TestExecutorHardening:
                     {"app": "test-app"},
                 )
         assert any("smart_wait timed out" in r.message for r in caplog.records)
+
+class TestMainMenuButtonAlias:
+    """dtk_main_menu should honor selector.name as a custom main-menu button
+    alias (apps may override AccessibleName of the DTK titlebar option button)."""
+
+    def test_dtk_main_menu_passes_selector_name_as_button_alias(self):
+        from src.at.executor.handlers import handle_dtk_main_menu
+        from src.at.parser.models import SuiteActionStep
+
+        with unittest.mock.patch("src.at.executor.menu_nav.AtMenuNavigator") as nav_cls:
+            step = SuiteActionStep(
+                action="dtk_main_menu",
+                selector={"name": "OptionMenu", "role": "menu"},
+                items=["设置"],
+            )
+            handle_dtk_main_menu(step, {"app": "test-app"})
+        nav_cls.assert_called_once_with("test-app", button_name="OptionMenu")
+        inst = nav_cls.return_value
+        inst.open_main_menu.assert_called_once()
+        inst.select.assert_called_once_with(["设置"])
+
+    def test_open_main_menu_tries_custom_name_then_default(self, monkeypatch):
+        from src.at.executor.menu_nav import AtMenuNavigator
+
+        mk_inst = unittest.mock.MagicMock()
+        dog_inst = unittest.mock.MagicMock()
+        dog_inst.find_elements_by_attr.return_value = []
+        fake_mk_mod = unittest.mock.MagicMock()
+        fake_mk_mod.MouseKey = unittest.mock.MagicMock(return_value=mk_inst)
+        fake_dog_mod = unittest.mock.MagicMock()
+        fake_dog_mod.DogtailUtils = unittest.mock.MagicMock(return_value=dog_inst)
+        monkeypatch.setitem(sys.modules, "src.mouse_key", fake_mk_mod)
+        monkeypatch.setitem(sys.modules, "src.dogtail_utils", fake_dog_mod)
+
+        nav = AtMenuNavigator("test-app", button_name="OptionMenu")
+        nav.open_main_menu()
+        calls = [c.args[0] for c in dog_inst.find_elements_by_attr.call_args_list]
+        assert calls == ["$//OptionMenu/", "$//DTitlebarDWindowOptionButton/"]
+
+    def test_open_main_menu_stops_at_custom_name_when_found(self, monkeypatch):
+        from src.at.executor.menu_nav import AtMenuNavigator
+
+        mk_inst = unittest.mock.MagicMock()
+        btn = unittest.mock.MagicMock()
+        btn.actions = {"Press": object()}
+        dog_inst = unittest.mock.MagicMock()
+        dog_inst.find_elements_by_attr.return_value = [btn]
+        fake_mk_mod = unittest.mock.MagicMock()
+        fake_mk_mod.MouseKey = unittest.mock.MagicMock(return_value=mk_inst)
+        fake_dog_mod = unittest.mock.MagicMock()
+        fake_dog_mod.DogtailUtils = unittest.mock.MagicMock(return_value=dog_inst)
+        monkeypatch.setitem(sys.modules, "src.mouse_key", fake_mk_mod)
+        monkeypatch.setitem(sys.modules, "src.dogtail_utils", fake_dog_mod)
+
+        nav = AtMenuNavigator("test-app", button_name="OptionMenu")
+        nav.open_main_menu()
+        calls = [c.args[0] for c in dog_inst.find_elements_by_attr.call_args_list]
+        assert calls == ["$//OptionMenu/"]
+        btn.doActionNamed.assert_called_once_with("Press")
+
+    def test_open_main_menu_default_only_without_alias(self, monkeypatch):
+        from src.at.executor.menu_nav import AtMenuNavigator
+
+        mk_inst = unittest.mock.MagicMock()
+        dog_inst = unittest.mock.MagicMock()
+        dog_inst.find_elements_by_attr.return_value = []
+        fake_mk_mod = unittest.mock.MagicMock()
+        fake_mk_mod.MouseKey = unittest.mock.MagicMock(return_value=mk_inst)
+        fake_dog_mod = unittest.mock.MagicMock()
+        fake_dog_mod.DogtailUtils = unittest.mock.MagicMock(return_value=dog_inst)
+        monkeypatch.setitem(sys.modules, "src.mouse_key", fake_mk_mod)
+        monkeypatch.setitem(sys.modules, "src.dogtail_utils", fake_dog_mod)
+
+        nav = AtMenuNavigator("test-app")
+        nav.open_main_menu()
+        calls = [c.args[0] for c in dog_inst.find_elements_by_attr.call_args_list]
+        assert calls == ["$//DTitlebarDWindowOptionButton/"]
