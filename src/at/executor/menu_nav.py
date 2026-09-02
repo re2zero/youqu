@@ -17,6 +17,7 @@ class AtMenuNavigator:
         self.button_name = button_name
         self._mk_inst = None
         self._app_node = None
+        self._clicked = False
 
     def _get_mk(self):
         if self._mk_inst is None:
@@ -142,6 +143,118 @@ class AtMenuNavigator:
                 return True
         return False
 
+    def _find_menu_item_node(self, target, exact=False):
+        """遍历 AT-SPI 树，找到名称匹配且可见的菜单项节点。
+
+        用于键盘导航失效时的兜底：DTK 右键菜单(DMenu::exec())是 transient
+        popup，dogtail 静态树扫描不到，但 gi Atspi 遍历 desktop 树可见。
+        返回 [(name, extents), ...]，extents 为屏幕坐标。
+        target 为空时收集所有 role 含 menu 的节点(诊断用)。
+        限制遍历深度/节点数，避免 AT-SPI 树异常时全树扫描卡住。
+        """
+        try:
+            import gi
+            gi.require_version("Atspi", "2.0")
+            from gi.repository import Atspi
+            root = Atspi.get_desktop(0)
+            matches = []
+            count = [0]
+
+            def walk(node, depth=0):
+                if depth > 6 or count[0] > 300:
+                    return
+                count[0] += 1
+                try:
+                    role = node.get_role_name() or ""
+                    name = node.get_name() or ""
+                    if "menu" in role.lower() and name:
+                        if not target:
+                            ext = node.get_extents(Atspi.CoordType.SCREEN)
+                            matches.append((name, ext))
+                        elif "menu item" in role.lower():
+                            matched = (
+                                name == target if exact else target.lower() in name.lower()
+                            )
+                            if matched:
+                                ext = node.get_extents(Atspi.CoordType.SCREEN)
+                                if ext.width > 0 and ext.height > 0:
+                                    matches.append((name, ext))
+                    for i in range(node.get_child_count()):
+                        walk(node.get_child_at_index(i), depth + 1)
+                except Exception:
+                    pass
+
+            walk(root)
+            return matches
+        except Exception:
+            return []
+
+    def _click_menu_item(self, target, exact=False, focused_node=None):
+        """键盘导航失效时, 定位菜单项并鼠标点击。
+
+        优先从当前 AT-SPI 焦点菜单项向上找菜单容器, 只遍历当前菜单
+        (子节点少, 避免全树扫描在 AT-SPI 树异常时卡住); focused_node
+        缺省时回退到受限的全树扫描(_find_menu_item_node)。
+        """
+        try:
+            import gi
+            gi.require_version("Atspi", "2.0")
+            from gi.repository import Atspi
+
+            node = focused_node
+            if node is None:
+                matches = self._find_menu_item_node(target, exact)
+                if not matches:
+                    return False
+                name, ext = matches[0]
+                cx, cy = ext.x + ext.width / 2, ext.y + ext.height / 2
+                self._get_mk().click(cx, cy)
+                time.sleep(0.3)
+                return True
+
+            # 向上找菜单容器(role 含 menu), 最多 5 层
+            found_menu = False
+            for _ in range(5):
+                try:
+                    node = node.get_parent()
+                except Exception:
+                    return False
+                if not node:
+                    return False
+                role = node.get_role_name() or ""
+                if "menu" in role.lower():
+                    found_menu = True
+                    break
+            if not found_menu:
+                return False
+
+            # 遍历菜单容器内菜单项, 点击目标
+            # 注意: get_child_at_index 可能返回 None(AT-SPI 树不稳定),
+            # 跳过无效子节点继续遍历
+            try:
+                child_count = node.get_child_count()
+                for i in range(child_count):
+                    try:
+                        child = node.get_child_at_index(i)
+                        role = child.get_role_name() or ""
+                        name = child.get_name() or ""
+                    except Exception:
+                        continue
+                    if "menu item" in role.lower() and name:
+                        matched = name == target if exact else target.lower() in name.lower()
+                        if matched:
+                            ext = child.get_extents(Atspi.CoordType.SCREEN)
+                            if ext.width > 0 and ext.height > 0:
+                                cx, cy = ext.x + ext.width / 2, ext.y + ext.height / 2
+                                self._get_mk().click(cx, cy)
+                                time.sleep(0.3)
+                                return True
+            except Exception:
+                return False
+            return False
+        except Exception:
+            return False
+
     def _read_focused_item(self, from_root=False):
         result = self._scan_focused(self._app(), max_depth=3)
         if not result and from_root:
@@ -192,9 +305,11 @@ class AtMenuNavigator:
             pass
 
         focused_name = [""]
+        focused_node = [None]
         found = [False]
         iteration = [0]
         start_name = [None]
+        stall = [False]
         mk = self._get_mk()
 
         def on_focus_event(event):
@@ -204,6 +319,7 @@ class AtMenuNavigator:
                     role = src.get_role_name() if src else ""
                     if "menu" in role.lower():
                         focused_name[0] = src.get_name() or ""
+                        focused_node[0] = src
             except Exception:
                 pass
 
@@ -233,6 +349,11 @@ class AtMenuNavigator:
                 return False
 
             if iteration[0] > 2 and current and current == start_name[0]:
+                # 键盘导航失效(焦点卡住, 常见于连续右键菜单: 菜单未 grab
+                # 键盘焦点, Down 键不移动菜单项焦点)。只标记 stall 并退出
+                # 主循环, 阻塞的 AT-SPI 定位 + 鼠标点击兜底在 loop.run()
+                # 之后执行, 避免在 GLib 回调中阻塞导致死锁。
+                stall[0] = True
                 loop.quit()
                 return False
 
@@ -259,6 +380,11 @@ class AtMenuNavigator:
             return False, f"menu navigation timed out after {watchdog_ms}ms"
         if found[0]:
             return True, focused_name[0]
+        if stall[0]:
+            # 键盘导航失效, 主循环已退出, 在此做阻塞的 AT-SPI 定位 + 点击
+            if self._click_menu_item(target, exact, focused_node[0]):
+                self._clicked = True
+                return True, target
         return False, f"menu item '{target}' not found"
 
     def navigate_to(self, items, exact=False):
@@ -275,7 +401,15 @@ class AtMenuNavigator:
                     # AT-SPI focus 事件模式(按键导航触发菜单项聚焦事件)
                     ok, err = self._navigate_by_events(target, exact)
                 if not ok:
-                    if not self._enumerate_and_navigate(target, exact):
+                    # 键盘导航全部失败时: 最后一层菜单项用 AT-SPI 定位 +
+                    # 鼠标点击兜底(覆盖连续右键菜单键盘导航失效的场景);
+                    # 其余层保持枚举导航
+                    if i == len(items) - 1 and self._click_menu_item(target, exact):
+                        ok = True
+                        self._clicked = True
+                    elif self._enumerate_and_navigate(target, exact):
+                        ok = True
+                    else:
                         raise AtMenuNotFoundError(err or f"menu item '{target}' not found")
 
             if ok:
@@ -290,8 +424,10 @@ class AtMenuNavigator:
                 time.sleep(0.3)
 
     def select(self, items, exact=False):
+        self._clicked = False
         self.navigate_to(items, exact)
-        self._get_mk().press_key("Return")
+        if not self._clicked:
+            self._get_mk().press_key("Return")
         time.sleep(0.3)
 
     def cancel(self):
