@@ -414,8 +414,14 @@ def handle_keyboard_hot_key(step: SuiteActionStep, context: dict) -> None:
     mk = get_mk(context)
     keys = step.key
     if isinstance(keys, str):
-        sep = "+" if "+" in keys else ","
-        key_list = [k.strip().lower() for k in keys.split(sep) if k.strip()]
+        if "," in keys:
+            key_list = [k.strip().lower() for k in keys.split(",") if k.strip()]
+        else:
+            parts = keys.split("+")
+            # a trailing "+" is the plus key, not an empty segment
+            if parts and parts[-1] == "":
+                parts[-1] = "+"
+            key_list = [k.strip().lower() for k in parts if k.strip()]
     elif isinstance(keys, list):
         key_list = [str(k).lower() for k in keys]
     else:
