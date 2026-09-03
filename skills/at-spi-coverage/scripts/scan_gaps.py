@@ -86,6 +86,15 @@ except ImportError:
 
 _TYPE_DB_PATH = Path(__file__).resolve().parent / "type_db.json"
 
+# Container-only Qt types: pure grouping objects that hold actions/buttons
+# (QActionGroup, QButtonGroup) but are themselves never interactive UI
+# controls. They are NOT locatable by AT-SPI name and must be excluded from
+# interactive classification everywhere (type DB, hardcoded sets, custom
+# type resolution).
+_CONTAINER_ONLY_TYPES: frozenset[str] = frozenset({
+    "QActionGroup", "QButtonGroup",
+})
+
 
 class TypeDatabase:
     """Loads and queries the type classification database.
@@ -122,6 +131,15 @@ class TypeDatabase:
         Follows the inheritance chain (bases) to find the best category.
         """
         base = type_name.replace(" *", "").replace("&", "").split("<")[0].strip()
+
+        # Container-only Qt types: pure grouping objects (QActionGroup,
+        # QButtonGroup) that hold actions/buttons but are not themselves
+        # interactive UI controls. They are NOT locatable by AT-SPI name and
+        # must not be counted as interactive widgets — short-circuit before
+        # custom types and the type DB (which classifies QButtonGroup as
+        # interactive) and the hardcoded fallback sets.
+        if base in _CONTAINER_ONLY_TYPES:
+            return "unknown"
 
         # Check custom types first (project-specific)
         if base in self._custom_types:
@@ -205,8 +223,7 @@ class TypeDatabase:
             "QListView", "QTreeView", "QTableView",
             "QTabBar", "QKeySequenceEdit",
             "QMenu", "QMenuBar",
-            "QAction", "QActionGroup", "QShortcut",
-            "QButtonGroup",
+            "QAction", "QShortcut",
             "QDialogButtonBox", "QCalendarWidget", "QFontComboBox",
             "QAbstractItemView", "QAbstractScrollArea",
         })
@@ -318,8 +335,8 @@ _QT_UI_CLASSES: frozenset[str] = frozenset({
     "QScrollArea", "QGroupBox", "QFrame", "QStackedWidget",
     "QSplitter", "QProgressBar", "QListWidget", "QTreeWidget", "QTableWidget",
     "QGraphicsView", "QScrollBar",
-    "QAction", "QActionGroup", "QShortcut",
-    "QButtonGroup", "QStackedLayout",
+    "QAction", "QShortcut",
+    "QStackedLayout",
     "QHBoxLayout", "QVBoxLayout", "QGridLayout", "QFormLayout",
 })
 
@@ -339,8 +356,8 @@ _INTERACTIVE_CLASSES: frozenset[str] = frozenset({
     "QCheckBox", "QRadioButton", "QSlider", "QSpinBox", "QDoubleSpinBox",
     "QListWidget", "QTreeWidget", "QTableWidget", "QListView", "QTreeView",
     "QTableView", "QTabBar", "QScrollBar",
-    "QMenu", "QMenuBar", "QAction", "QActionGroup", "QShortcut",
-    "QButtonGroup", "QDialogButtonBox", "QCalendarWidget", "QKeySequenceEdit",
+    "QMenu", "QMenuBar", "QAction", "QShortcut",
+    "QDialogButtonBox", "QCalendarWidget", "QKeySequenceEdit",
     "DAction", "DMenu", "DMenuItem", "DMenuBar",
     "DTabBar", "DListView", "DTreeView",
     "DKeySequenceEdit",
@@ -349,8 +366,7 @@ _INTERACTIVE_CLASSES: frozenset[str] = frozenset({
 
 _NON_WIDGET_INTERACTIVE: frozenset[str] = frozenset({
     # Pure QObject types — only setObjectName() is available, no setAccessibleName()
-    "QAction", "QActionGroup", "QShortcut",
-    "QButtonGroup",
+    "QAction", "QShortcut",
     "DAction",
 })
 
@@ -369,6 +385,7 @@ _DECORATIVE_CLASSES: frozenset[str] = frozenset({
     "QGroupBox", "QScrollArea", "QSplitter",
     "QStackedWidget", "QStatusBar", "QTabWidget", "QToolBar",
 })
+
 
 
 # ---------------------------------------------------------------------------
@@ -818,10 +835,20 @@ def _detect_call_in_unexposed(
 # ---------------------------------------------------------------------------
 
 
+def _file_key(rel_path: str) -> str:
+    """Per-file map key: relative source path without the extension.
+
+    Used to scope text_named_calls / newed_members so a same-named member in
+    a different file cannot rescue or count one here (e.g. TextEdit's
+    m_actEditView must not rescue BottomBar's m_actEditView).
+    """
+    return str(Path(rel_path).with_suffix(""))
+
+
 def _gap_fully_named(
     g: WidgetInstance,
     global_named_calls: dict[str, set[str]],
-    text_named_calls: dict[str, set[str]],
+    text_named_calls: dict[tuple[str, str], set[str]],
 ) -> bool:
     """Decide whether a gap instance is actually fully named (cross-file merge).
 
@@ -840,7 +867,7 @@ def _gap_fully_named(
     if g.has_accessible_name:
         present.add("setAccessibleName")
     present |= global_named_calls.get(g.variable, set())
-    present |= text_named_calls.get(g.variable, set())
+    present |= text_named_calls.get((_file_key(g.source_file), g.variable), set())
     needs_both = _is_interactive_type(g.type_name) and not _is_non_widget_interactive(g.type_name)
     if needs_both:
         return {"setObjectName", "setAccessibleName"} <= present
@@ -1057,11 +1084,18 @@ def _scan_one_file(
 
         if is_layout:
             continue
+        if _is_non_widget_interactive(eff_type):
+            # QAction/DAction/QShortcut: pure QObject, only setObjectName()
+            # (exposed as accessible-id, NOT accessible-name). youqu/AT-SPI
+            # engines locate elements by accessible-name only, so these can
+            # never be targeted by AT cases. Exclude from the scan total so
+            # SPI and AT denominators stay identical.
+            continue
         if is_decorative and not inst.has_object_name and not inst.has_accessible_name:
             continue
 
         if inst.has_object_name or inst.has_accessible_name:
-            if is_interactive and not _is_non_widget_interactive(eff_type):
+            if is_interactive:
                 # QWidget subclass: need BOTH setObjectName() AND setAccessibleName()
                 if inst.has_object_name and inst.has_accessible_name:
                     ok_widgets_list.append(inst)
@@ -1069,16 +1103,11 @@ def _scan_one_file(
                     # Partial: only one of the two exists → still a gap
                     gap_widgets_list.append(inst)
             else:
-                # Non-widget interactive (QAction, QShortcut) or decorative — either is sufficient
+                # Decorative with a name — either is sufficient
                 ok_widgets_list.append(inst)
         elif is_interactive:
-            if _is_non_widget_interactive(eff_type):
-                # Non-widget (QAction, QShortcut): only setObjectName() is needed
-                # Don't report if truly no name — scanner will still list it
-                gap_widgets_list.append(inst)
-            else:
-                # QWidget subclass: needs both
-                gap_widgets_list.append(inst)
+            # QWidget subclass: needs both
+            gap_widgets_list.append(inst)
 
     return rel_path, ok_widgets_list, gap_widgets_list, named_calls, None
 
@@ -1169,17 +1198,20 @@ def scan_source(
         all_files.append(p)
     all_files.sort()
 
-    # Members actually instantiated via `new` in any .cpp file.
+    # Members actually instantiated via `new` in any .cpp file, keyed by
+    # (file_stem, variable) so a same-named member new-ed in a DIFFERENT file
+    # (e.g. TextEdit's m_actEditView in dtextedit.cpp) does not mark BottomBar's
+    # m_actEditView (bottombar.cpp) as instantiated.
     # Used to filter: (a) dead-code members (declared but never new-ed),
     # and (b) external/parameter-assigned members (m_var = ctorParam or
     # m_var = externalPtr) — not created by this class, so naming is not
     # this class's responsibility.
-    newed_members: set[str] = set()
+    newed_members: set[tuple[str, str]] = set()
     # Variables with setObjectName/setAccessibleName calls detected via text
     # regex — catches pointer-member calls (m_ptr->setObjectName(...)) that
     # libclang may miss when the pointer type is unresolved (UNEXPOSED_EXPR).
-    # Maps variable -> set of call types present.
-    text_named_calls: dict[str, set[str]] = {}
+    # Keyed by (file_stem, variable) -> set of call types present.
+    text_named_calls: dict[tuple[str, str], set[str]] = {}
 
     _NEW_ASSIGN_RE = re.compile(r'(\w+)\s*=\s*new\s+')
     _NEW_INIT_RE = re.compile(r'(\w+)\s*\(\s*new\s+')
@@ -1193,15 +1225,17 @@ def scan_source(
     for f in all_files:
         try:
             content = Path(f).read_text(errors="replace")
+            fkey = _file_key(str(f.relative_to(root)))
             for m in _NEW_ASSIGN_RE.finditer(content):
-                newed_members.add(m.group(1))
+                newed_members.add((fkey, m.group(1)))
             for m in _NEW_INIT_RE.finditer(content):
-                newed_members.add(m.group(1))
+                newed_members.add((fkey, m.group(1)))
             for rx, call_type in _NAME_CALL_PATTERNS:
                 for m in rx.finditer(content):
-                    text_named_calls.setdefault(m.group(1), set()).add(call_type)
+                    text_named_calls.setdefault((fkey, m.group(1)), set()).add(call_type)
         except Exception:
             continue
+
 
     if not all_files:
         logger.warning("No C++ source files found in %s", src_dir)
@@ -1277,6 +1311,22 @@ def scan_source(
                 if progress_cb:
                     progress_cb(done, total, rel_path)
 
+    # Dead-member / external-assignment filter FIRST: only consider a gap if
+    # the member is actually instantiated via `new` in its own file.
+    # - Dead code (declared but never new-ed) → not a real widget, skip.
+    # - Parameter-assigned (m_var = ctorParam or externalPtr) → not this
+    #   class's responsibility to name, skip.
+    # Keyed by (file_stem, variable) so a same-named member new-ed in a
+    # DIFFERENT file (e.g. TextEdit's m_actEditView in dtextedit.cpp) does not
+    # mark BottomBar's m_actEditView (bottombar.cpp) as instantiated.
+    # Running this before the cross-file rescue means non-new members can
+    # never be rescued into "named" by a same-named member elsewhere.
+    live_gaps: list[WidgetInstance] = []
+    for g in all_gaps:
+        if (_file_key(g.source_file), g.variable) in newed_members:
+            live_gaps.append(g)
+    all_gaps = live_gaps
+
     # Cross-file merge: a gap may be named in another file
     # (e.g. commonpanel.h fields named in remotemanagementpanel.cpp).
     # A gap is only rescued if it is actually fully named — for interactive
@@ -1287,13 +1337,6 @@ def scan_source(
     for g in all_gaps:
         if _gap_fully_named(g, global_named_calls, text_named_calls):
             all_ok.append(g)
-            continue
-        # Dead-member / external-assignment filter: only report a gap if the
-        # member is actually instantiated via `new` in some .cpp file.
-        # - Dead code (declared but never new-ed) → not a real widget, skip.
-        # - Parameter-assigned (m_var = ctorParam or externalPtr) → not this
-        #   class's responsibility to name, skip.
-        if g.variable not in newed_members:
             continue
         still_gaps.append(g)
     all_gaps = still_gaps
@@ -1350,6 +1393,19 @@ def _write_outputs(result: ScanResult, output_dir: str) -> None:
     gap_count = len(result.gap_widgets)
     coverage = f"{ok_count / total * 100:.1f}%" if total else "0%"
 
+    # at_locatable_total: widgets locatable by AT-SPI name at runtime.
+    # The source-naming denominator (total_widgets) also counts non-widget
+    # interactive types (QAction/QShortcut/DAction) that only expose
+    # setObjectName — correct for source naming coverage, but these are NOT
+    # locatable by AT-SPI name (the objectName sits at the end of the
+    # accessible-id path, not as the element name). at_locatable_total
+    # excludes them so AT-case coverage uses an honest "locatable by name"
+    # denominator. Runtime-only exemptions (e.g. PButton, never constructed)
+    # are applied by coverage_atcase via unreachable.yaml.
+    at_locatable_total = sum(
+        1 for w in result.widgets if not _is_non_widget_interactive(w.type_name)
+    )
+
     try:
         import yaml
     except ImportError:
@@ -1371,6 +1427,7 @@ def _write_outputs(result: ScanResult, output_dir: str) -> None:
         "version": "1.0",
         "summary": {
             "total_widgets": total,
+            "at_locatable_total": at_locatable_total,
             "with_names": ok_count,
             "missing_names": gap_count,
             "coverage": coverage,
@@ -1396,6 +1453,7 @@ def _write_outputs(result: ScanResult, output_dir: str) -> None:
         },
         "summary": {
             "total_widgets": total,
+            "at_locatable_total": at_locatable_total,
             "with_names": ok_count,
             "missing_names": gap_count,
             "coverage": coverage,

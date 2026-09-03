@@ -210,6 +210,59 @@ def _denoise(names: set[str]) -> set[str]:
     return {n for n in names if n and not _is_noise(n)}
 
 
+def _collect_unreachable_names(scan_dir: Path) -> set[str]:
+    """收集 unreachable.yaml 中仍计入 at_locatable_total 的运行时豁免名。
+
+    unreachable.yaml (tests/at/unreachable.yaml) 列出的元素是运行时 AT-SPI
+    树中按名不可定位的豁免项。at_locatable_total 已剔除 QAction 家族与容器,
+    因此这里只收集仍计数的 **widget 类型** 豁免 (如 PButton, 声明为
+    DPushButton 但运行时从不构造)。通过扫描产物 (pre_scan_ok/gaps.yaml) 的
+    type 判断: 非 widget 交互类型 (QAction/DAction/QShortcut) 已在分母外,
+    不重复扣除。返回应再从分母扣除的 name 集合。
+    """
+    # 扫描产物 name -> type (用于判断是否 widget 类型)
+    scan_types: dict[str, str] = {}
+    for fname in ("pre_scan_ok.yaml", "pre_scan_gaps.yaml"):
+        data = _load_yaml(scan_dir / fname)
+        if not isinstance(data, dict):
+            continue
+        items = data.get("widgets") or data.get("gaps") or []
+        for w in items:
+            if not isinstance(w, dict):
+                continue
+            n = w.get("existing_accessible_name") or w.get("existing_object_name") or ""
+            t = w.get("type", "")
+            if n and t:
+                scan_types.setdefault(n.strip(), t)
+    # non-widget 交互类型 (仅在源码命名口径计入, at_locatable_total 已剔除)
+    _NON_WIDGET = {"QAction", "DAction", "QShortcut"}
+    names: set[str] = set()
+    unreachable = scan_dir.parent / "tests" / "at" / "unreachable.yaml"
+    # 也支持显式 at_dir 下的 unreachable
+    for cand in (unreachable, scan_dir.parent / "unreachable.yaml"):
+        data = _load_yaml(cand)
+        if not isinstance(data, dict):
+            continue
+        entries = data.get("unreachable", [])
+        for e in entries:
+            if not isinstance(e, dict):
+                continue
+            nm = e.get("name", "")
+            if not nm:
+                continue
+            # 若扫描产物能定位其类型且为 widget (非 QAction 家族) → 需扣除。
+            # 若扫描产物中查不到该 name (说明已被 at_locatable_total 排除,
+            # 如容器 ActionGroup/Group), 不重复扣。
+            t = scan_types.get(nm, "")
+            base = t.replace(" *", "").replace("*", "").split("<")[0].strip()
+            if not t:
+                continue  # 扫描产物中不存在 → 已在分母外, 不重复扣
+            if base in _NON_WIDGET:
+                continue  # 已在 at_locatable_total 之外, 不重复扣
+            names.add(nm)
+    return names
+
+
 def _read_total_from(data: Any, keys: tuple[str, ...]) -> int | None:
     """从扫描产物 dict 读取 total 字段 (C++: total_widgets, QML: total_elements)。"""
     if not isinstance(data, dict):
@@ -225,8 +278,12 @@ def _read_total_from(data: Any, keys: tuple[str, ...]) -> int | None:
 def _load_scan_total(scan_dir: Path) -> tuple[int | None, str]:
     """从 coverage_stats.py 扫描产物读取 total (应编写元素总数)。
 
+    C++ 优先读取 summary.at_locatable_total (剔除非 widget 交互类型
+    QAction/QShortcut/DAction 及容器后、按名可定位的元素总数), 回退
+    summary.total_widgets (源码命名口径, 含 QAction 等仅 setObjectName 类型)。
     C++ 与 QML 分别读取后求和 (混合项目两者都有控件时 total = cpp + qml):
-    - C++: pre_report.json, 回退 pre_scan_gaps.yaml (summary.total_widgets)
+    - C++: pre_report.json, 回退 pre_scan_gaps.yaml (summary.at_locatable_total /
+           summary.total_widgets)
     - QML: qml_report.json, 回退 qml_gaps.yaml (summary.total_elements)
     返回 (total, source_label); 无任何产物时返回 (None, "")。
     """
@@ -234,13 +291,13 @@ def _load_scan_total(scan_dir: Path) -> tuple[int | None, str]:
     cpp_src = ""
     pre_report = scan_dir / "pre_report.json"
     if pre_report.is_file():
-        t = _read_total_from(_load_json(pre_report), ("total_widgets",))
+        t = _read_total_from(_load_json(pre_report), ("at_locatable_total", "total_widgets"))
         if t is not None:
             cpp_total, cpp_src = t, "pre_report.json"
     if cpp_total is None:
         pre_gaps = scan_dir / "pre_scan_gaps.yaml"
         if pre_gaps.is_file():
-            t = _read_total_from(_load_yaml(pre_gaps), ("total_widgets",))
+            t = _read_total_from(_load_yaml(pre_gaps), ("at_locatable_total", "total_widgets"))
             if t is not None:
                 cpp_total, cpp_src = t, "pre_scan_gaps.yaml"
 
@@ -336,6 +393,15 @@ def main() -> int:
         if total is None:
             print(f"[FAIL] 扫描产物 {scan_dir} 中未找到 total_widgets / total_elements 字段。", file=sys.stderr)
             return 1
+
+    # 运行时豁免: unreachable.yaml 中仍计入 at_locatable_total 的 widget 类型
+    # (如 PButton, 声明为 DPushButton 但运行时从不构造) 从分母扣除。
+    runtime_exempt: set[str] = set()
+    if total is not None and scan_dir is not None:
+        runtime_exempt = _collect_unreachable_names(scan_dir)
+        if runtime_exempt:
+            total -= len(runtime_exempt)
+            total_source += f" (豁免 {len(runtime_exempt)} 运行时不可定位)"
 
     # ---- suite 引用: selector (持久) + items (瞬态, 不计覆盖) ----
     if at_dir is not None:

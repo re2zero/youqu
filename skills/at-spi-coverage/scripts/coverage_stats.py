@@ -237,21 +237,47 @@ def _run_cpp_scan(src: str, build: str | None, compile_commands: str | None,
         (re.compile(r'(\w+)\s*\.\s*setObjectName\s*\('), "setObjectName"),
         (re.compile(r'(\w+)\s*\.\s*setAccessibleName\s*\('), "setAccessibleName"),
     ]
-    newed_members: set[str] = set()
-    text_named_calls: dict[str, set[str]] = {}
+    # newed_members: (file_stem, variable) members instantiated via `new`,
+    # scoped per file so a same-named member new-ed in a different file does
+    # not mark one here (TextEdit::m_actEditView must not instantiate
+    # BottomBar::m_actEditView). Drops dead header-only members and
+    # externally-owned references (m_var = ctorParam).
+    newed_members: set[tuple[str, str]] = set()
+    # text_named_calls: (file_stem, variable) -> call types, scoped per file.
+    text_named_calls: dict[tuple[str, str], set[str]] = {}
     for f in all_files:
         try:
             content = f.read_text(errors="replace")
+            # all_files come from root.rglob, so relative_to always works.
+            # (A startswith(str(root)) guard breaks for root="." where
+            # str(f) is "reader/..." and never starts with ".", silently
+            # keying newed_members/text_named_calls by bare filename and
+            # dropping every gap in the cross-file merge.)
+            rel = str(f.relative_to(root))
+            fkey = sg._file_key(rel)
             for m in _NEW_ASSIGN_RE.finditer(content):
-                newed_members.add(m.group(1))
+                newed_members.add((fkey, m.group(1)))
             for m in _NEW_INIT_RE.finditer(content):
-                newed_members.add(m.group(1))
+                newed_members.add((fkey, m.group(1)))
             for rx, call_type in _NAME_CALL_PATTERNS:
                 for m in rx.finditer(content):
-                    text_named_calls.setdefault(m.group(1), set()).add(call_type)
+                    text_named_calls.setdefault((fkey, m.group(1)), set()).add(call_type)
         except Exception:
             continue
-    # 6) Cross-file merge: a gap may be named in another file. A gap is only
+    # 6) Dead-member / external-assignment filter FIRST (parity with
+    # scan_gaps.scan_source): only consider a gap if the member is actually
+    # instantiated via `new` in its own file. Drops dead header-only members
+    # and externally-owned references (m_var = ctorParam, never new-ed).
+    # Scoped by (file_stem, variable) so a same-named member new-ed in a
+    # different file does not count here. Running before the cross-file
+    # rescue means non-new members can never be rescued into "named".
+    live_gaps = []
+    for g in all_gaps:
+        if (sg._file_key(g.source_file), g.variable) in newed_members:
+            live_gaps.append(g)
+    all_gaps = live_gaps
+
+    # 7) Cross-file merge: a gap may be named in another file. A gap is only
     # rescued if actually fully named — interactive QWidgets need BOTH
     # setObjectName AND setAccessibleName. Uses the shared helper from
     # scan_gaps so baseline and quality-gate scans agree exactly.
@@ -259,11 +285,6 @@ def _run_cpp_scan(src: str, build: str | None, compile_commands: str | None,
     for g in all_gaps:
         if sg._gap_fully_named(g, global_named_calls, text_named_calls):
             all_ok.append(g)
-            continue
-        # Dead header-only member (never referenced in any .cpp) or
-        # externally-owned reference (m_var = ctorParam, never new-ed):
-        # not this class's responsibility to name.
-        if g.variable not in newed_members:
             continue
         still_gaps.append(g)
     all_gaps = still_gaps
