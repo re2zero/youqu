@@ -20,9 +20,9 @@ pipeline_assemble.py consumes it unchanged. meta.module_short is set (assemble
 reads it for the output file name).
 
 Usage:
-    parse_cases_standard.py --input tests/casefile/out/cases_standard.yaml \
+    parse_cases_standard.py --input tests/at/casefile/out/cases_standard.yaml \
         --output tests/at/modules/ --app deepin-screen-recorder
-    parse_cases_standard.py --input tests/casefile/out/normalized/ \
+    parse_cases_standard.py --input tests/at/casefile/out/normalized/ \
         --output tests/at/modules/ --app deepin-screen-recorder
 """
 
@@ -121,9 +121,9 @@ def main() -> None:
         description="Convert at-case-authoring output into module input.json",
         epilog=(
             "Examples:\n"
-            "  parse_cases_standard.py --input tests/casefile/out/cases_standard.yaml \\\n"
+            "  parse_cases_standard.py --input tests/at/casefile/out/cases_standard.yaml \\\n"
             "      --output tests/at/modules/ --app deepin-screen-recorder\n"
-            "  parse_cases_standard.py --input tests/casefile/out/normalized/ \\\n"
+            "  parse_cases_standard.py --input tests/at/casefile/out/normalized/ \\\n"
             "      --output tests/at/modules/ --app deepin-screen-recorder\n"
             "\n"
             "Emits one input.json per module (no token re-slicing)."

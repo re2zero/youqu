@@ -77,7 +77,7 @@ def _load_and_run_suite(
         project_root = Path(os.getcwd())
         variables.setdefault("PROJECT_ROOT", str(project_root))
         
-        _default_test_files = str(project_root / "tests" / "files")
+        _default_test_files = str(project_root / "tests" / "at" / "files")
         variables.setdefault(
             "TEST_FILES_DIR",
             os.environ.get("YOUQU_TEST_FILES_DIR", _default_test_files),

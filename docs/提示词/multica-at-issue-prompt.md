@@ -21,7 +21,7 @@
 |--------|-----|
 | 项目路径 | `{PROJECT_ROOT}/` |
 | AT 测试目录 | `{AT_PATH}` (默认 `tests/at/yaml/`) |
-| 测试文件目录 | `{TEST_FILES_DIR}` (默认 `tests/files/`，供 YAML 变量替换) |
+| 测试文件目录 | `{TEST_FILES_DIR}` (默认 `tests/at/files/`，供 YAML 变量替换) |
 | 应用名 | `{APP_NAME}` |
 | apt 包名 | `{APP_PACKAGE}` |
 | 应用二进制 | `{APP_BINARY}` |
@@ -49,7 +49,7 @@
 |--------|-----|
 | 项目路径 | `{PROJECT_ROOT}/` |
 | AT 测试目录 | `{AT_PATH}` (默认 `tests/at/yaml/`) |
-| 测试文件目录 | `{TEST_FILES_DIR}` (默认 `tests/files/`，供 YAML 变量替换) |
+| 测试文件目录 | `{TEST_FILES_DIR}` (默认 `tests/at/files/`，供 YAML 变量替换) |
 | 应用名 | `{APP_NAME}` |
 | apt 包名 | `{APP_PACKAGE}` |
 | 应用二进制 | `{APP_BINARY}` |
@@ -78,7 +78,7 @@
 |--------|-----|
 | 项目路径 | `{PROJECT_ROOT}/` |
 | AT 测试目录 | `{AT_PATH}` (默认 `tests/at/yaml/`) |
-| 测试文件目录 | `{TEST_FILES_DIR}` (默认 `tests/files/`，供 YAML 变量替换) |
+| 测试文件目录 | `{TEST_FILES_DIR}` (默认 `tests/at/files/`，供 YAML 变量替换) |
 | 应用名 | `{APP_NAME}` |
 | apt 包名 | `{APP_PACKAGE}` |
 | 应用二进制 | `{APP_BINARY}` |

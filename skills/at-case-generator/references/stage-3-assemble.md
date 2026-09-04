@@ -15,7 +15,7 @@ python3 <skill>/scripts/pipeline_assemble.py \
 
 # 2. 覆盖门禁（硬性 100%）
 python3 <skill>/scripts/cover.py \
-    --element-map tests/casefile/out/element-map.yaml \
+    --element-map tests/at/casefile/out/element-map.yaml \
     --testdir tests/at/yaml/ \
     --coverage-report tests/at/coverage-report.yaml \
     --threshold 100

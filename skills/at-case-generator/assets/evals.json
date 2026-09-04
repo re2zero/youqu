@@ -3,7 +3,7 @@
   "evals": [
     {
       "id": 1,
-      "prompt": "deepin-screen-recorder 的规范用例在 tests/casefile/out/cases_standard.yaml，元素映射表在 tests/casefile/out/element-map.yaml，帮我生成 AT 测试套件到 tests/at/，白名单 100% 覆盖。",
+      "prompt": "deepin-screen-recorder 的规范用例在 tests/at/casefile/out/cases_standard.yaml，元素映射表在 tests/at/casefile/out/element-map.yaml，帮我生成 AT 测试套件到 tests/at/，白名单 100% 覆盖。",
       "expected_output": "parse_cases_standard.py（规范产物→modules/*.input.json，不解析 xlsx、不扫描源码）→ element_manifest.py（element-map→element-coverage-manifest.yaml，菜单进 transient_items，TBD 进 unresolved）→ 主 agent 逐模块映射 output.json（manual→unsupported）→ pipeline_assemble.py 组装 → cover.py 100% 门禁。产出 yaml/*.suite.yaml + elements.yaml + cases_mapped.yaml。",
       "files": [],
       "assertions": [
@@ -16,8 +16,8 @@
     },
     {
       "id": 2,
-      "prompt": "直接用 tests/casefile/out/normalized/ 下已按模块规范化的用例 + element-map.yaml 生成 deepin-screen-recorder 的 AT suite。",
-      "expected_output": "parse_cases_standard.py --input tests/casefile/out/normalized/（整模块一片，不重复切分）→ 主 agent 逐模块映射 → pipeline_assemble.py → cover.py。",
+      "prompt": "直接用 tests/at/casefile/out/normalized/ 下已按模块规范化的用例 + element-map.yaml 生成 deepin-screen-recorder 的 AT suite。",
+      "expected_output": "parse_cases_standard.py --input tests/at/casefile/out/normalized/（整模块一片，不重复切分）→ 主 agent 逐模块映射 → pipeline_assemble.py → cover.py。",
       "files": [],
       "assertions": [
         "断言模块数与 normalized/ 目录一致（无额外 token 重切）",

@@ -35,7 +35,7 @@
 |------|------|--------|------|------|
 | PROJECT_ROOT | 是 | — | 项目根路径 | `/home/user/projects/deepin-music` |
 | AT_PATH | 是 | `tests/at/yaml/` | AT 测试目录（相对 PROJECT_ROOT） | `tests/at/yaml/` |
-| TEST_FILES_DIR | 否 | `tests/files/` | 测试文件目录（相对 PROJECT_ROOT），供 YAML 中 `${TEST_FILES_DIR}` 变量替换使用 | `tests/files/` |
+| TEST_FILES_DIR | 否 | `tests/at/files/` | 测试文件目录（相对 PROJECT_ROOT），供 YAML 中 `${TEST_FILES_DIR}` 变量替换使用 | `tests/at/files/` |
 | APP_NAME | 是 | — | 应用名 | `deepin-music` |
 | APP_PACKAGE | 是 | — | apt 包名 | `deepin-music` |
 | APP_BINARY | 是 | — | 应用二进制路径 | `/usr/bin/deepin-music` |

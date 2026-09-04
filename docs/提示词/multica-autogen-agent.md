@@ -55,7 +55,7 @@ MCP 不可用时跳过，报告中显式标注"MCP 不可用，跳过 UI 图谱�
 
 **场景一：全量生成（tests/at/ 为空）**
 - 用 multica repo checkout 获取源码。
-- 确定用例文件来源（xlsx/csv，名称与路径不定）：项目内常见位置（如 `autotests/casefile/`、`tests/casefile/`，按内容识别）；或由外界指定（issue/任务描述给出路径或附件）；两者皆无 → 走 feature-driven 模式（从需求/PR 生成，仍需源码提供元素全集）。
+- 确定用例文件来源（xlsx/csv，名称与路径不定）：项目内常见位置（如 `autotests/at/casefile/`、`tests/at/casefile/`，按内容识别）；或由外界指定（issue/任务描述给出路径或附件）；两者皆无 → 走 feature-driven 模式（从需求/PR 生成，仍需源码提供元素全集）。
 - 执行 at-suite-generator 管线（见第 4 节）。若前置已产出图谱，将 elements.yaml 与 expected-at-spi-elements.md 做差异对照。
 
 **场景二：完善补全（tests/at/ 已有内容）**

@@ -9,7 +9,7 @@
     },
     {
       "id": 2,
-      "prompt": "把 tests/casefile/out/normalized/ 下的用例转成可运行的 AT-SPI suite",
+      "prompt": "把 tests/at/casefile/out/normalized/ 下的用例转成可运行的 AT-SPI suite",
       "should_trigger": true,
       "reason": "normalized 已是规范产物 → 直接生成"
     },

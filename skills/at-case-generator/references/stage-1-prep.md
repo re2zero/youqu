@@ -21,12 +21,12 @@
 
 ```bash
 python3 <skill>/scripts/parse_cases_standard.py \
-    --input tests/casefile/out/cases_standard.yaml \
+    --input tests/at/casefile/out/cases_standard.yaml \
     --output tests/at/modules/ --app deepin-screen-recorder
 
 # 或直接用 normalized/（AI 规范化后按模块，含 manual/reason）
 python3 <skill>/scripts/parse_cases_standard.py \
-    --input tests/casefile/out/normalized/ \
+    --input tests/at/casefile/out/normalized/ \
     --output tests/at/modules/ --app deepin-screen-recorder
 ```
 
@@ -38,7 +38,7 @@ python3 <skill>/scripts/parse_cases_standard.py \
 
 ```bash
 python3 <skill>/scripts/element_manifest.py \
-    --element-map tests/casefile/out/element-map.yaml \
+    --element-map tests/at/casefile/out/element-map.yaml \
     --output tests/at/element-coverage-manifest.yaml
 ```
 

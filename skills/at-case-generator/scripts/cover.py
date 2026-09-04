@@ -17,7 +17,7 @@ Terminology (do not conflate):
     persistent elements. This is the ONLY exemption input this script reads.
 
 Usage:
-    cover.py --element-map tests/casefile/out/element-map.yaml \
+    cover.py --element-map tests/at/casefile/out/element-map.yaml \
         --testdir tests/at/yaml/ \
         [--coverage-report tests/at/coverage-report.yaml] \
         [--unreachable tests/at/unreachable.yaml] \
@@ -134,9 +134,9 @@ def main() -> int:
         description="AT-SPI element coverage gate over element-map (hard 100% target)",
         epilog=(
             "Examples:\n"
-            "  python3 cover.py --element-map tests/casefile/out/element-map.yaml \\\n"
+            "  python3 cover.py --element-map tests/at/casefile/out/element-map.yaml \\\n"
             "      --testdir tests/at/yaml/\n"
-            "  python3 cover.py --element-map tests/casefile/out/element-map.yaml \\\n"
+            "  python3 cover.py --element-map tests/at/casefile/out/element-map.yaml \\\n"
             "      --testdir tests/at/yaml/ --coverage-report tests/at/coverage-report.yaml\n"
             "\n"
             "Exit 0 if coverage >= threshold (default 100), 1 otherwise."

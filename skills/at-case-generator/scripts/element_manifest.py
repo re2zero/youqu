@@ -25,7 +25,7 @@ Naming:
     located at runtime by dtk_main_menu text.
 
 Usage:
-    element_manifest.py --element-map tests/casefile/out/element-map.yaml \
+    element_manifest.py --element-map tests/at/casefile/out/element-map.yaml \
         --output tests/at/element-coverage-manifest.yaml
 """
 

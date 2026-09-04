@@ -19,9 +19,9 @@ permission:
 
 ## 关联文件
 - PROJECT_ROOT: 当前项目
-- XLSX_PAH: $PROJECT_ROOT/tests/casefile/
+- XLSX_PAH: $PROJECT_ROOT/tests/at/casefile/
   存放xlsx原始的测试用例表，如果不存在，则暂停并提示用户。
-- TEST_FILES_DIR: $PROJECT_ROOT/tests/files/
+- TEST_FILES_DIR: $PROJECT_ROOT/tests/at/files/
   如果存在测试文件，需要在解析用例前了解有哪些测试文件，在对应的测试用例中使用。
 
 ## 何时使用
@@ -38,8 +38,8 @@ permission:
 
 1. 加载 `at-case-generator` 技能，阅读 references/ 下 pipeline-reference.md、suite-format.md、pitfalls.md
 2. **同时加载 `at-mapping-rules` 技能**，阅读步骤语义解析协议、selector 填写约束、强制规则、UNSUPPORTED 分类
-3. 确认 `$PROJECT_ROOT/tests/casefile/` 下有 xlsx 文件
-4. 确认 `$PROJECT_ROOT/tests/files/` 下有测试文件（如有）
+3. 确认 `$PROJECT_ROOT/tests/at/casefile/` 下有 xlsx 文件
+4. 确认 `$PROJECT_ROOT/tests/at/files/` 下有测试文件（如有）
 
 ## 管线流程
 

@@ -57,7 +57,7 @@ youqu at verify --suite tests/at/yaml/<module>/<module>.suite.yaml --spec-id <id
 
 ```bash
 python3 <skill>/scripts/cover.py \
-    --element-map tests/casefile/out/element-map.yaml \
+    --element-map tests/at/casefile/out/element-map.yaml \
     --testdir tests/at/yaml/ \
     --coverage-report tests/at/coverage-report.yaml \
     --threshold 100
