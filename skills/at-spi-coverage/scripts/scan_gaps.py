@@ -5,7 +5,9 @@ Scans C++/Qt/DTK source code for UI widget member variables that lack
 setObjectName() and setAccessibleName() calls. Operates at the *instance*
 level: knows which member variable is missing a name, not just which class.
 
-Dependencies: python3-clang-18, libclang-18-dev, PyYAML, Python stdlib.
+Dependencies: libclang (auto-located & self-healed by libclang_bootstrap.py:
+              env -> ldconfig -> user-local/system dirs -> pip install libclang),
+              PyYAML, Python stdlib.
 
 Usage:
     scan_gaps.py --src <source_dir> --build <build_dir> --output <output_dir>
@@ -37,40 +39,13 @@ logger = logging.getLogger("scan_gaps")
 # libclang setup — MUST call Config.set_library_path() BEFORE any import
 # ---------------------------------------------------------------------------
 
-_LIBCLANG_CANDIDATES = [
-    "/usr/lib/x86_64-linux-gnu",
-    "/usr/lib64",
-    "/usr/lib",
-    "/usr/lib/llvm-18/lib",
-    "/usr/lib/llvm-17/lib",
-    "/usr/lib/llvm-19/lib",
-]
+# libclang bootstrap — single source of truth (see libclang_bootstrap.py).
+# MUST run BEFORE `from clang.cindex import ...` so Config.set_library_file()
+# takes effect before the library is first loaded.
+from libclang_bootstrap import ensure_libclang
 
-_libclang_libpath: str | None = None
-for _base in _LIBCLANG_CANDIDATES:
-    _p = Path(_base)
-    if not _p.is_dir():
-        continue
-    try:
-        for _f in _p.iterdir():
-            if "libclang" in _f.name and _f.suffix in (".so", ".so.1"):
-                _libclang_libpath = _base
-                break
-    except OSError:
-        continue
-    if _libclang_libpath:
-        break
-
-if _libclang_libpath:
-    _key = "LD_LIBRARY_PATH"
-    _old = os.environ.get(_key, "")
-    if _libclang_libpath not in _old:
-        os.environ[_key] = f"{_libclang_libpath}:{_old}" if _old else _libclang_libpath
-    from clang.cindex import Config
-    Config.set_library_path(_libclang_libpath)
-    _LIBCLANG_READY = True
-else:
-    _LIBCLANG_READY = False
+_libclang_result = ensure_libclang()
+_LIBCLANG_READY = _libclang_result.found
 
 try:
     from clang.cindex import CursorKind, Index

@@ -90,7 +90,7 @@ Full stage details: `references/stage-1-prep.md`, `references/stage-2-generate.m
 | PyYAML | always | `pip install pyyaml` |
 | openpyxl | xlsx mode | `pip install openpyxl` |
 | `at-spi-coverage` skill | scan step | sibling skill (produces `coverage_scan/`) |
-| libclang bindings | scan step | `sudo apt install python3-clang-18 libclang-18-dev` |
+| libclang (binding + .so) | scan step | auto via `at-spi-coverage` bootstrap (sudo-free) |
 
 ## Errors & fallbacks
 

@@ -85,13 +85,21 @@ For a large project you may scan 1000+ `.cpp` files but see only ~90 in the by-f
 
 The script runs an environment check before any scanning and exits with code 1 + install hints if a required dependency is missing. You don't need to pre-verify — just run it; the check is automatic.
 
+**libclang (binding + .so) is auto-located and self-healed** by
+`scripts/libclang_bootstrap.py`: env (`LIBCLANG_LIBRARY_FILE` /
+`LIBCLANG_LIBRARY_PATH`) → `ldconfig -p` → user-local + system dirs →
+`pip install libclang`. The pip fallback (sudo-free, survives PEP 668) provides
+a **matched binding + .so pair** from one wheel, so a clean venv with neither
+installed still scans. The env-check prints the resolution source so you can
+tell which layer won.
+
 What it checks, by mode:
 
 | Dependency | C++ scan | QML scan | `--from-yaml` |
 |-----------|----------|----------|----------------|
 | pyyaml | required | required | required (reads YAML) |
-| python `clang` module | required | — | — |
-| libclang `.so` | required | — | — |
+| python `clang` module | auto (bootstrap, incl. pip fallback) | — | — |
+| libclang `.so` | auto (bootstrap, incl. pip fallback) | — | — |
 | libclang binding init (scan_gaps) | required | — | — |
 
 Example output when everything is present:
@@ -101,21 +109,26 @@ Example output when everything is present:
 环境检测
 ============================================================
   [✓] pyyaml                     已安装
-  [✓] python clang 模块          已安装
-  [✓] libclang 动态库            /usr/lib/x86_64-linux-gnu/libclang-17.so
+  [✓] libclang 绑定+动态库         /lib/x86_64-linux-gnu/libclang-18.so.18  (ldconfig)
   [✓] libclang 绑定可用          scan_gaps 可用
 ============================================================
 [PASS] 环境检测通过
 ============================================================
 ```
 
+`(<source>)` is one of `LIBCLANG_LIBRARY_FILE` / `LIBCLANG_LIBRARY_PATH` /
+`ldconfig` / `user-local|system` / `pip:libclang`. A `pip:libclang` tag means
+the sudo-free fallback installed the wheel bundle on the spot.
+
 When something is missing, each failing item prints its install command, plus a one-liner covering all C++ deps:
 
 ```
-  [✗] python clang 模块          未安装
-      sudo apt install python3-clang
+  [✗] libclang 绑定+动态库       未找到
+      设置 $LIBCLANG_LIBRARY_FILE=<path> 或确保可 pip install libclang
 ============================================================
 [FAIL] 环境检测未通过, 请按上述提示安装缺失依赖后重试。
+       脚本会自动 pip install libclang 兜底(免 sudo); 仍失败则设 $LIBCLANG_LIBRARY_FILE=<path>
        一键安装 (C++ 模式):  sudo apt install python3-clang libclang-18-dev && pip install pyyaml
 ============================================================
 ```
+

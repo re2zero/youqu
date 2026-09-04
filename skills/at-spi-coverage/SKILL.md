@@ -6,7 +6,7 @@ description: >
   (elements exercised by *.suite.yaml vs. scan total, transient menu items
   excluded). Auto-detects the AT case dir under tests/at/.
   Triggers: AT-SPI覆盖率, 覆盖率, coverage, AT 用例覆盖率, atcase, 控件缺口, gap 分析.
-version: "0.5.4"
+version: "0.5.5"
 license: MIT
 author: Uniontech
 ---
@@ -79,12 +79,21 @@ Semantics, total-source precedence, noise filter, and output: read `references/a
 ## Prerequisites
 
 ```bash
-# C++ scanning needs libclang Python bindings + the .so
-sudo apt install python3-clang libclang-18-dev   # match your system's libclang version (e.g. libclang-17-dev)
+# C++ scanning: libclang is AUTO-LOCATED + self-healed by
+# scripts/libclang_bootstrap.py — zero config on normal machines, sudo-free.
 pip install pyyaml
+
+# Offline/managed box only: install once, then set $LIBCLANG_LIBRARY_FILE.
+sudo apt install python3-clang libclang-18-dev  # match your system version
 
 # QML scanning and AT 用例覆盖率 need only Python stdlib (+ pyyaml)
 ```
+
+libclang resolution: `LIBCLANG_LIBRARY_FILE` → `LIBCLANG_LIBRARY_PATH` →
+`ldconfig` → user-local/system dirs → `pip install libclang` (sudo-free,
+PEP 668-aware; covers BOTH the Python binding and the .so in one matched
+pair). Disable the pip fallback with `$LIBCLANG_NO_PIP`. The env-check prints
+which layer won, e.g. `[✓] libclang 绑定+动态库 <path> (ldconfig)`.
 
 ## Gotchas
 
@@ -103,7 +112,7 @@ pip install pyyaml
 
 | Symptom | Cause / Fix |
 |---------|-------------|
-| `libclang not available` | `sudo apt install python3-clang libclang-18-dev` (match your system's libclang version) |
+| `libclang not available` | Auto-heals via pip: covers BOTH the Python binding and the .so (matched pair). Check the env-check's `(<source>)` tag. If `not-found`/`binding-missing`: offline box → set `LIBCLANG_LIBRARY_FILE=<path>` once, or `sudo apt install python3-clang libclang-18-dev` (match version). PEP 668 blocks pip → bootstrap already retries `--user`/`--break-system-packages`; verify network / `$LIBCLANG_NO_PIP` unset. |
 | `compile_commands: 0 个文件` | No `compile_commands.json` under `build*/`. Pass `--compile-commands <path>` explicitly, or accept the fallback (check `0 failed` in summary). |
 | Scan seems hung | Large projects take 2-5 min. The script prints progress every 20 files; if no progress lines for >1 min, check libclang imported cleanly. |
 | Coverage looks too low | Run `--by-type` and inspect whether a custom widget type is misclassified as non-interactive. Custom types are registered by `resolve_custom_types` scanning `.h` files for `class X : public DPushButton` patterns. |

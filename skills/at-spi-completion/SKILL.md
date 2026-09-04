@@ -305,10 +305,8 @@ skills/at-spi-coverage/scripts/
 （`scan_gaps.py` / `scan_qml.py`），保证补全前后用同一扫描器。
 Run `python3 scripts/<name>.py --help` for per-script options.
 
-## Dependencies
+`pip install pyyaml`
 
-`sudo apt install python3-clang-18 libclang-18-dev && pip install pyyaml`
-
-扫描器（`scan_gaps.py`）需要 libclang Python 绑定；未安装时会降级或报错。
+libclang（含 Python 绑定）由 `at-spi-coverage` 技能自动定位 + 自愈，无需手工安装。
 QML 扫描（`scan_qml.py`）纯 tokenizer 实现，无外部依赖。
 扫描器位于 `at-spi-coverage/scripts/`，本技能通过 `quality_gate.py` 运行时导入。

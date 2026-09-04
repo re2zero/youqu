@@ -376,27 +376,6 @@ def _print_block(title: str, ok: int, gap: int) -> None:
     print(f"  覆盖率        : {_pct(ok, total)}%")
 
 
-def _detect_libclang() -> tuple[bool, str]:
-    """Detect libclang .so path. Returns (found, path_or_reason)."""
-    candidates = [
-        "/usr/lib/x86_64-linux-gnu", "/usr/lib64", "/usr/lib",
-        "/usr/lib/llvm-18/lib", "/usr/lib/llvm-17/lib", "/usr/lib/llvm-19/lib",
-        "/usr/lib/llvm-16/lib",
-    ]
-    for base in candidates:
-        b = Path(base)
-        if not b.is_dir():
-            continue
-        try:
-            for f in b.iterdir():
-                if "libclang" in f.name and f.suffix in (".so", ".so.1") \
-                        and "cpp" not in f.name:
-                    return True, str(f)
-        except OSError:
-            continue
-    return False, "未在常见路径找到 libclang*.so"
-
-
 _ENV_LOG: list[str] = []
 
 
@@ -429,41 +408,36 @@ def _check_env(need_cpp: bool, need_qml: bool, from_yaml: bool) -> bool:
 
     # 2) C++ deps — only when actually scanning C++ (not --from-yaml, not --qml-only)
     if need_cpp and not from_yaml:
-        # clang python module
-        clang_mod_ok = False
-        try:
-            import clang.cindex  # noqa: F401
-            clang_mod_ok = True
-            _say("  [✓] python clang 模块          已安装")
-        except ImportError:
-            _say("  [✗] python clang 模块          未安装")
-            _say("      sudo apt install python3-clang")
+        # Bootstrap resolves .so + Python binding together, self-healing via
+        # pip when either is missing (sudo-free, PEP 668-aware). No manual
+        # binding check first — let ensure_libclang() do the whole job.
+        _add_scripts_to_path()
+        from libclang_bootstrap import ensure_libclang
+        _lc = ensure_libclang()
+        if _lc.found:
+            _say(f"  [✓] libclang 绑定+动态库         {_lc.display()}  ({_lc.source})")
+        else:
+            if _lc.source in ("LIBCLANG_LIBRARY_FILE", "LIBCLANG_LIBRARY_PATH"):
+                _say(f"  [✗] libclang {_lc.source} 指向的路径无效")
+                _say("      检查环境变量路径是否正确")
+            else:
+                _say("  [✗] libclang 绑定+动态库       未找到")
+                _say("      设置 $LIBCLANG_LIBRARY_FILE=<path> 或确保可 pip install libclang")
             all_ok = False
 
-        # libclang .so (only check if python module present, else double-error noise)
-        if clang_mod_ok:
-            found, info = _detect_libclang()
-            if found:
-                _say(f"  [✓] libclang 动态库            {info}")
-            else:
-                _say("  [✗] libclang 动态库            未找到")
-                _say("      sudo apt install libclang-18-dev  # 或匹配你的系统版本")
-                all_ok = False
-
         # libclang import actually works end-to-end
-        if clang_mod_ok:
-            _add_scripts_to_path()
-            try:
-                import scan_gaps as sg  # type: ignore
-                if not (sg._LIBCLANG_READY and sg._LIBCLANG_IMPORT_OK):
-                    _say("  [✗] libclang 绑定初始化失败     scan_gaps._LIBCLANG_READY=False")
-                    _say("      检查 libclang 版本与 python3-clang 是否一致")
-                    all_ok = False
-                else:
-                    _say("  [✓] libclang 绑定可用          scan_gaps 可用")
-            except Exception as e:
-                _say(f"  [✗] scan_gaps 导入异常          {e}")
+        _add_scripts_to_path()
+        try:
+            import scan_gaps as sg  # type: ignore
+            if not (sg._LIBCLANG_READY and sg._LIBCLANG_IMPORT_OK):
+                _say("  [✗] libclang 绑定初始化失败     scan_gaps._LIBCLANG_READY=False")
+                _say("      检查 libclang 版本与 python3-clang 是否一致")
                 all_ok = False
+            else:
+                _say("  [✓] libclang 绑定可用          scan_gaps 可用")
+        except Exception as e:
+            _say(f"  [✗] scan_gaps 导入异常          {e}")
+            all_ok = False
     else:
         _say("  [—] C++ 扫描依赖                跳过 (非 C++ 扫描模式)")
 
@@ -474,6 +448,7 @@ def _check_env(need_cpp: bool, need_qml: bool, from_yaml: bool) -> bool:
     _say("=" * 60)
     if not all_ok:
         _say("[FAIL] 环境检测未通过, 请按上述提示安装缺失依赖后重试。")
+        _say("       脚本会自动 pip install libclang 兜底(免 sudo); 仍失败则设 $LIBCLANG_LIBRARY_FILE=<path>")
         _say("       一键安装 (C++ 模式):  sudo apt install python3-clang libclang-18-dev && pip install pyyaml")
     else:
         _say("[PASS] 环境检测通过")
