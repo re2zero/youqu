@@ -719,6 +719,65 @@ class TestGetDogBasename:
         assert captured_app[0] == "deepin-terminal"
 
 
+    def test_get_dog_rebinds_when_cached_dead(self):
+        from src.at.executor.handlers import get_dog
+
+        dead_dog = unittest.mock.MagicMock()
+        dead_dog.obj.dead = True
+        fresh_dog = unittest.mock.MagicMock()
+        context = {"app": "test-app", "dog": dead_dog}
+        with unittest.mock.patch(
+            "src.at.executor.handlers._bind_dog",
+            return_value=fresh_dog,
+        ) as mock_bind:
+            result = get_dog(context, "deepin-terminal")
+        assert result is fresh_dog
+        mock_bind.assert_called_once_with("deepin-terminal")
+
+    def test_get_dog_rebinds_when_obj_is_none(self):
+        from src.at.executor.handlers import get_dog
+
+        broken_dog = unittest.mock.MagicMock()
+        broken_dog.obj = None
+        fresh_dog = unittest.mock.MagicMock()
+        context = {"app": "test-app", "dog": broken_dog}
+        with unittest.mock.patch(
+            "src.at.executor.handlers._bind_dog",
+            return_value=fresh_dog,
+        ) as mock_bind:
+            result = get_dog(context, "deepin-terminal")
+        assert result is fresh_dog
+        mock_bind.assert_called_once_with("deepin-terminal")
+
+    def test_get_dog_keeps_fresh_cached_dog(self):
+        from src.at.executor.handlers import get_dog
+
+        alive_dog = unittest.mock.MagicMock()
+        alive_dog.obj.dead = False
+        context = {"app": "test-app", "dog": alive_dog}
+        with unittest.mock.patch(
+            "src.at.executor.handlers._bind_dog",
+            return_value=unittest.mock.MagicMock(),
+        ) as mock_bind:
+            result = get_dog(context, "deepin-terminal")
+        assert result is alive_dog
+        mock_bind.assert_not_called()
+
+    def test_get_dog_keeps_stale_when_rebind_fails(self):
+        from src.at.executor.handlers import get_dog
+
+        dead_dog = unittest.mock.MagicMock()
+        dead_dog.obj.dead = True
+        context = {"app": "test-app", "dog": dead_dog}
+        with unittest.mock.patch(
+            "src.at.executor.handlers._bind_dog",
+            side_effect=RuntimeError("app not started"),
+        ) as mock_bind:
+            result = get_dog(context, "deepin-terminal")
+        assert result is dead_dog
+        mock_bind.assert_called_once_with("deepin-terminal")
+
+
 class TestWaitForAndSmartWait:
     def test_wait_condition_model_defaults(self):
         from src.at.parser.models import WaitCondition

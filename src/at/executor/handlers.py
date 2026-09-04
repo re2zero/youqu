@@ -38,15 +38,34 @@ def get_mk(context: dict):
     return context["mk"]
 
 
+def _bind_dog(app: str | None = None):
+    from src.dogtail_utils import DogtailUtils
+
+    if app and "/" in app:
+        atspi_name = os.path.basename(app.split()[0])
+    else:
+        atspi_name = app
+    return DogtailUtils(atspi_name) if atspi_name else DogtailUtils()
+
+
 def get_dog(context: dict, app: str | None = None):
     if context.get("dog") is None:
-        from src.dogtail_utils import DogtailUtils
-
-        if app and "/" in app:
-            atspi_name = os.path.basename(app.split()[0])
-        else:
-            atspi_name = app
-        context["dog"] = DogtailUtils(atspi_name) if atspi_name else DogtailUtils()
+        context["dog"] = _bind_dog(app)
+        return context["dog"]
+    dog = context["dog"]
+    try:
+        # AT-SPI 节点已失效（应用被 stopApp/重启后旧进程节点 dead）→
+        # dogtail 在 dead 节点上 findChildren 静默返回空列表，导致元素
+        # 误判为不存在。检测到 dead 时重新绑定当前进程。
+        if dog.obj is None or dog.obj.dead:
+            logger.warning("cached AT-SPI node dead (app restarted); rebinding dog")
+            try:
+                context["dog"] = _bind_dog(app)
+            except BaseException as exc:
+                # 应用可能尚未就绪，保留旧 dog，后续查找会再次触发重绑
+                logger.warning("rebind dog failed: %s; keeping stale dog", exc)
+    except BaseException:
+        pass
     return context["dog"]
 
 
