@@ -34,6 +34,23 @@ except ModuleNotFoundError:
 from src.mouse_key import MouseKey
 
 
+def _node_matches_accessible_id(node, accessible_id: str) -> bool:
+    """Check whether an AT-SPI node's accessible-id matches (exact or suffix).
+
+    Qt bridge encodes objectName into a dotted path via
+    QAccessibleBridgeUtils::accessibleId(), e.g.
+    "EditorApplication.Window...UnixAction". The requested id may be the
+    full path or the objectName suffix.
+    """
+    try:
+        node_id = node.get_accessible_id()
+    except Exception:
+        return False
+    if not node_id:
+        return False
+    return node_id == accessible_id or node_id.endswith("." + accessible_id)
+
+
 class DogtailUtils(MouseKey):
     """
     通过属性进行元素定位和操作。
@@ -155,7 +172,6 @@ class DogtailUtils(MouseKey):
         """
         logger.debug(f"鼠标移至元素 {element} 中心")
         self.move_to(*self.element_center(element))
-
     @staticmethod
     def __evalx(expr, element, recursive):
         """evalx"""
@@ -175,6 +191,30 @@ class DogtailUtils(MouseKey):
         if match_role_only:
             name = None
             role_name = match_role_only.group(1)
+        # accessible-id 形式: [accessible-id='xxx'] 或 name[@accessible-id='xxx']
+        accessible_id = None
+        match_aid = re.match(r"^(.*?)\[@accessible-id='([^']*)'\]$", name)
+        if match_aid:
+            name = match_aid.group(1)
+            accessible_id = match_aid.group(2)
+        match_aid_only = re.match(r"^\[accessible-id='([^']*)'\]$", name)
+        if match_aid_only:
+            name = None
+            accessible_id = match_aid_only.group(1)
+        if accessible_id:
+            elements = element.findChildren(
+                predicate.GenericPredicate(
+                    name=name or None, roleName=role_name
+                ),
+                recursive=recursive,
+            )
+            # accessible-id 无法用 GenericPredicate 表达，需二次过滤
+            elements = [
+                n
+                for n in elements
+                if _node_matches_accessible_id(n, accessible_id)
+            ]
+            return node, elements
         if name == "*":
             element = element.children
         else:
@@ -245,22 +285,35 @@ class DogtailUtils(MouseKey):
         self.find_element_by_attr(expr, index).click(3)
 
     def find_elements_by_accessible_id(self, accessible_id):
-        """通过 AT-SPI accessible attribute 查找元素。
+        """通过 AT-SPI accessible-id 查找元素。
 
-        AT-SPI get_attributes() 返回 ["key:value", ...] 列表，
-        accessible_id 存储在 "accessible" key 中。
+        Qt/DTK (Qt5/Qt6) 的 at-spi bridge 把 QObject::objectName 编码进
+        QAccessibleBridgeUtils::accessibleId() 返回的点分路径，例如
+        "EditorApplication.Window.Dtk::Widget::DTitlebar.AddButton"。
+        该 id 通过 pyatspi 的 get_accessible_id() 读取，不在
+        get_attributes() 中。
+
+        匹配规则：支持完整路径精确匹配，也支持 objectName 后缀匹配
+        （element-map 常只记录源码 setObjectName("X") 的短名，运行时
+        id 是 "父链.X" 长路径）。
         """
-        logger.debug(f"查找元素 accessible_id={accessible_id}")
+        if not accessible_id:
+            return []
+        target = str(accessible_id)
+        logger.debug(f"查找元素 accessible_id={target}")
 
         def _match(node):
             try:
-                attrs = node.get_attributes()
-                for a in attrs:
-                    if a.startswith("accessible:") and accessible_id in a:
-                        return True
+                node_id = node.get_accessible_id()
             except Exception:
-                pass
-            return False
+                return False
+            if not node_id:
+                return False
+            if node_id == target:
+                return True
+            # 后缀匹配: 真实 id "EditorApplication...UnixAction",
+            # element-map 存 "UnixAction"
+            return node_id.endswith("." + target)
 
         try:
             return self.obj.findChildren(_match, recursive=True)

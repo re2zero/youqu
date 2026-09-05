@@ -133,6 +133,10 @@ class MappingSelector(BaseModel):
     name: Optional[str] = None
     role: Optional[str] = None
     name_pattern: Optional[str] = None
+    # Qt6 bridge 把 objectName 编码进 get_accessible_id() 的点分路径；
+    # 生成链通过该字段透传，否则映射产物会静默丢弃。
+    accessible_id: Optional[str] = None
+    object_name: Optional[str] = None
 
 
 class MappingEntry(BaseModel):

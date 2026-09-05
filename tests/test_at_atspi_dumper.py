@@ -29,6 +29,7 @@ def _make_accessible(
     role_name: str = "panel",
     name: str = "test",
     attrs: str = "",
+    accessible_id: str = "",
     children: list | None = None,
 ) -> MagicMock:
     """Build a mock pyatspi.Accessible with the given properties."""
@@ -36,6 +37,10 @@ def _make_accessible(
     obj.get_role_name.return_value = role_name
     obj.get_name.return_value = name
     obj.get_attributes.return_value = attrs
+    if accessible_id:
+        obj.get_accessible_id.return_value = accessible_id
+    else:
+        obj.get_accessible_id.return_value = ""
     obj.get_child_count.return_value = len(children) if children else 0
     if children:
         obj.get_child_at_index.side_effect = lambda i: children[i]

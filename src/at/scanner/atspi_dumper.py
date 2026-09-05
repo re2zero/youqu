@@ -49,9 +49,9 @@ _STATE_MAP: dict[int, str] = {
 def _get_node_attrs(obj: pyatspi.Accessible) -> tuple[str, str]:
     """Extract object_name and accessible_id from AT-SPI object attributes.
 
-    AT-SPI attributes are a semicolon-separated ``"key:value"`` string
-    (Qt/DTK apps expose ``object-name`` for QWidget.objectName and
-    ``accessible-id`` there).
+    pyatspi 2.x ``get_attributes()`` returns a dict (e.g.
+    ``{'toolkit': 'gtk', 'window-type': 'normal'}``). Qt/DTK apps expose
+    ``object-name`` (QWidget.objectName) and ``accessible-id`` there.
 
     Returns (object_name, accessible_id).
     """
@@ -61,15 +61,19 @@ def _get_node_attrs(obj: pyatspi.Accessible) -> tuple[str, str]:
         raw = obj.get_attributes()
         if not raw:
             return object_name, accessible_id
-        for attr in raw.split(";"):
-            kv = attr.strip().split(":", 1)
-            if len(kv) != 2:
-                continue
-            key, value = kv[0].strip(), kv[1].strip()
-            if key == "object-name":
-                object_name = value
-            elif key == "accessible-id":
-                accessible_id = value
+        if isinstance(raw, dict):
+            object_name = raw.get("object-name", "")
+            accessible_id = raw.get("accessible-id", "")
+        elif isinstance(raw, str):
+            for attr in raw.split(";"):
+                kv = attr.strip().split(":", 1)
+                if len(kv) != 2:
+                    continue
+                key, value = kv[0].strip(), kv[1].strip()
+                if key == "object-name":
+                    object_name = value
+                elif key == "accessible-id":
+                    accessible_id = value
     except Exception:
         pass
     return object_name, accessible_id
@@ -83,6 +87,13 @@ def _extract_node(obj: pyatspi.Accessible, depth: int, stats: dict[str, int]) ->
         role_name = obj.get_role_name() or "unknown"
         name = obj.get_name() or ""
         object_name, accessible_id = _get_node_attrs(obj)
+        if not accessible_id:
+            # Qt6 bridge 把 objectName 编码进 accessibleId() 点分路径
+            # （QAccessibleBridgeUtils::accessibleId），不走 attributes。
+            try:
+                accessible_id = obj.get_accessible_id() or ""
+            except Exception:
+                accessible_id = ""
     except Exception:
         stats["errors"] += 1
         return {"role": "unknown", "name": "", "source": "runtime"}

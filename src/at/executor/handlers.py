@@ -333,6 +333,15 @@ def _find_parent_element(dog, attrs, idx=0):
         try:
             found = dog.find_elements_by_accessible_id(accessible_id)
             if found:
+                # 同名 accessible_id 可能匹配到隐藏幽灵节点（残留窗口实例）。
+                # 优先返回 showing 的节点，避免 idx=0 取到 extents=(0,0,0,0) 的
+                # 隐藏节点导致坐标点击失效或被 showing 守卫拦截。
+                for n in found:
+                    try:
+                        if n.showing:
+                            return n
+                    except BaseException:
+                        continue
                 try:
                     return found[idx]
                 except IndexError:
@@ -487,6 +496,37 @@ def handle_mouse_drag(step: SuiteActionStep, context: dict) -> None:
     mk.drag_to(x, y)
 
 
+def _do_element_action(element, action: str, attrs: dict) -> None:
+    """Trigger a DMenu menu item via its AT-SPI action.
+
+    Only used for menu items whose AT-SPI showing/extents lag behind the
+    visible menu (dogtail sees stale (0,y) extents). doActionNamed('Press')
+    activates the focused menu item — for a freshly opened menu the focused
+    item is the default (first) one, so this only works reliably when the
+    target IS the focused item. Never falls back to coordinate clicks:
+    stale extents would click the screen top-left and steal window focus.
+    """
+    candidates = {
+        "click": ["Press", "click", "press"],
+        "right_click": ["Press", "click"],
+        "double_click": ["Press", "click"],
+    }.get(action, ["Press", "click"])
+    tried = set()
+    for name in candidates:
+        if name in tried:
+            continue
+        tried.add(name)
+        try:
+            element.doActionNamed(name)
+            logger.info("element_action via AT-SPI action %r (selector=%s)", name, attrs)
+            return
+        except BaseException:
+            continue
+    raise ElementNotFound(
+        f"menu item action failed (AT-SPI action unavailable); selector={attrs}"
+    )
+
+
 _ELEMENT_DO_WHITELIST = {"click", "right_click", "double_click", "focus", "point"}
 
 
@@ -503,6 +543,41 @@ def handle_element_action(step: SuiteActionStep, context: dict) -> None:
         raise ValueError(
             f"Unknown element action '{action}'. Supported: {sorted(_ELEMENT_DO_WHITELIST)}"
         )
+    # 守卫: 拦截完全无坐标的隐藏节点（extents 全 0，如菜单关闭时的
+    # 幽灵重复实例），避免 dogtail Node.click() 按 (0,0) 误点屏幕左上角。
+    # DTK DMenu 弹出后菜单项 AT-SPI showing/extents 状态可能滞后：
+    #   - 普通控件: showing=False 但坐标有效 → 正常坐标点击
+    #   - menu item: showing=False 且 extents 为 (0,y) 假坐标 → 走
+    #     _do_element_action (AT-SPI action)，不依赖坐标
+    use_action = False
+    try:
+        role = getattr(element, "roleName", "") or ""
+    except BaseException:
+        role = ""
+    is_menu_item = "menu item" in role.lower()
+    if action in ("click", "right_click", "double_click"):
+        try:
+            ex, ey, ew, eh = element.extents
+            if ew <= 0 or eh <= 0 or (ex <= 0 and ey <= 0):
+                raise ElementNotFound(
+                    f"element has no valid coordinates (extents={element.extents}), "
+                    f"refusing to click; selector={attrs}"
+                )
+            if is_menu_item:
+                # 菜单项: showing=False 但坐标有值(可能滞后) → 用 action 触发
+                try:
+                    if not element.showing:
+                        use_action = True
+                except BaseException:
+                    pass
+        except ElementNotFound:
+            raise
+        except BaseException:
+            # 探测失败时不阻塞（保守放行，避免误杀可用元素）
+            pass
+    if use_action:
+        _do_element_action(element, action, attrs)
+        return
     if action == "click":
         try:
             element.click()
@@ -533,6 +608,17 @@ def handle_element_set_value(step: SuiteActionStep, context: dict) -> None:
     attrs = resolve_step_attrs(step, elements)
     idx = attrs.get("index", 0)
     element = find_element(dog, attrs, idx)
+    try:
+        ex, ey, ew, eh = element.extents
+        if ew <= 0 or eh <= 0 or (ex <= 0 and ey <= 0):
+            raise ElementNotFound(
+                f"element has no valid coordinates (extents={element.extents}), "
+                f"refusing to click; selector={attrs}"
+            )
+    except ElementNotFound:
+        raise
+    except BaseException:
+        pass
     element.click()
     mk.input_message(step.text or "")
 
@@ -560,8 +646,6 @@ def handle_dtk_main_menu(step: SuiteActionStep, context: dict) -> None:
             raise
     else:
         nav.cancel()
-
-
 def handle_dtk_context_menu(step: SuiteActionStep, context: dict) -> None:
     from src.at.executor.menu_nav import AtMenuNavigator
 

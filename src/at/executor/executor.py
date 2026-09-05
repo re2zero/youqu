@@ -65,16 +65,21 @@ def _wait_for_selector(wait_cond, context: dict[str, Any]) -> bool:
     if not sel:
         return False
     name = sel.get("name")
-    if not name:
+    accessible_id = sel.get("accessible_id")
+    if not name and not accessible_id:
         return False
-    expr = f"$//{name}/"
     dog = get_dog(context, context.get("app") or "")
     deadline = time.time() + wait_cond.timeout / 1000.0
     interval = wait_cond.interval / 1000.0
     while time.time() < deadline:
         try:
-            if dog.find_elements_by_attr(expr):
-                return True
+            if accessible_id:
+                if dog.find_elements_by_accessible_id(accessible_id):
+                    return True
+            else:
+                expr = f"$//{name}/"
+                if dog.find_elements_by_attr(expr):
+                    return True
         except Exception:
             pass
         time.sleep(interval)
@@ -89,11 +94,15 @@ def _extract_selector_from_step(
         attrs = elements[step.ref]
         name = attrs.get("name")
         role = attrs.get("role")
-        if name or role:
-            return {"name": name, "role": role}
+        accessible_id = attrs.get("accessible_id")
+        if name or role or accessible_id:
+            d = {"name": name, "role": role}
+            if accessible_id:
+                d["accessible_id"] = accessible_id
+            return d
     if step.selector:
         d = {k: v for k, v in step.selector.items() if v is not None}
-        if d.get("name") or d.get("role"):
+        if d.get("name") or d.get("role") or d.get("accessible_id"):
             return d
     return None
 
@@ -116,11 +125,8 @@ def _peek_next_selector(
 def _smart_wait(target: dict, timeout_s: float, context: dict[str, Any]) -> bool:
     name = target.get("name")
     role = target.get("role")
-    if not name and not role:
-        time.sleep(timeout_s)
-        return False
-    expr = f"$//{name}/" if name else "$/"
-    if expr == "$/":
+    accessible_id = target.get("accessible_id")
+    if not name and not role and not accessible_id:
         time.sleep(timeout_s)
         return False
     dog = get_dog(context, context.get("app") or "")
@@ -128,8 +134,16 @@ def _smart_wait(target: dict, timeout_s: float, context: dict[str, Any]) -> bool
     interval = 0.2
     while time.time() < deadline:
         try:
-            if dog.find_elements_by_attr(expr):
-                return True
+            if accessible_id:
+                if dog.find_elements_by_accessible_id(accessible_id):
+                    return True
+            else:
+                expr = f"$//{name}/" if name else "$/"
+                if expr == "$/":
+                    time.sleep(timeout_s)
+                    return False
+                if dog.find_elements_by_attr(expr):
+                    return True
         except Exception:
             pass
         time.sleep(interval)
