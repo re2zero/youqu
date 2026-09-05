@@ -178,7 +178,7 @@ class TestHandlers:
     def test_all_handlers_callable(self):
         from src.at.executor.handlers import HANDLERS
 
-        assert len(HANDLERS) == 32
+        assert len(HANDLERS) == 33
         for name, handler in HANDLERS.items():
             assert callable(handler), f"{name} not callable"
 

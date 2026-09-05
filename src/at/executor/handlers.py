@@ -691,6 +691,64 @@ def handle_dtk_context_menu(step: SuiteActionStep, context: dict) -> None:
         # No items to select — dismiss the unused menu
         nav.cancel()
 
+def handle_dtk_dropdown_menu(step: SuiteActionStep, context: dict) -> None:
+    """Select an item from a DTK DDropdownMenu (bottom-bar dropdown).
+
+    DDropdownMenu (used by deepin-editor for format/encoding/highlight
+    selectors) pops its DMenu up on click; the popup menu items are NOT
+    exposed to AT-SPI (verified: gi fresh query finds no menu item nodes
+    while the menu is visibly open), so element_action by accessible_id
+    cannot target them directly. The reliable path is:
+      1. click the trigger button (persistent node, via selector/coords)
+      2. keyboard-navigate the open DMenu (Up/Down + Return) via
+         AtMenuNavigator — DMenu handles its own keyboard loop, no AT-SPI
+         dependency.
+    """
+    app_name = context.get("app") or ""
+    dog = get_dog(context, app_name)
+    elements = context.get("elements") or {}
+
+    attrs = resolve_step_attrs(step, elements)
+    items = attrs.get("menu", []) or attrs.get("items", [])
+    if not items:
+        name = attrs.get("name", "")
+        if name:
+            items = [name]
+    if not items:
+        raise ValueError(
+            "dtk_dropdown_menu requires items (menu item text to select), "
+            f"selector={attrs}"
+        )
+
+    # 1. 点击触发按钮打开菜单
+    trigger_attrs = {k: v for k, v in attrs.items() if k != "items" and k != "menu"}
+    if trigger_attrs.get("name") or trigger_attrs.get("role") or trigger_attrs.get(
+        "accessible_id"
+    ) or trigger_attrs.get("parent") or trigger_attrs.get("x") is not None:
+        try:
+            idx = trigger_attrs.get("index", 0)
+            element = find_element(dog, trigger_attrs, idx)
+            element.click()
+            time.sleep(0.5)
+        except BaseException:
+            # 触发按钮定位/点击失败时回退坐标
+            x, y = resolve_coordinates(trigger_attrs, context)
+            mk = get_mk(context)
+            mk.click(x, y)
+            time.sleep(0.5)
+    else:
+        raise ElementNotFound(f"dtk_dropdown_menu: no trigger locator: {attrs}")
+
+    # 2. 键盘导航选择菜单项
+    from src.at.executor.menu_nav import AtMenuNavigator
+
+    nav = AtMenuNavigator(app_name)
+    try:
+        nav.select(items)
+    except BaseException:
+        nav.cancel()
+        raise
+
 
 def handle_dbus_call(step: SuiteActionStep, context: dict) -> None:
     from src.dbus_utils import DbusUtils
@@ -1041,6 +1099,7 @@ HANDLERS: dict[str, Callable[[SuiteActionStep, dict], None]] = {
     "element_set_value": handle_element_set_value,
     "dtk_main_menu": handle_dtk_main_menu,
     "dtk_context_menu": handle_dtk_context_menu,
+    "dtk_dropdown_menu": handle_dtk_dropdown_menu,
     "dbus_call": handle_dbus_call,
     "dbus_get_property": handle_dbus_get_property,
     "file_dialog_select": handle_file_dialog_select,

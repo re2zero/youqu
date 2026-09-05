@@ -78,6 +78,7 @@ QAction/DAction/QShortcut 是纯 QObject，**没有 setAccessibleName 方法**�
   wait: 1.0
 ```
 
+
 ### 5.2 键盘导航方向（实测陷阱）
 
 **DDropdownMenu 菜单向上展开**（deepin-editor 底部栏，菜单弹出在按钮上方）：
@@ -98,7 +99,27 @@ DMenu 弹出后菜单项 AT-SPI 状态可能滞后：
 |---|---|
 | 主菜单（标题栏） | `dtk_main_menu` + `items`（键盘导航，menu_nav 处理） |
 | 右键菜单 | `dtk_context_menu` + selector（定位右键位置）+ `items` |
-| DDropdownMenu 下拉 | 点触发按钮（element_action PToolButton）→ 键盘导航菜单项 |
+| DDropdownMenu 下拉 | `dtk_dropdown_menu` + selector（触发按钮）+ `items`（见 §5.5） |
+### 5.5 DDropdownMenu 语义化选择（推荐）
+
+**实测结论（deepin-editor）**：DTK DMenu 弹出后，菜单项对 AT-SPI **完全不可见**——
+gi 全新查询找不到任何 menu item / popup menu 节点（即使菜单在屏幕上可见）。
+因此 `element_action + accessible_id` 无法直接点击弹出菜单项（extents 是
+假坐标、`doActionNamed('Press')` 激活的是键盘聚焦项而非目标项）。
+
+**正确方式**：用 `dtk_dropdown_menu` action（引擎专用 handler，内部=点触发
+按钮 + DMenu 键盘导航，不依赖 AT-SPI 菜单项可见性）：
+
+```yaml
+- action: dtk_dropdown_menu
+  selector:
+    accessible_id: PToolButton   # DDropdownMenu 触发按钮（持久节点）
+  items: [Windows]                # 目标菜单项文本（精确匹配）
+```
+
+已实测（deepin-editor 格式菜单）：`items: [Windows]` 成功把行尾格式从
+Unix 切到 Windows（OCR 验证底栏文本变化）。DDropdownMenu 的编码/高亮/
+视图模式选择器同理。
 
 ## 6. 幽灵节点与定位歧义
 
