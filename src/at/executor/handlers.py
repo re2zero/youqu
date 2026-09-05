@@ -691,6 +691,31 @@ def handle_dtk_context_menu(step: SuiteActionStep, context: dict) -> None:
         # No items to select — dismiss the unused menu
         nav.cancel()
 
+def _menu_item_text_by_accessible_id(dog, accessible_id: str) -> str:
+    """Resolve a menu item's display text from its objectName (accessible_id suffix).
+
+    Qt6 bridge encodes QObject::objectName into the accessible_id dotted
+    path suffix (e.g. '...DropdownMenu.UnixAction'); the same node's AT-SPI
+    name is the display text ('Unix'). Menu items exist in the AT-SPI tree
+    while their menu is CLOSED (persistent placeholders), so this lookup
+    must happen before opening the menu. Returns "" when no match.
+    """
+    if not accessible_id:
+        return ""
+    try:
+        nodes = dog.find_elements_by_accessible_id(accessible_id)
+        for n in nodes:
+            try:
+                role = getattr(n, "roleName", "") or ""
+                if "menu item" in role.lower() and getattr(n, "name", ""):
+                    return n.name
+            except BaseException:
+                continue
+    except BaseException:
+        pass
+    return ""
+
+
 def handle_dtk_dropdown_menu(step: SuiteActionStep, context: dict) -> None:
     """Select an item from a DTK DDropdownMenu (bottom-bar dropdown).
 
@@ -716,9 +741,17 @@ def handle_dtk_dropdown_menu(step: SuiteActionStep, context: dict) -> None:
             items = [name]
     if not items:
         raise ValueError(
-            "dtk_dropdown_menu requires items (menu item text to select), "
-            f"selector={attrs}"
+            "dtk_dropdown_menu requires items (menu item text or objectName "
+            "suffix), selector={attrs}"
         )
+
+    # items 若是 objectName 后缀(如 UnixAction), 菜单关闭态树里有对应节点
+    # (accessible_id 后缀=objectName, name=显示文本)。在点触发按钮前反查
+    # 显示文本 —— 菜单弹出后节点消失, 无法再查。
+    resolved_items = []
+    for item in items:
+        text = _menu_item_text_by_accessible_id(dog, item)
+        resolved_items.append(text if text else item)
 
     # 1. 点击触发按钮打开菜单
     trigger_attrs = {k: v for k, v in attrs.items() if k != "items" and k != "menu"}
@@ -744,7 +777,7 @@ def handle_dtk_dropdown_menu(step: SuiteActionStep, context: dict) -> None:
 
     nav = AtMenuNavigator(app_name)
     try:
-        nav.select(items)
+        nav.select(resolved_items)
     except BaseException:
         nav.cancel()
         raise

@@ -117,9 +117,21 @@ gi 全新查询找不到任何 menu item / popup menu 节点（即使菜单在�
   items: [Windows]                # 目标菜单项文本（精确匹配）
 ```
 
-已实测（deepin-editor 格式菜单）：`items: [Windows]` 成功把行尾格式从
-Unix 切到 Windows（OCR 验证底栏文本变化）。DDropdownMenu 的编码/高亮/
-视图模式选择器同理。
+**items 也支持 objectName 后缀**（无需手写显示文本）：菜单关闭时 AT-SPI
+树里菜单项节点天然携带 `accessible_id 后缀=objectName` 与 `name=显示文本`
+的映射，引擎在打开菜单前自动反查。从代码的 setObjectName 直接可得：
+
+```yaml
+  items: [WindowsAction]   # objectName 后缀 → 运行时反查显示文本 'Windows'
+```
+
+实测反查（deepin-editor）：`UnixAction→Unix`、`WindowsAction→Windows`、
+`EditView→编辑模式`、`PActUtf8→UTF-8`。写用例时优先用 objectName 后缀，
+它来自代码（稳定、可 grep），不依赖手抄界面文本。
+
+已实测（deepin-editor 格式菜单）：`items: [Windows]` 与 `items: [WindowsAction]`
+都成功把行尾格式从 Unix 切到 Windows（OCR 验证底栏文本变化）。
+DDropdownMenu 的编码/高亮/视图模式选择器同理。
 
 ## 6. 幽灵节点与定位歧义
 
