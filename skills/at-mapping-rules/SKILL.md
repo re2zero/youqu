@@ -123,6 +123,10 @@ If the button is not in at-tree, mark the step UNSUPPORTED (see Rule 9).
 
 ## Selector Filling Constraints
 
+> **先读** `references/selector-guide.md`（Qt6 ObjectName→accessible_id 机制、
+> DTK 菜单操作、幽灵节点、常见错误）。以下约束是其精华版。
+>
+
 ### Constraint 1: At Least One Locator
 
 Every `element_action`, `mouse_click`, `assert_element` step MUST have a
