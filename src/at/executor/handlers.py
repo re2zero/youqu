@@ -543,6 +543,20 @@ def handle_element_action(step: SuiteActionStep, context: dict) -> None:
         raise ValueError(
             f"Unknown element action '{action}'. Supported: {sorted(_ELEMENT_DO_WHITELIST)}"
         )
+    # 智能分派: accessible_id 定位到菜单项(关闭态)且要点击 → 自动菜单导航
+    # (识别父菜单类型 → 打开菜单 → 键盘导航选择), 无需 dtk_dropdown_menu。
+    if attrs.get("accessible_id"):
+        try:
+            from src.at.executor.intelligent import dispatch
+
+            handled = dispatch(dog, attrs, action, context, element=element)
+            if handled:
+                return
+        except ElementNotFound:
+            raise
+        except BaseException as exc:
+            # 分派失败(如菜单导航不可用)时回退传统路径, 保留行为
+            logger.warning("intelligent dispatch failed (%s); fallback", exc)
     # 守卫: 拦截完全无坐标的隐藏节点（extents 全 0，如菜单关闭时的
     # 幽灵重复实例），避免 dogtail Node.click() 按 (0,0) 误点屏幕左上角。
     # DTK DMenu 弹出后菜单项 AT-SPI showing/extents 状态可能滞后：
@@ -995,6 +1009,14 @@ def handle_assert_element(step: SuiteActionStep, context: dict) -> None:
     logger = logging.getLogger(__name__)
     dog = get_dog(context, context.get("app") or "")
     attrs = _assert_step_attrs(step, context)
+    if attrs and attrs.get("accessible_id"):
+        # accessible_id 断言: 用 get_accessible_id 通道 (支持菜单项关闭态)
+        logger.info(f"断言元素存在(accessible_id)<{attrs['accessible_id']}>")
+        if not dog.find_elements_by_accessible_id(attrs["accessible_id"]):
+            raise AssertionError(
+                f"元素不存在！！！accessible_id= <{attrs['accessible_id']}>"
+            )
+        return
     if attrs and attrs.get("child_index") is not None:
         logger.info(f"断言子元素存在<{attrs}>")
         try:
@@ -1011,9 +1033,15 @@ def handle_assert_element(step: SuiteActionStep, context: dict) -> None:
 def handle_assert_not_exists(step: SuiteActionStep, context: dict) -> None:
     import logging
 
-    logger = logging.getLogger(__name__)
     dog = get_dog(context, context.get("app") or "")
     attrs = _assert_step_attrs(step, context)
+    if attrs and attrs.get("accessible_id"):
+        logger.info(f"断言元素不存在(accessible_id)<{attrs['accessible_id']}>")
+        if dog.find_elements_by_accessible_id(attrs["accessible_id"]):
+            raise AssertionError(
+                f"元素不应存在！！！accessible_id= <{attrs['accessible_id']}>"
+            )
+        return
     if attrs and attrs.get("child_index") is not None:
         logger.info(f"断言子元素不存在<{attrs}>")
         try:
