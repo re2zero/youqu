@@ -99,7 +99,7 @@ DMenu 弹出后菜单项 AT-SPI 状态可能滞后：
 |---|---|
 | 主菜单（标题栏） | `dtk_main_menu` + `items`（键盘导航，menu_nav 处理） |
 | 右键菜单 | `dtk_context_menu` + selector（定位右键位置）+ `items` |
-| DDropdownMenu 下拉 | `dtk_dropdown_menu` + selector（触发按钮）+ `items`（见 §5.5） |
+| DDropdownMenu 下拉 | `element_action` + `accessible_id`（智能分派，见 §5.5）；歧义时 `dtk_dropdown_menu` |
 ### 5.5 DDropdownMenu 语义化选择（推荐）
 
 **实测结论（deepin-editor）**：DTK DMenu 弹出后，菜单项对 AT-SPI **完全不可见**——
@@ -107,31 +107,42 @@ gi 全新查询找不到任何 menu item / popup menu 节点（即使菜单在�
 因此 `element_action + accessible_id` 无法直接点击弹出菜单项（extents 是
 假坐标、`doActionNamed('Press')` 激活的是键盘聚焦项而非目标项）。
 
-**正确方式**：用 `dtk_dropdown_menu` action（引擎专用 handler，内部=点触发
-按钮 + DMenu 键盘导航，不依赖 AT-SPI 菜单项可见性）：
+**首选方式（智能分派）**：直接写菜单项的 objectName，引擎自动分派——
+识别关闭态菜单项节点（parent popup accessible_id 段模式）→ 反查显示文本 →
+点触发按钮打开菜单 → AtMenuNavigator 键盘导航选择：
 
 ```yaml
-- action: dtk_dropdown_menu
+- action: element_action
   selector:
-    accessible_id: PToolButton   # DDropdownMenu 触发按钮（持久节点）
-  items: [Windows]                # 目标菜单项文本（精确匹配）
+    accessible_id: WindowsAction   # 菜单项 objectName，引擎自动菜单导航
+  do: click
 ```
 
-**items 也支持 objectName 后缀**（无需手写显示文本）：菜单关闭时 AT-SPI
-树里菜单项节点天然携带 `accessible_id 后缀=objectName` 与 `name=显示文本`
-的映射，引擎在打开菜单前自动反查。从代码的 setObjectName 直接可得：
-
-```yaml
-  items: [WindowsAction]   # objectName 后缀 → 运行时反查显示文本 'Windows'
-```
+**显示文本自动反查**：菜单关闭时 AT-SPI 树里菜单项节点天然携带
+`accessible_id 后缀=objectName` 与 `name=显示文本` 的映射，引擎在打开
+菜单前自动反查，无需手抄界面文本。从代码的 setObjectName 直接可得：
 
 实测反查（deepin-editor）：`UnixAction→Unix`、`WindowsAction→Windows`、
 `EditView→编辑模式`、`PActUtf8→UTF-8`。写用例时优先用 objectName 后缀，
 它来自代码（稳定、可 grep），不依赖手抄界面文本。
 
-已实测（deepin-editor 格式菜单）：`items: [Windows]` 与 `items: [WindowsAction]`
-都成功把行尾格式从 Unix 切到 Windows（OCR 验证底栏文本变化）。
-DDropdownMenu 的编码/高亮/视图模式选择器同理。
+**歧义回退**：仅当 4 个 DDropdownMenu 触发按钮 aid 全同（PToolButton）、
+智能分派找不到唯一触发按钮而需要 `index` 显式消歧时，才用 `dtk_dropdown_menu`：
+
+```yaml
+- action: dtk_dropdown_menu
+  selector:
+    accessible_id: PToolButton   # DDropdownMenu 触发按钮（持久节点）
+  items: [WindowsAction]          # objectName 后缀 → 运行时反查显示文本 'Windows'
+```
+
+`dtk_dropdown_menu` 的 `items` 同时支持显示文本与 objectName 后缀（引擎
+打开菜单前自动反查）。已实测（deepin-editor 格式菜单）：`items: [Windows]`
+与 `items: [WindowsAction]` 都成功把行尾格式从 Unix 切到 Windows（OCR
+验证底栏文本变化）。DDropdownMenu 的编码/高亮/视图模式选择器同理。
+而 `element_action + accessible_id: WindowsAction` 亦已实测通过（同一
+引擎自动菜单导航路径）。
+
 
 ## 6. 幽灵节点与定位歧义
 
