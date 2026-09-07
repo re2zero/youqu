@@ -7,6 +7,7 @@ import shlex
 import signal
 import subprocess
 import time
+from pathlib import Path
 from typing import Any, Callable
 
 from src.at.parser.models import SuiteActionStep
@@ -1143,6 +1144,99 @@ def handle_assert_ocr_not_exists(step: SuiteActionStep, context: dict) -> None:
     text = step.value or step.expected or ""
     AssertCommon.assert_ocr_not_exist(str(text))
 
+def handle_assert_vlm_reference(step: SuiteActionStep, context: dict) -> None:
+    """VLM reference-image assertion: compose expected vs actual, judge visually.
+
+    Fields:
+      path    — reference image (expected state), relative to suite dir or absolute
+      text    — assertion feature description (what state is being verified)
+      expected— judgment mode: "strict" (default, any style diff => FAIL)
+                or "tolerant" (only specified feature matters)
+    """
+    from src.vlm.config import VLMConfig
+    from src.vlm.vlm_locator import create_vlm_locator
+
+    config = VLMConfig()
+    if not config.is_available():
+        raise AssertionError(
+            "assert_vlm_reference: VLM 未启用 (VLM_ENABLED=false) 或无 httpx"
+        )
+    locator = create_vlm_locator(config)
+    if not locator.is_available():
+        raise AssertionError(
+            f"assert_vlm_reference: VLM 服务不可用 ({config.backend.base_url})"
+        )
+
+    ref_path = step.path or step.value or ""
+    if not ref_path:
+        raise AssertionError("assert_vlm_reference: 缺少 reference 图片 (path 字段)")
+    if not os.path.isabs(ref_path):
+        base = Path(context.get("suite_dir") or context.get("cwd") or os.getcwd())
+        candidate = base / ref_path
+        if not candidate.is_file():
+            # Suite files live in <output>/<module>/ while references/
+            # live at the output root — search upward like _load_elements.
+            for parent in base.parents:
+                p = parent / ref_path
+                if p.is_file():
+                    candidate = p
+                    break
+        ref_path = str(candidate)
+    if not os.path.exists(ref_path):
+        raise AssertionError(f"assert_vlm_reference: 参考图不存在: {ref_path}")
+
+    feature_raw = step.text or step.prompt or "界面整体状态"
+    feature = feature_raw
+    mode = str(step.expected or "strict").lower()
+    if "|" in feature_raw:
+        parts = feature_raw.split("|")
+        feature = parts[0].strip()
+        mode = parts[1].strip().lower()
+    if mode not in ("strict", "tolerant"):
+        mode = "strict"
+
+    # 1. capture actual screen
+    from src.vlm.screenshot import capture_screen
+    import io
+
+    raw = capture_screen()
+    if not raw:
+        raise AssertionError("assert_vlm_reference: 无法截取屏幕")
+    actual_path = os.path.join(
+        config.evidence_dir, f"vlm_ref_actual_{int(time.time())}.png"
+    )
+    from PIL import Image
+
+    Image.open(io.BytesIO(raw)).convert("RGB").save(actual_path)
+
+    # 2. judge via VLM (compose inside locator)
+    result = locator.evaluate_with_reference(
+        reference_path=ref_path,
+        actual_path=actual_path,
+        feature=feature,
+        mode=mode,
+        ignore_patterns=step.ignore,
+    )
+    if result is None:
+        raise AssertionError("assert_vlm_reference: VLM 返回空结果")
+
+    logger.info(
+        "VLM 参考图断言: verdict=%s confidence=%.2f feature=%s reason=%s",
+        result.verdict,
+        result.confidence,
+        feature,
+        result.reason,
+    )
+    if result.verdict == "UNSURE" or result.confidence < 0.6:
+        raise AssertionError(
+            f"VLM 参考图断言不确定 (confidence={result.confidence:.2f}, UNSURE): "
+            f"feature={feature} reason={result.reason} evidence={actual_path}"
+        )
+    if result.verdict == "FAIL":
+        raise AssertionError(
+            f"VLM 参考图断言失败: feature={feature} reason={result.reason} "
+            f"evidence={actual_path}"
+        )
 
 HANDLERS: dict[str, Callable[[SuiteActionStep, dict], None]] = {
     "session_start": handle_session_start,
@@ -1178,4 +1272,5 @@ HANDLERS: dict[str, Callable[[SuiteActionStep, dict], None]] = {
     "assert_image_not_exists": handle_assert_image_not_exists,
     "assert_ocr_exists": handle_assert_ocr_exists,
     "assert_ocr_not_exists": handle_assert_ocr_not_exists,
+    "assert_vlm_reference": handle_assert_vlm_reference,
 }

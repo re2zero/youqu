@@ -63,6 +63,7 @@ except ImportError:
             "assert_image_not_exists",
             "assert_ocr_exists",
             "assert_ocr_not_exists",
+            "assert_vlm_reference",
         }
     )
 
@@ -388,6 +389,13 @@ def _step_to_action(step: CaseStep) -> SuiteActionStep | None:
 
         if step.action == "assert_ocr_not_exists":
             return SuiteActionStep(action="assert_ocr_not_exists", value=step.text)
+
+    if step.element_hint == ElementHint.vlm_assert:
+        return SuiteActionStep(
+            action="assert_vlm_reference",
+            path=step.value,
+            text=step.text,
+        )
 
     return _step_to_action_fallback(step)
 

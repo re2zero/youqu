@@ -226,6 +226,7 @@ def cmd_record(args):
             output_dir=args.output,
             gui_mode=gui_mode,
             launch_cmd=getattr(args, "launch", None),
+            reference_dir=getattr(args, "reference", "references"),
         )
         session.start()
         # 输出绝对路径

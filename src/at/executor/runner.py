@@ -104,7 +104,11 @@ def _load_and_run_suite(
         return {"suite": str(suite_path), "status": "error", "error": str(exc)}
 
     elements = _load_elements(suite_path.parent)
-    context = {"elements": elements, "app": config.app}
+    context = {
+        "elements": elements,
+        "app": config.app,
+        "suite_dir": str(suite_path.parent),
+    }
     executor = AtSuiteExecutor(config, context)
     result = executor.run(spec_ids=spec_ids, tags=tags, skip_env_check=skip_env_check)
     return {

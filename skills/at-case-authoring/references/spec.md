@@ -78,6 +78,33 @@
 - 菜单写**路径**：`右键-查找` / `主菜单-设置-高级设置`
 - **禁止写代码标识**：`accessible_id=FindNext`、`点击 Search 元素`
 
+## 4.1 VLM 参考图断言（`vlm_assert` hint）
+
+断言目标涉及**整界面视觉状态对比**（参考图 vs 实际截图），用 `vlm_assert` hint：
+
+```yaml
+- description: 对比参考图与实际界面是否一致
+  element_hint: vlm_assert
+  value: references/fm_open.png    # 参考图路径（相对 suite 目录）
+  text: 窗口整体界面状态|strict    # 断言特征 | 判定模式
+```
+
+字段：
+
+| 字段 | 说明 |
+|---|---|
+| `element_hint: vlm_assert` | 触发 `assert_vlm_reference` 动作 |
+| `value` | 参考图路径（期望状态），相对 suite 目录或绝对路径 |
+| `text` | 断言特征描述，`|` 后接判定模式（见下） |
+| `ignore`（可选） | 可忽略的差异列表，如 `["时间戳", "进度条"]` |
+
+判定模式（`text` 里 `|` 后的值）：
+
+- `strict`（默认）：任何边框/颜色/高亮/透明度/布局差异 → FAIL，仅时间/进度数值变化可忽略
+- `tolerant`：仅关注 `text` 指定的特征本身是否一致，其他区域差异可忽略
+
+录制时可用 `youqu at record --reference references` 自动生成参考图（存到 `references/` 目录，按 segment 命名）。
+
 ## 5. 输入数据
 
 - 必填具体 payload：`输入：123ASsdh周圣》?:%$%^&`

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Any, Optional
+from typing import Any, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -204,11 +204,12 @@ class SuiteActionStep(BaseModel):
     prompt: Optional[str] = None
     evidence: Optional[str] = None
     app: Optional[str] = None
-    expected: Optional[int] = None
+    expected: Optional[Union[int, str]] = None
     name_pattern: Optional[str] = None
     key: Optional[str] = None
     text: Optional[str] = None
     value: Optional[Any] = None
+    ignore: Optional[list[str]] = None
     note: Optional[str] = None
 
 

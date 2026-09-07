@@ -213,7 +213,11 @@ def main():
         default="tests/at/plan.yaml",
         help="Path to plan.yaml (used with --module)",
     )
-
+    p_at_record.add_argument(
+        "--reference",
+        default="references",
+        help="Reference image output directory (relative to --output)",
+    )
     p_at_merge = at_sub.add_parser("merge", help="Layered merge: scan + record → at-tree.yaml")
     p_at_merge.add_argument("--app", default="", help="Application name")
     p_at_merge.add_argument("--scan", default="", help="Scan output directory (scanned_ok.yaml)")

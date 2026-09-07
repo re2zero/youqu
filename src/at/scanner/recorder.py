@@ -66,7 +66,7 @@ class Segment:
     trigger: Optional[dict[str, Any]] = None
     events: list[dict[str, Any]] = field(default_factory=list)
     states: list[str] = field(default_factory=list)
-
+    reference: Optional[str] = None
 
 # ---------------------------------------------------------------------------
 # Event element extraction
@@ -91,6 +91,11 @@ def _extract_element(obj: Any) -> dict[str, Any]:
         description = obj.description or ""
     except Exception:
         description = ""
+    try:
+        ext = obj.get_extents(_DESKTOP_COORDS)
+        bounds = [ext.x, ext.y, ext.width, ext.height]
+    except Exception:
+        bounds = None
 
     return {
         "role": role_name,
@@ -99,6 +104,7 @@ def _extract_element(obj: Any) -> dict[str, Any]:
         "accessible_id": accessible_id,
         "description": description,
         "states": states,
+        "bounds": bounds,
         "source": "runtime",
     }
 
@@ -135,17 +141,21 @@ class RecordSession:
         output_dir: str | Path,
         gui_mode: bool = False,
         launch_cmd: Optional[str] = None,
-    ) -> None:
+        reference_dir: str | Path = "references",
+ ) -> None:
+        self.reference_dir = Path(output_dir) / reference_dir
+        self.reference_dir.mkdir(parents=True, exist_ok=True)
         self.app_name = app_name
         self.output_dir = Path(output_dir)
         self.states_dir = self.output_dir / "states"
         self.gui_mode = gui_mode
         self.launch_cmd = launch_cmd
 
+
         self.segments: list[Segment] = []
         self.current_segment: Optional[Segment] = None
         self.state_index = 0
-        self.start_time = 0.0
+        self._ref_counter = 0
         self._lock = threading.Lock()
 
         # Input listener
@@ -870,6 +880,7 @@ class RecordSession:
         with self._lock:
             if self.current_segment and self.current_segment.events:
                 self.segments.append(self.current_segment)
+                self._capture_reference(self.current_segment)
             self.current_segment = Segment(label=label, trigger=trigger)
 
         self._print_event("SEGMENT", f'"{label}"')
@@ -877,6 +888,46 @@ class RecordSession:
     # ------------------------------------------------------------------
     # Subtree dump
     # ------------------------------------------------------------------
+
+    def _capture_reference(self, segment: Segment) -> None:
+        """Capture current screen as reference image for this segment.
+
+        Saves to references/<label_sanitized>_<index>.png and stores the
+        relative path in segment.reference for assert_vlm_reference.
+        """
+        try:
+            from src.vlm.screenshot import capture_screen
+            from PIL import Image
+            import io
+
+            raw = capture_screen()
+            if not raw:
+                return
+            img = Image.open(io.BytesIO(raw)).convert("RGB")
+            # Crop to app window bounds if available from last window event
+            last_win = next(
+                (e for e in reversed(segment.events)
+                 if e.get("type") == "window_activate"),
+                None,
+            )
+            if last_win and last_win.get("element", {}).get("bounds"):
+                b = last_win["element"]["bounds"]
+                img = img.crop((b[0], b[1], b[0] + b[2], b[1] + b[3]))
+
+            safe_label = "".join(
+                c if c.isalnum() or c in "_-" else "_" for c in segment.label
+            )
+            # Use a dedicated counter, not state_index: segments can split
+            # on window_activate without any window:create bumping state_index,
+            # so reusing state_index would collide for repeated child windows.
+            ref_name = f"{safe_label}_{self._ref_counter:02d}.png"
+            self._ref_counter += 1
+            ref_path = self.reference_dir / ref_name
+            img.save(ref_path)
+            segment.reference = str(ref_path.relative_to(self.output_dir))
+            logger.info("Reference image saved: %s", segment.reference)
+        except Exception as e:
+            logger.debug("capture_reference failed: %s", e)
 
     def _dump_app_tree(self) -> list[dict]:
         """Dump the full AT-SPI tree for the main app."""
@@ -1024,6 +1075,7 @@ class RecordSession:
                     "trigger": s.trigger,
                     "events": s.events,
                     "states": s.states,
+                    "reference": s.reference,
                 }
                 for s in self.segments
                 if s.events

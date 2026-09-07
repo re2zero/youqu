@@ -13,7 +13,7 @@ import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Optional
 
 import httpx
 
@@ -132,6 +132,31 @@ class VLMLocator(ABC):
         Returns:
             {"tool_calls": [...], "content": "..."} or {"error": "..."}
         """
+
+
+    @abstractmethod
+    def evaluate_with_reference(
+        self,
+        reference_path: str,
+        actual_path: str,
+        feature: str,
+        mode: str = "strict",
+    ) -> "VLMAssertResult":
+        """Compose expected-reference and actual-screenshot into one image and
+        judge whether the actual screenshot presents the expected state.
+
+        Args:
+            reference_path: Expected-state reference image
+            actual_path: Actual screenshot of the app under test
+            feature: Assertion feature description (what state is verified)
+            mode: "strict" — any style diff (border/color/highlight/alpha)
+                  counts as FAIL, only time/date value changes tolerated;
+                  "tolerant" — only the feature's state matters
+
+        Returns:
+            VLMAssertResult or None
+        """
+
 
 
 class OpenAICompatLocator(VLMLocator):
@@ -387,6 +412,112 @@ class OpenAICompatLocator(VLMLocator):
         ]
 
         return self._call_api(messages, tools=tools)
+
+    def evaluate_with_reference(
+        self,
+        reference_path: str,
+        actual_path: str,
+        feature: str,
+        mode: str = "strict",
+        ignore_patterns: Optional[list[str]] = None,
+    ) -> VLMAssertResult:
+        """Compose expected-reference and actual into one image, then judge.
+
+        llama-server (this build) drops the second image on multi-image requests,
+        so the pair is pasted into a single canvas with neutral-gray side labels.
+        Only time/date value differences are tolerated by the strict prompt.
+        """
+        from PIL import Image, ImageDraw, ImageFont
+
+        ref = Image.open(reference_path).convert("RGB")
+        actual = Image.open(actual_path).convert("RGB")
+        height = max(ref.height, actual.height)
+        ref = ref.resize((int(ref.width * height / ref.height), height))
+        actual = actual.resize((int(actual.width * height / actual.height), height))
+
+        canvas = Image.new(
+            "RGB", (ref.width + actual.width + 4, height + 30), (30, 30, 30)
+        )
+        canvas.paste(ref, (2, 32))
+        canvas.paste(actual, (ref.width + 2, 32))
+        draw = ImageDraw.Draw(canvas)
+        try:
+            font = ImageFont.truetype(
+                "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc", 22
+            )
+        except Exception:
+            font = ImageFont.load_default()
+        draw.text((ref.width // 2 - 40, 4), "LEFT=期望", fill=(200, 200, 200), font=font)
+        draw.text(
+            (ref.width + actual.width // 2 - 40, 4),
+            "RIGHT=实际",
+            fill=(200, 200, 200),
+            font=font,
+        )
+        if canvas.width > 1024:
+            canvas = canvas.resize((1024, int(canvas.height * 1024 / canvas.width)))
+
+        from io import BytesIO
+
+        buf = BytesIO()
+        canvas.save(buf, format="PNG")
+        img_b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
+        strict_rule = (
+            "任何边框/颜色/高亮/透明度/布局差异都算 FAIL，仅时间/进度数值变化可忽略。"
+            if mode == "strict"
+            else "仅关注特征本身的状态是否一致，其他区域差异可忽略。"
+        )
+        ignore_note = ""
+        if ignore_patterns:
+            ignore_note = "可忽略的差异：{}。".format("、".join(ignore_patterns))
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": "data:image/png;base64,{}".format(img_b64)
+                        },
+                    },
+                    {
+                        "type": "text",
+                        "text": (
+                            "任务：UI测试断言。\n"
+                            "左半=期望参考（灰色标签 LEFT=期望），右半=实际截图"
+                            "（灰色标签 RIGHT=实际），忽略标签文字本身。\n"
+                            "验证特征：{}\n\n"
+                            "判定规则：\n"
+                            "1. 先描述左侧期望中该特征如何呈现，再描述右侧实际中该特征如何呈现；\n"
+                            "2. {}\n"
+                            "3. {}\n"
+                            '4. 输出JSON：{{"verdict": "PASS"|"FAIL"|"UNSURE", '
+                            '"confidence": 0.0-1.0, "reason": "左右各自状态+差异证据"}}\n'
+                            "5. confidence < 0.6 时必须输出 UNSURE。"
+                        ).format(feature, strict_rule, ignore_note)
+                    },
+                ],
+            }
+        ]
+
+        result = self._call_api(messages)
+        if "error" in result:
+            logger.error("evaluate_with_reference failed: {}".format(result["error"]))
+            return None  # type: ignore[return-value]
+
+        try:
+            content = result["choices"][0]["message"]["content"]
+            data = _extract_json(content)
+            if not data:
+                return None  # type: ignore[return-value]
+            return VLMAssertResult(
+                verdict=data.get("verdict", "FAIL").upper(),
+                confidence=data.get("confidence", 0.5),
+                reason=data.get("reason", ""),
+            )
+        except Exception as e:
+            logger.error("evaluate_with_reference parse failed: {}".format(e))
+            return None  # type: ignore[return-value]
 
 
 def create_vlm_locator(config) -> VLMLocator:  # type: ignore[type-arg]
