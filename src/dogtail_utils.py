@@ -51,6 +51,113 @@ def _node_matches_accessible_id(node, accessible_id: str) -> bool:
     return node_id == accessible_id or node_id.endswith("." + accessible_id)
 
 
+def _active_frame_extents(app_node):
+    """当前活动窗口的屏幕边界 (x, y, w, h)，无则 None。
+
+    多窗口时 dogtail 绑定 application 节点下所有 frame，find 返回的坐标
+    可能来自非活动窗口（新窗口在别的位置，操作却用旧窗口坐标）。这里用
+    xdotool 活动窗口几何过滤，只保留活动窗口内节点。
+    """
+    try:
+        import subprocess
+
+        r = subprocess.run(
+            ["xdotool", "getactivewindow"], capture_output=True, text=True, timeout=5
+        )
+        active_id = r.stdout.strip()
+        if not active_id.isdigit():
+            return None
+        g = subprocess.run(
+            ["xdotool", "getwindowgeometry", active_id],
+            capture_output=True, text=True, timeout=5,
+        ).stdout
+        import re
+
+        pos = re.search(r"Position: (\d+),(\d+)", g)
+        geo = re.search(r"Geometry: (\d+)x(\d+)", g)
+        if not pos or not geo:
+            return None
+        return (
+            int(pos.group(1)), int(pos.group(2)),
+            int(geo.group(1)), int(geo.group(2)),
+        )
+    except BaseException:
+        return None
+
+
+def _in_extents(x, y, ext):
+    if not ext:
+        return True
+    ex, ey, ew, eh = ext
+    return ex <= x < ex + ew and ey <= y < ey + eh
+
+
+def _gi_find_descendants(root, name=None, role=None, recursive=True, accessible_id=None):
+    """gi AT-SPI 递归查找（替代失效的 dogtail findChildren）。
+
+    dogtail 的 findChildren 底层走 pyatspi.utils.findAllDescendants，其用
+    ``for child in acc`` 迭代；但 gi Atspi.Accessible 普通子节点没有
+    ``__iter__``（只有 Root/Application 有），递归到第一层子节点即失败，
+    返回空。这里用 gi 的 get_child_count/get_child_at_index 递归。
+
+    多窗口时优先返回当前活动窗口内的节点（xdotool 活动窗口几何过滤），
+    避免新窗口在别的位置却操作旧窗口坐标。
+    """
+    results = []
+    active_ext = _active_frame_extents(root)
+
+    def _match(node):
+        try:
+            if name is not None and (node.get_name() or "") != name:
+                return False
+            if role is not None and (node.get_role_name() or "") != role:
+                return False
+            if accessible_id is not None and not _node_matches_accessible_id(
+                node, accessible_id
+            ):
+                return False
+            return True
+        except BaseException:
+            return False
+
+    def _walk(node, depth=0):
+        if depth > 64:
+            return
+        try:
+            if _match(node):
+                # 活动窗口过滤: 节点有有效坐标且在活动窗口内才保留;
+                # 无效坐标 (关闭态占位 x=0/width=0) 不参与过滤, 保留。
+                try:
+                    ext = node.get_extents(
+                        __import__("gi").repository.Atspi.CoordType.SCREEN
+                    )
+                    if ext.width > 0 and ext.height > 0 and ext.x > 0 and ext.y > 0:
+                        if _in_extents(ext.x, ext.y, active_ext):
+                            results.append(node)
+                        return
+                except BaseException:
+                    pass
+                results.append(node)
+        except BaseException:
+            pass
+        if not recursive:
+            return
+        try:
+            count = node.get_child_count()
+        except BaseException:
+            return
+        for i in range(count):
+            try:
+                child = node.get_child_at_index(i)
+            except BaseException:
+                continue
+            _walk(child, depth + 1)
+
+    try:
+        _walk(root)
+    except BaseException:
+        return []
+    return results
 class DogtailUtils(MouseKey):
     """
     通过属性进行元素定位和操作。
@@ -202,24 +309,24 @@ class DogtailUtils(MouseKey):
             name = None
             accessible_id = match_aid_only.group(1)
         if accessible_id:
-            elements = element.findChildren(
-                predicate.GenericPredicate(
-                    name=name or None, roleName=role_name
-                ),
+            elements = _gi_find_descendants(
+                element,
+                name=name or None,
+                role=role_name,
                 recursive=recursive,
+                accessible_id=accessible_id,
             )
-            # accessible-id 无法用 GenericPredicate 表达，需二次过滤
-            elements = [
-                n
-                for n in elements
-                if _node_matches_accessible_id(n, accessible_id)
-            ]
             return node, elements
         if name == "*":
-            element = element.children
+            try:
+                element = list(element.children)
+            except BaseException:
+                element = []
         else:
-            element = element.findChildren(
-                predicate.GenericPredicate(name=name or None, roleName=role_name),
+            element = _gi_find_descendants(
+                element,
+                name=name or None,
+                role=role_name,
                 recursive=recursive,
             )
         return node, element
@@ -315,10 +422,12 @@ class DogtailUtils(MouseKey):
             # element-map 存 "UnixAction"
             return node_id.endswith("." + target)
 
-        try:
-            return self.obj.findChildren(_match, recursive=True)
-        except Exception:
-            return []
+        # findChildren 对 gi Atspi.Accessible 失效 (pyatspi.utils.
+        # findAllDescendants 依赖 __iter__, 普通子节点没有) → 返回空。
+        # 用 gi 递归遍历替代 (内部已含活动窗口过滤)。
+        return _gi_find_descendants(
+            self.obj, accessible_id=target, recursive=True
+        )
 
     def find_element_by_accessible_id(self, accessible_id, index=0):
         """通过 accessible_id 查找单个元素。"""

@@ -176,58 +176,77 @@ class TestNodeMatchesAccessibleId:
 
 
 class TestFindElementsByAccessibleId:
-    def test_method_uses_get_accessible_id_not_attrs(self):
-        """find_elements_by_accessible_id must read get_accessible_id(), not
-        get_attributes() (which returns {} for Qt6 nodes)."""
+    def _make_gi_node(self, accessible_id, children=()):
+        node = unittest.mock.MagicMock()
+        node.get_accessible_id.return_value = accessible_id
+        node.get_child_count.return_value = len(children)
+        node.get_child_at_index.side_effect = lambda i: children[i]
+        return node
+
+    def test_matches_exact_and_suffix_via_gi_walk(self):
+        """find_elements_by_accessible_id must walk the gi AT-SPI tree
+        (findChildren is broken for gi Accessible) and match get_accessible_id()
+        exact or dotted-suffix."""
         real = dogtail_utils.DogtailUtils.__dict__["find_elements_by_accessible_id"]
+        hit = self._make_gi_node("EditorApplication.DropdownMenu.UnixAction")
+        miss = self._make_gi_node("EditorApplication.DropdownMenu.WindowsAction")
+        root = self._make_gi_node("EditorApplication", children=(hit, miss))
         fake_self = unittest.mock.MagicMock()
-        fake_self.obj.findChildren.return_value = ["node1"]
+        fake_self.obj = root
 
-        real(fake_self, "UnixAction")
-        match_fn = fake_self.obj.findChildren.call_args.args[0]
+        results = real(fake_self, "UnixAction")
+        assert results == [hit]
 
-        node_hit = _make_node("EditorApplication.DropdownMenu.UnixAction")
-        node_miss = _make_node("EditorApplication.DropdownMenu.WindowsAction")
-        assert match_fn(node_hit) is True
-        assert match_fn(node_miss) is False
-
-    def test_empty_target_returns_empty(self):
+    def test_no_get_accessible_id_node_skipped(self):
         real = dogtail_utils.DogtailUtils.__dict__["find_elements_by_accessible_id"]
+        bad = unittest.mock.MagicMock()
+        bad.get_accessible_id.side_effect = RuntimeError("no id")
+        bad.get_child_count.return_value = 0
+        root = self._make_gi_node("EditorApplication", children=(bad,))
         fake_self = unittest.mock.MagicMock()
-        result = real(fake_self, "")
-        assert result == []
-        fake_self.obj.findChildren.assert_not_called()
+        fake_self.obj = root
+        assert real(fake_self, "Anything") == []
 
 
 class TestEvalxAccessibleId:
+    def _make_gi_node(self, accessible_id, name="", role="", children=()):
+        node = unittest.mock.MagicMock()
+        node.get_accessible_id.return_value = accessible_id
+        node.get_name.return_value = name
+        node.get_role_name.return_value = role
+        node.get_child_count.return_value = len(children)
+        node.get_child_at_index.side_effect = lambda i: children[i]
+        return node
+
     def _call_evalx(self, expr, children):
-        # Python name-mangles __evalx → _DogtailUtils__evalx in the class dict.
         real = dogtail_utils.DogtailUtils.__dict__["_DogtailUtils__evalx"]
         fake_self = unittest.mock.MagicMock()
-        fake_self.obj.findChildren.return_value = children
-        # __evalx is a @staticmethod: (expr, element, recursive)
-        _, elements = real(expr + "/", fake_self.obj, True)
+        root = self._make_gi_node("EditorApplication", children=children)
+        _, elements = real(expr + "/", root, True)
         return elements
+
     def test_pure_accessible_id_expr(self):
-        child_hit = _make_node("EditorApplication.DropdownMenu.UnixAction")
-        child_miss = _make_node("EditorApplication.DropdownMenu.WindowsAction")
+        child_hit = self._make_gi_node("EditorApplication.DropdownMenu.UnixAction")
+        child_miss = self._make_gi_node("EditorApplication.DropdownMenu.WindowsAction")
         elements = self._call_evalx("[accessible-id='UnixAction']", [child_hit, child_miss])
         assert len(elements) == 1
         assert elements[0] is child_hit
 
     def test_name_with_accessible_id_expr(self):
-        child_hit = _make_node("EditorApplication.DropdownMenu.UnixAction")
+        child_hit = self._make_gi_node(
+            "EditorApplication.DropdownMenu.UnixAction", name="Unix"
+        )
         elements = self._call_evalx("Unix[@accessible-id='UnixAction']", [child_hit])
         assert len(elements) == 1
 
     def test_full_path_accessible_id_expr(self):
-        child_hit = _make_node("EditorApplication.DropdownMenu.UnixAction")
+        child_hit = self._make_gi_node("EditorApplication.DropdownMenu.UnixAction")
         elements = self._call_evalx(
             "[accessible-id='EditorApplication.DropdownMenu.UnixAction']", [child_hit]
         )
         assert len(elements) == 1
 
     def test_no_match_returns_empty(self):
-        child_miss = _make_node("EditorApplication.DropdownMenu.WindowsAction")
+        child_miss = self._make_gi_node("EditorApplication.DropdownMenu.WindowsAction")
         elements = self._call_evalx("[accessible-id='UnixAction']", [child_miss])
         assert elements == []

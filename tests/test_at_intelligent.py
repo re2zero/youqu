@@ -130,6 +130,7 @@ class TestActOnMenuItem:
         trigger = unittest.mock.MagicMock()
         trigger.get_accessible_id.return_value = "EditorApplication.BottomBar.DDropdownMenu.PToolButton"
         trigger.showing = True
+        trigger.extents = (100, 100, 50, 28)  # 有效坐标 (试探式触发跳过无效)
         dog = unittest.mock.MagicMock()
         dog.find_elements_by_accessible_id.return_value = [trigger]
 

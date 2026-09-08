@@ -68,23 +68,21 @@ def resolve_display_text(node) -> str:
         return ""
 
 
-def _find_menu_trigger(dog, popup_aid: str, index: int | None = None):
-    """Find the trigger button for a dropdown menu (best effort).
+def _find_menu_triggers(dog, popup_aid: str) -> list:
+    """All candidate trigger buttons for a dropdown menu.
 
-    DDropdownMenu trigger buttons share the same accessible_id suffix
-    (PToolButton) across menus; they are distinguished by screen position,
-    which the popup does not expose. Strategy: search buttons whose full
-    accessible_id contains the same segment as the popup (e.g. both contain
-    'DropdownMenu'), pick showing ones, apply index if given.
+    DDropdownMenu trigger buttons share the SAME accessible_id suffix
+    (PToolButton) across all bottom-bar menus, so the popup aid cannot
+    distinguish which button opens which menu. Return every showing button
+    whose aid contains the shared segment AND has valid coordinates (skip
+    closed-state placeholders extents=(0,0,0,0)); the caller tries each and
+    checks the popped-up menu content.
     """
     try:
         from src.at.executor.handlers import find_element
     except ImportError:  # pragma: no cover
         find_element = None
 
-    # The trigger button's aid contains the same distinguishing segment as
-    # the popup (e.g. '...BottomBar.DDropdownMenu.PToolButton' ↔
-    # 'EditorApplication.DropdownMenu' share 'DropdownMenu').
     popup_segs = set(popup_aid.split("."))
     shared_seg = None
     for seg in ("DropdownMenu", "DDropdownMenu"):
@@ -92,22 +90,33 @@ def _find_menu_trigger(dog, popup_aid: str, index: int | None = None):
             shared_seg = seg
             break
     if not shared_seg:
-        return None
+        return []
 
     candidates = []
     try:
-        # Walk the app tree for buttons whose aid contains the shared segment
         buttons = dog.find_elements_by_accessible_id("PToolButton") or []
         for n in buttons:
             try:
                 aid = n.get_accessible_id() or ""
                 if shared_seg in aid and n.showing:
+                    # 跳过无效坐标按钮 (关闭态占位 extents=(0,0,0,0))
+                    try:
+                        x, y, w, h = n.extents
+                        if w <= 0 or h <= 0 or (x <= 0 and y <= 0):
+                            continue
+                    except BaseException:
+                        continue
                     candidates.append(n)
             except BaseException:
                 continue
     except BaseException:
-        return None
+        return []
+    return candidates
 
+
+def _find_menu_trigger(dog, popup_aid: str, index: int | None = None):
+    """Find the trigger button for a dropdown menu (best effort)."""
+    candidates = _find_menu_triggers(dog, popup_aid)
     if not candidates:
         return None
     if index is not None:
@@ -147,17 +156,51 @@ def act_on_menu_item(dog, node, action: str, attrs: dict, context: dict) -> None
 
     # Open the menu before navigating.
     if menu_kind == "dropdown":
-        trigger = _find_menu_trigger(dog, popup_aid, attrs.get("index"))
-        if trigger is not None:
-            trigger.click()
-            time.sleep(0.5)
-        else:
-            # No trigger found — maybe the menu is already open. Proceed to
-            # keyboard navigation anyway.
+        # 试探式触发: 多个 DDropdownMenu 的 PToolButton aid 完全相同,
+        # candidates[0] 可能点错按钮。逐个点击候选按钮, 用 nav.select
+        # 尝试选中目标; 成功则停, 失败换下一个。
+        triggers = _find_menu_triggers(dog, popup_aid)
+        if not triggers:
             logger.warning(
                 "dtk menu item: no dropdown trigger found for popup %r; "
                 "assuming menu already open", popup_aid,
             )
+        else:
+            from src.at.executor.menu_nav import AtMenuNavigator
+
+            opened = False
+            for trigger in triggers:
+                try:
+                    trigger.click()
+                    time.sleep(0.6)
+                except BaseException:
+                    continue
+                nav_try = AtMenuNavigator(context.get("app", ""))
+                try:
+                    nav_try.select([display_text], exact=True)
+                    opened = True
+                    break
+                except BaseException:
+                    try:
+                        nav_try.cancel()
+                    except BaseException:
+                        pass
+                    time.sleep(0.2)
+            if not opened:
+                logger.warning(
+                    "dtk menu item: no trigger opened a menu containing %r; "
+                    "trying keyboard nav anyway", display_text,
+                )
+                from src.at.executor.menu_nav import AtMenuNavigator
+
+                nav = AtMenuNavigator(context.get("app", ""))
+                try:
+                    nav.select([display_text], exact=True)
+                except BaseException:
+                    nav.cancel()
+                    raise
+                return
+            return  # 试探式触发已选中目标
 
     from src.at.executor.menu_nav import AtMenuNavigator
 
