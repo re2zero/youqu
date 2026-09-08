@@ -54,42 +54,34 @@ def _node_matches_accessible_id(node, accessible_id: str) -> bool:
 def _active_frame_extents(app_node):
     """当前活动窗口的屏幕边界 (x, y, w, h)，无则 None。
 
-    多窗口时 dogtail 绑定 application 节点下所有 frame，find 返回的坐标
-    可能来自非活动窗口（新窗口在别的位置，操作却用旧窗口坐标）。这里用
-    xdotool 活动窗口几何过滤，只保留活动窗口内节点。
+    多窗口时 application 节点下有多个 frame，find 返回的坐标可能来自非
+    活动窗口（新窗口在别的位置，操作却用旧窗口坐标）。这里用 AT-SPI
+    自身的活动状态判定：找出 role=frame 且 state 含 ACTIVE 的顶层窗口，
+    返回其 extents（与 get_extents(SCREEN) 同一坐标系，用于按 frame 归属
+    过滤，而非坐标点判定）。
+
+    注意: 部分环境 AT-SPI 不暴露 ACTIVE state（所有 frame 均非 ACTIVE，
+    如模态对话框场景），此时返回 None，调用方据此回退为不过滤，避免
+    误删子窗口/主窗口元素。
     """
     try:
-        import subprocess
-
-        r = subprocess.run(
-            ["xdotool", "getactivewindow"], capture_output=True, text=True, timeout=5
-        )
-        active_id = r.stdout.strip()
-        if not active_id.isdigit():
-            return None
-        g = subprocess.run(
-            ["xdotool", "getwindowgeometry", active_id],
-            capture_output=True, text=True, timeout=5,
-        ).stdout
-        import re
-
-        pos = re.search(r"Position: (\d+),(\d+)", g)
-        geo = re.search(r"Geometry: (\d+)x(\d+)", g)
-        if not pos or not geo:
-            return None
-        return (
-            int(pos.group(1)), int(pos.group(2)),
-            int(geo.group(1)), int(geo.group(2)),
-        )
+        from gi.repository import Atspi
     except BaseException:
         return None
-
-
-def _in_extents(x, y, ext):
-    if not ext:
-        return True
-    ex, ey, ew, eh = ext
-    return ex <= x < ex + ew and ey <= y < ey + eh
+    try:
+        count = app_node.get_child_count()
+        for i in range(count):
+            frame = app_node.get_child_at_index(i)
+            if (frame.get_role_name() or "") != "frame":
+                continue
+            if not frame.get_state_set().contains(Atspi.StateType.ACTIVE):
+                continue
+            ext = frame.get_extents(Atspi.CoordType.SCREEN)
+            if ext.width > 0 and ext.height > 0:
+                return (ext.x, ext.y, ext.width, ext.height)
+    except BaseException:
+        return None
+    return None
 
 
 def _gi_find_descendants(root, name=None, role=None, recursive=True, accessible_id=None):
@@ -100,8 +92,10 @@ def _gi_find_descendants(root, name=None, role=None, recursive=True, accessible_
     ``__iter__``（只有 Root/Application 有），递归到第一层子节点即失败，
     返回空。这里用 gi 的 get_child_count/get_child_at_index 递归。
 
-    多窗口时优先返回当前活动窗口内的节点（xdotool 活动窗口几何过滤），
-    避免新窗口在别的位置却操作旧窗口坐标。
+    多窗口时只保留活动窗口（AT-SPI ACTIVE frame）内的节点，避免新窗口在
+    别的位置却操作旧窗口坐标。按 frame 归属过滤（非坐标点判定），滚动
+    区域外（y 超出可视区）的控件仍属于当前窗口，不会被误删；活动 frame
+    判定失败时不过滤（宽松回退），避免设置对话框等子窗口元素被误删。
     """
     results = []
     active_ext = _active_frame_extents(root)
@@ -120,24 +114,19 @@ def _gi_find_descendants(root, name=None, role=None, recursive=True, accessible_
         except BaseException:
             return False
 
-    def _walk(node, depth=0):
+    def _walk(node, depth=0, in_active=None):
+        # in_active: None=未知(不过滤), True=活动 frame 内, False=非活动 frame 内
         if depth > 64:
             return
         try:
             if _match(node):
-                # 活动窗口过滤: 节点有有效坐标且在活动窗口内才保留;
-                # 无效坐标 (关闭态占位 x=0/width=0) 不参与过滤, 保留。
-                try:
-                    ext = node.get_extents(
-                        __import__("gi").repository.Atspi.CoordType.SCREEN
-                    )
-                    if ext.width > 0 and ext.height > 0 and ext.x > 0 and ext.y > 0:
-                        if _in_extents(ext.x, ext.y, active_ext):
-                            results.append(node)
-                        return
-                except BaseException:
-                    pass
+                # 仅丢弃明确属于非活动 frame 的节点。找不到活动 frame
+                # (active_ext None) / 节点属于 dialog 等非 frame 顶层 /
+                # 无法归属 → 保留, 避免设置对话框等子窗口元素被误删。
+                if in_active is False:
+                    return
                 results.append(node)
+                return
         except BaseException:
             pass
         if not recursive:
@@ -151,7 +140,24 @@ def _gi_find_descendants(root, name=None, role=None, recursive=True, accessible_
                 child = node.get_child_at_index(i)
             except BaseException:
                 continue
-            _walk(child, depth + 1)
+            child_active = in_active
+            if depth == 0:
+                # 顶层 frame 归属判定: 只有 role=frame 的顶层参与过滤,
+                # dialog 等其它顶层窗口不参与(保留)。
+                try:
+                    if (child.get_role_name() or "") == "frame":
+                        if active_ext is None:
+                            child_active = None
+                        else:
+                            ext = child.get_extents(
+                                __import__("gi").repository.Atspi.CoordType.SCREEN
+                            )
+                            child_active = (
+                                ext.x, ext.y, ext.width, ext.height
+                            ) == active_ext
+                except BaseException:
+                    child_active = None
+            _walk(child, depth + 1, child_active)
 
     try:
         _walk(root)

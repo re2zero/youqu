@@ -250,3 +250,99 @@ class TestEvalxAccessibleId:
         child_miss = self._make_gi_node("EditorApplication.DropdownMenu.WindowsAction")
         elements = self._call_evalx("[accessible-id='UnixAction']", [child_miss])
         assert elements == []
+
+
+class TestActiveFrameFilter:
+    """活动窗口过滤 (AT-SPI ACTIVE frame 判定 + 宽松回退)。
+
+    修复: 打开设置对话框等子窗口后, 其内元素不能被误判为"不在活动窗口"
+    而全部丢弃。有 ACTIVE frame 时只返回该 frame 内节点; 判定失败
+    (无 ACTIVE frame) 时不过滤。
+    """
+
+    def _install_fake_gi(self):
+        saved = {
+            "gi": sys.modules.get("gi"),
+            "gi.repository": sys.modules.get("gi.repository"),
+            "gi.repository.Atspi": sys.modules.get("gi.repository.Atspi"),
+        }
+        atspi = types.ModuleType("gi.repository.Atspi")
+        atspi.CoordType = type("CoordType", (), {"SCREEN": 1})
+        atspi.StateType = type("StateType", (), {"ACTIVE": 0})
+        repo = types.ModuleType("gi.repository")
+        repo.Atspi = atspi
+        gi = types.ModuleType("gi")
+        gi.repository = repo
+        sys.modules["gi"] = gi
+        sys.modules["gi.repository"] = repo
+        sys.modules["gi.repository.Atspi"] = atspi
+        return saved
+
+    def _restore_gi(self, saved):
+        for k, v in saved.items():
+            if v is None:
+                sys.modules.pop(k, None)
+            else:
+                sys.modules[k] = v
+
+    def _gi_node(self, accessible_id="", name="", role="", extents=None, active=False, children=()):
+        node = unittest.mock.MagicMock()
+        node.get_accessible_id.return_value = accessible_id
+        node.get_name.return_value = name
+        node.get_role_name.return_value = role
+        node.get_child_count.return_value = len(children)
+        node.get_child_at_index.side_effect = lambda i: children[i]
+
+        class _Ext:
+            def __init__(self, x, y, w, h):
+                self.x, self.y, self.width, self.height = x, y, w, h
+
+        if extents is not None:
+            node.get_extents.return_value = _Ext(*extents)
+        state = unittest.mock.MagicMock()
+        state.contains.return_value = active
+        node.get_state_set.return_value = state
+        return node
+
+    def _find_by_name(self, root, name):
+        return dogtail_utils._gi_find_descendants(root, name=name)
+
+    def test_active_frame_only(self):
+        """有 ACTIVE frame: 只返回该 frame 内节点, 其它窗口元素被丢弃。"""
+        saved = self._install_fake_gi()
+        try:
+            active_frame = self._gi_node(
+                "FrameActive", role="frame", extents=(0, 0, 100, 100), active=True,
+                children=(self._gi_node(name="Target", extents=(50, 50, 10, 10)),),
+            )
+            inactive_frame = self._gi_node(
+                "FrameInactive", role="frame", extents=(200, 0, 100, 100), active=False,
+                children=(self._gi_node(name="Target", extents=(250, 50, 10, 10)),),
+            )
+            root = self._gi_node("EditorApplication", children=(active_frame, inactive_frame))
+            results = self._find_by_name(root, "Target")
+            # 只保留活动 frame 内节点 (child 均在 activity_frame 下则只取其一)。
+            # 这里用坐标区分: 只有 active frame 内的 (50,50) 被保留。
+            assert len(results) == 1
+            assert results[0].get_name() == "Target"
+        finally:
+            self._restore_gi(saved)
+
+    def test_no_active_frame_no_filter(self):
+        """无 ACTIVE frame (判定失败): 宽松回退, 不过滤 —— 子窗口元素不被误删。"""
+        saved = self._install_fake_gi()
+        try:
+            frame_a = self._gi_node(
+                "FrameA", role="frame", extents=(0, 0, 100, 100), active=False,
+                children=(self._gi_node(name="Target", extents=(50, 50, 10, 10)),),
+            )
+            frame_b = self._gi_node(
+                "FrameB", role="frame", extents=(200, 0, 100, 100), active=False,
+                children=(self._gi_node(name="Target", extents=(250, 50, 10, 10)),),
+            )
+            root = self._gi_node("EditorApplication", children=(frame_a, frame_b))
+            results = self._find_by_name(root, "Target")
+            assert len(results) == 2
+        finally:
+            self._restore_gi(saved)
+

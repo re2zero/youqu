@@ -1150,20 +1150,41 @@ class TestExecutorHardening:
             with pytest.raises(ValueError, match="Unknown element action"):
                 handle_element_action(step, {"app": "test-app"})
 
-    def test_element_action_click_in_whitelist(self):
+    def test_element_action_click_uses_atspi_action_first(self):
         from src.at.executor.handlers import handle_element_action
         from src.at.parser.models import SuiteActionStep
 
         fake_element = unittest.mock.MagicMock()
         fake_dog = unittest.mock.MagicMock()
-        fake_dog.find_elements_by_accessible_id.return_value = [fake_element]
+        fake_dog.find_element_by_attr.return_value = fake_element
         step = SuiteActionStep(
             action="element_action",
-            selector={"accessible_id": "btn_ok"},
+            selector={"name": "SomeBtn", "role": "push button"},
             do="click",
         )
         with unittest.mock.patch("src.at.executor.handlers.get_dog", return_value=fake_dog):
             handle_element_action(step, {"app": "test-app"})
+        # 方案 A: AT-SPI action 优先触发，不依赖坐标（规避 DTK 对话框假通过）
+        fake_element.doActionNamed.assert_called()
+        fake_element.click.assert_not_called()
+
+    def test_element_action_click_falls_back_to_coordinates(self):
+        from src.at.executor.handlers import handle_element_action
+        from src.at.parser.models import SuiteActionStep
+
+        fake_element = unittest.mock.MagicMock()
+        fake_element.doActionNamed.side_effect = RuntimeError("no action")
+        fake_element.extents = (10, 10, 50, 30)
+        fake_dog = unittest.mock.MagicMock()
+        fake_dog.find_element_by_attr.return_value = fake_element
+        step = SuiteActionStep(
+            action="element_action",
+            selector={"name": "SomeBtn", "role": "push button"},
+            do="click",
+        )
+        with unittest.mock.patch("src.at.executor.handlers.get_dog", return_value=fake_dog):
+            handle_element_action(step, {"app": "test-app"})
+        # AT-SPI action 不可用 → 回退坐标点击（带坐标守卫）
         fake_element.click.assert_called_once()
 
     def test_smart_wait_timeout_logs_warning(self, caplog):

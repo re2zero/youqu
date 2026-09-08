@@ -285,7 +285,7 @@ def _find_by_hierarchy(dog, attrs, idx):
     child_role = attrs.get("role", "")
 
     if parent_name:
-        parents = dog.find_elements_by_attr(f"$//{parent_name}/")
+        parents = dog.find_elements_by_attr(f"$//{_escape_expr_name(parent_name)}/")
     elif parent_role:
         from src.depends.dogtail.tree import predicate
 
@@ -350,7 +350,7 @@ def _find_parent_element(dog, attrs, idx=0):
         except Exception:
             pass
     if name:
-        expr = f"$//{name}/"
+        expr = f"$//{_escape_expr_name(name)}/"
         return dog.find_element_by_attr(expr, idx)
     if role:
         from src.depends.dogtail.tree import predicate
@@ -497,21 +497,29 @@ def handle_mouse_drag(step: SuiteActionStep, context: dict) -> None:
     mk.drag_to(x, y)
 
 
-def _do_element_action(element, action: str, attrs: dict) -> None:
-    """Trigger a DMenu menu item via its AT-SPI action.
+def _is_check_box(element) -> bool:
+    try:
+        role = getattr(element, "roleName", "") or ""
+        if not role:
+            role = element.get_role_name() or ""
+        return "check box" in role.lower()
+    except BaseException:
+        return False
 
-    Only used for menu items whose AT-SPI showing/extents lag behind the
-    visible menu (dogtail sees stale (0,y) extents). doActionNamed('Press')
-    activates the focused menu item — for a freshly opened menu the focused
-    item is the default (first) one, so this only works reliably when the
-    target IS the focused item. Never falls back to coordinate clicks:
-    stale extents would click the screen top-left and steal window focus.
+
+def _try_atspi_click(element, action: str, attrs: dict) -> bool:
+    """Try to trigger an element via its AT-SPI action; True if triggered.
+
+    DTK 对话框/菜单元素（DCheckBox、DSuggestButton 等）经 Qt AT-SPI 桥直接
+    触发动作，不依赖屏幕坐标——规避坐标点击对对话框元素不可靠导致的
+    "找到但没生效"（假通过）。任何候选 action 成功即返回 True；全部失败
+    （控件无对应 action）返回 False，由调用方回退坐标点击。
     """
     candidates = {
-        "click": ["Press", "click", "press"],
+        "click": ["Press", "toggle", "activate", "click", "press"],
         "right_click": ["Press", "click"],
         "double_click": ["Press", "click"],
-    }.get(action, ["Press", "click"])
+    }.get(action, ["Press", "toggle", "activate", "click", "press"])
     tried = set()
     for name in candidates:
         if name in tried:
@@ -520,12 +528,43 @@ def _do_element_action(element, action: str, attrs: dict) -> None:
         try:
             element.doActionNamed(name)
             logger.info("element_action via AT-SPI action %r (selector=%s)", name, attrs)
-            return
+            return True
         except BaseException:
             continue
-    raise ElementNotFound(
-        f"menu item action failed (AT-SPI action unavailable); selector={attrs}"
-    )
+    return False
+
+
+def _coordinate_click(element, action: str, attrs: dict) -> None:
+    """坐标点击回退路径（AT-SPI action 不可用时）。
+
+    带坐标守卫：拒绝点击 extents 全 0 的隐藏幽灵节点，避免误点屏幕左上角。
+    """
+    try:
+        ex, ey, ew, eh = element.extents
+        if ew <= 0 or eh <= 0 or (ex <= 0 and ey <= 0):
+            raise ElementNotFound(
+                f"element has no valid coordinates (extents={element.extents}), "
+                f"refusing to click; selector={attrs}"
+            )
+    except ElementNotFound:
+        raise
+    except BaseException:
+        pass
+    if action == "click":
+        try:
+            element.click()
+        except NotImplementedError:
+            element.doActionNamed('click')
+    elif action == "right_click":
+        try:
+            element.click(button=3)
+        except NotImplementedError:
+            element.doActionNamed('click')
+    elif action == "double_click":
+        try:
+            element.doubleClick()
+        except NotImplementedError:
+            element.doActionNamed('click')
 
 
 _ELEMENT_DO_WHITELIST = {"click", "right_click", "double_click", "focus", "point"}
@@ -558,57 +597,20 @@ def handle_element_action(step: SuiteActionStep, context: dict) -> None:
         except BaseException as exc:
             # 分派失败(如菜单导航不可用)时回退传统路径, 保留行为
             logger.warning("intelligent dispatch failed (%s); fallback", exc)
-    # 守卫: 拦截完全无坐标的隐藏节点（extents 全 0，如菜单关闭时的
-    # 幽灵重复实例），避免 dogtail Node.click() 按 (0,0) 误点屏幕左上角。
-    # DTK DMenu 弹出后菜单项 AT-SPI showing/extents 状态可能滞后：
-    #   - 普通控件: showing=False 但坐标有效 → 正常坐标点击
-    #   - menu item: showing=False 且 extents 为 (0,y) 假坐标 → 走
-    #     _do_element_action (AT-SPI action)，不依赖坐标
-    use_action = False
-    try:
-        role = getattr(element, "roleName", "") or ""
-    except BaseException:
-        role = ""
-    is_menu_item = "menu item" in role.lower()
     if action in ("click", "right_click", "double_click"):
-        try:
-            ex, ey, ew, eh = element.extents
-            if ew <= 0 or eh <= 0 or (ex <= 0 and ey <= 0):
-                raise ElementNotFound(
-                    f"element has no valid coordinates (extents={element.extents}), "
-                    f"refusing to click; selector={attrs}"
-                )
-            if is_menu_item:
-                # 菜单项: showing=False 但坐标有值(可能滞后) → 用 action 触发
-                try:
-                    if not element.showing:
-                        use_action = True
-                except BaseException:
-                    pass
-        except ElementNotFound:
-            raise
-        except BaseException:
-            # 探测失败时不阻塞（保守放行，避免误杀可用元素）
-            pass
-    if use_action:
-        _do_element_action(element, action, attrs)
+        # DCheckBox: AT-SPI action (Press/Toggle/SetFocus) 存在但实现为空
+        # (假成功, 不真正 toggle), 直接坐标点击。
+        if _is_check_box(element):
+            _coordinate_click(element, action, attrs)
+            return
+        # 优先 AT-SPI action 触发（DTK 对话框/菜单元素经 Qt 桥直接触发，
+        # 不依赖屏幕坐标，规避坐标点击对对话框元素不可靠导致的"假通过"）。
+        # action 全部不可用时回退坐标点击（带坐标守卫）。
+        if _try_atspi_click(element, action, attrs):
+            return
+        _coordinate_click(element, action, attrs)
         return
-    if action == "click":
-        try:
-            element.click()
-        except NotImplementedError:
-            element.doActionNamed('click')
-    elif action == "right_click":
-        try:
-            element.click(button=3)
-        except NotImplementedError:
-            element.doActionNamed('click')
-    elif action == "double_click":
-        try:
-            element.doubleClick()
-        except NotImplementedError:
-            element.doActionNamed('click')
-    elif action == "focus":
+    if action == "focus":
         element.grabFocus()
     elif action == "point":
         dog.element_point(element)
@@ -623,18 +625,17 @@ def handle_element_set_value(step: SuiteActionStep, context: dict) -> None:
     attrs = resolve_step_attrs(step, elements)
     idx = attrs.get("index", 0)
     element = find_element(dog, attrs, idx)
+    # 聚焦输入框: 优先 AT-SPI grabFocus（不依赖坐标，对 DTK 对话框 DLineEdit
+    # 可靠），失败时回退坐标点击聚焦（带坐标守卫）。
     try:
-        ex, ey, ew, eh = element.extents
-        if ew <= 0 or eh <= 0 or (ex <= 0 and ey <= 0):
-            raise ElementNotFound(
-                f"element has no valid coordinates (extents={element.extents}), "
-                f"refusing to click; selector={attrs}"
-            )
-    except ElementNotFound:
-        raise
+        element.grabFocus()
     except BaseException:
-        pass
-    element.click()
+        try:
+            ex, ey, ew, eh = element.extents
+            if ew > 0 and eh > 0 and not (ex <= 0 and ey <= 0):
+                element.click()
+        except BaseException:
+            pass
     mk.input_message(step.text or "")
 
 
@@ -872,28 +873,40 @@ def handle_file_dialog_select(step: SuiteActionStep, context: dict) -> None:
         raise ValueError("file_dialog_select requires a 'path' argument")
 
     path = os.path.expanduser(path)
+    # 目录模式: 目标目录不存在时先创建, 确保走目录模式 (否则 is_dir=False
+    # 会误走 file 模式, 导致选择错误路径)。
+    if not os.path.isdir(path):
+        try:
+            os.makedirs(path, exist_ok=True)
+        except Exception:
+            pass
     is_dir = os.path.isdir(path)
 
     # Wait for dialog to appear
     time.sleep(1.0)
 
     def _focus_and_clear():
-        """Focus path bar (Ctrl+L) and clear existing text."""
-        subprocess.run(
-            ["xdotool", "key", "--clearmodifiers", "ctrl+l"],
-            capture_output=True, timeout=5
-        )
-        time.sleep(0.3)
-        subprocess.run(
-            ["xdotool", "key", "--clearmodifiers", "ctrl+a"],
-            capture_output=True, timeout=5
-        )
-        time.sleep(0.1)
-        subprocess.run(
-            ["xdotool", "key", "--clearmodifiers", "Delete"],
-            capture_output=True, timeout=5
-        )
-        time.sleep(0.1)
+        """Focus path bar (Ctrl+L) and clear existing text.
+
+        多次尝试: DTK 集成的 QFileDialog 地址栏聚焦/清空可能滞后, 单次
+        Ctrl+L+Ctrl+A+Delete 可能残留旧文本导致路径拼接。
+        """
+        for _ in range(2):
+            subprocess.run(
+                ["xdotool", "key", "--clearmodifiers", "ctrl+l"],
+                capture_output=True, timeout=5
+            )
+            time.sleep(0.3)
+            subprocess.run(
+                ["xdotool", "key", "--clearmodifiers", "ctrl+a"],
+                capture_output=True, timeout=5
+            )
+            time.sleep(0.1)
+            subprocess.run(
+                ["xdotool", "key", "--clearmodifiers", "Delete"],
+                capture_output=True, timeout=5
+            )
+            time.sleep(0.2)
 
     def _type_and_enter(text: str):
         """Type text and press Enter."""
@@ -967,6 +980,16 @@ def handle_screenshot(step: SuiteActionStep, context: dict) -> None:
     ImageUtils.save_temporary_picture(0, 0, w, h)
 
 
+def _escape_expr_name(name: str) -> str:
+    """转义元素名中的 '/'，避免 __evalx 正则把 name 截断。
+
+    元素名可含 '/'（如设置分组 "打开/保存设置"），而 __evalx 用
+    ``.*?[^\\\\]/`` 解析 expr，未转义的 '/' 会被当作路径分隔符截断 name。
+    转义为 ``\\/`` 后 __evalx 会还原为 '/'。
+    """
+    return name.replace("/", "\\/")
+
+
 def _attrs_to_expr(attrs: dict) -> str:
     if not attrs:
         return "$/"
@@ -978,9 +1001,9 @@ def _attrs_to_expr(attrs: dict) -> str:
     name = attrs.get("name", "")
     role = attrs.get("role", "")
     if name and role:
-        return f"$//{name}[@role='{role}']/"
+        return f"$//{_escape_expr_name(name)}[@role='{role}']/"
     if name:
-        return f"$//{name}/"
+        return f"$//{_escape_expr_name(name)}/"
     if role:
         return f"$//[role='{role}']/"
     return "$/"
@@ -1081,12 +1104,49 @@ def handle_assert_window(step: SuiteActionStep, context: dict) -> None:
             raise AssertionError(f"应用 {app} 窗口存在但名称不匹配 pattern={pattern}")
 
 
+def _parse_window_count_expected(expected):
+    """解析窗口数量断言期望。返回 (op, value)：
+    纯数字 → (None, int) 表示严格相等（走 assert_window_amount）；
+    ">2"/"<1"/">="/"<="/"=>" → (op, int)。
+    """
+    text = str(expected).strip()
+    for op in (">=", "<=", ">", "<", "=="):
+        if text.startswith(op):
+            try:
+                return op, int(text[len(op):].strip())
+            except ValueError:
+                raise ValueError(f"无效的窗口数量断言期望: {expected!r}")
+    try:
+        return None, int(text)
+    except ValueError:
+        raise ValueError(f"无效的窗口数量断言期望: {expected!r}")
+
+
+def _compare_window_count(actual, op, value):
+    return {
+        ">": actual > value,
+        "<": actual < value,
+        ">=": actual >= value,
+        "<=": actual <= value,
+        "==": actual == value,
+    }[op]
+
+
 def handle_assert_window_count(step: SuiteActionStep, context: dict) -> None:
     from src.assert_common import AssertCommon
+    from src.button_center import ButtonCenter
 
     app = step.app or context.get("app", "")
     expected = step.expected or 1
-    AssertCommon.assert_window_amount(app, int(expected))
+
+    op, value = _parse_window_count_expected(expected)
+    if op is None:
+        AssertCommon.assert_window_amount(app, value)
+        return
+
+    actual = ButtonCenter(app_name=app, config_path="xxx").get_windows_number(app)
+    if not _compare_window_count(actual, op, value):
+        raise AssertionError(f"断言应用窗口数量{app}为{actual}不满足{op}{value}")
 
 
 def handle_assert_process_running(step: SuiteActionStep, context: dict) -> None:
