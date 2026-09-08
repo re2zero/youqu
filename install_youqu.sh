@@ -288,7 +288,6 @@ setup_env() {
     local rc="${HOME}/.bashrc"
     local lines=(
         'export DISPLAY=":0"'
-        'export QT_QPA_PLATFORM='
         'export QT_ACCESSIBILITY=1'
         'export QT_LINUX_ACCESSIBILITY_ALWAYS_ON=1'
     )
@@ -298,7 +297,6 @@ setup_env() {
         fi
     done
     export DISPLAY="${DISPLAY:-:0}"
-    export QT_QPA_PLATFORM="${QT_QPA_PLATFORM:-}"
     export QT_ACCESSIBILITY=1
     export QT_LINUX_ACCESSIBILITY_ALWAYS_ON=1
     gsettings set org.gnome.desktop.interface toolkit-accessibility true > /dev/null 2>&1 \
