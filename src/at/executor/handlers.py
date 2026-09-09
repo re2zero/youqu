@@ -842,55 +842,348 @@ def handle_dbus_get_property(step: SuiteActionStep, context: dict) -> None:
 def handle_wait(step: SuiteActionStep, context: dict) -> None:
     pass
 
-def handle_file_dialog_select(step: SuiteActionStep, context: dict) -> None:
-    """Select files in a native file dialog (deepin/UOS portal).
 
-    Caller must trigger the file dialog opening first (e.g. click Import button
-    or press Ctrl+O). Then this handler:
+def _node_state(n):
+    """读取 AT-SPI 节点状态集, 兼容 get_state_set / get_state 两种 API。"""
+    try:
+        return n.get_state_set()
+    except BaseException:
+        try:
+            return n.get_state()
+        except BaseException:
+            return None
 
-    Directory mode (path is a directory):
-      1. Ctrl+L to focus path bar, Ctrl+A select all, Delete clear
-      2. Types the directory path
-      3. Presses Enter to navigate
-      4. Ctrl+A to select all files
-      5. Presses Enter to confirm
 
-    File mode (path is a file):
-      1. Ctrl+L to focus path bar, Ctrl+A select all, Delete clear
-      2. Types the parent directory path
-      3. Presses Enter to navigate into the directory
-      4. Ctrl+L to focus path bar, Ctrl+A select all, Delete clear
-      5. Types the filename
-      6. Presses Enter to open the file
-         (if dialog doesn't close, file type is unsupported)
+def _probe_dde_dialog() -> dict[str, Any] | None:
+    """探测 dde-file-dialog 进程 (DTK 文件对话框) 的 AT-SPI 树。
+
+    保存/覆盖确认对话框由独立的 dde-file-dialog 进程渲染, 其 AT-SPI 树
+    不在宿主应用下。返回:
+    {
+        "buttons": {name: {"node": n, "enabled": bool, "text": str}},
+        "text_inputs": [(node, name)],   # 可编辑文本输入框 (EditableText)
+        "file_items": [(node, name)],    # 文件列表项
+    }
+    无 dde-file-dialog 进程或未找到控件时返回 None。
     """
+    try:
+        import gi
+
+        gi.require_version("Atspi", "2.0")
+        from gi.repository import Atspi
+    except BaseException:
+        return None
+    buttons: dict[str, dict[str, Any]] = {}
+    text_inputs: list[tuple[Any, str, str]] = []
+    file_items: list[tuple[Any, str]] = []
+    file_list: Any = None
+    try:
+        desktop = Atspi.get_desktop(0)
+        for i in range(desktop.get_child_count()):
+            app = desktop.get_child_at_index(i)
+            try:
+                an = app.get_name() or ""
+            except Exception:
+                continue
+            if "dde-file-dialog" not in an:
+                continue
+            if app.get_child_count() == 0:
+                continue
+
+            def _walk(n):
+                nonlocal file_list
+                try:
+                    rl = n.get_role_name() or ""
+                    nm = n.get_name() or ""
+                    nid = ""
+                    try:
+                        nid = n.get_accessible_id() or ""
+                    except BaseException:
+                        pass
+                    e = n.get_extents(Atspi.CoordType.SCREEN)
+                    if e.width > 0 and e.height > 0:
+                        if rl in ("push button", "button") and nm:
+                            st = _node_state(n)
+                            enabled = bool(st and st.contains(Atspi.StateType.ENABLED))
+                            text = ""
+                            try:
+                                text = n.queryText().getText(0, -1) or ""
+                            except BaseException:
+                                pass
+                            buttons.setdefault(
+                                nm, {"node": n, "enabled": enabled, "text": text, "id": nid}
+                            )
+                        elif rl in ("text", "entry", "text box"):
+                            # 可编辑文本输入框 (文件名框/地址栏)
+                            try:
+                                n.queryEditableText()
+                                text_inputs.append((n, nm, nid))
+                            except BaseException:
+                                pass
+                        elif rl in ("list item", "table cell", "table row") and nm:
+                            # 只收集文件列表 (FileView) 的项, 排除搜索栏下拉
+                            # (AdvanceSearchBar/QComboBoxListView) 与侧边栏
+                            if "FileView" in nid:
+                                file_items.append((n, nm))
+                        elif rl == "list" and "FileView" in nid:
+                            file_list = n
+                except BaseException:
+                    pass
+                try:
+                    for k in range(n.get_child_count()):
+                        _walk(n.get_child_at_index(k))
+                except BaseException:
+                    pass
+
+            _walk(app)
+    except BaseException:
+        return None
+    if not buttons and not text_inputs and not file_items and file_list is None:
+        return None
+    return {
+        "buttons": buttons,
+        "text_inputs": text_inputs,
+        "file_items": file_items,
+        "file_list": file_list,
+    }
+
+
+def _pick_button(
+    buttons: dict,
+    names: tuple[str, ...],
+    texts: tuple[str, ...] = (),
+    id_contains: str = "",
+):
+    """按 accessible name / accessible_id / 文本匹配按钮, 返回按钮信息 dict 或 None。
+
+    name 匹配时忽略空格 (中文按钮名如 "保 存" 可被 "保存" 命中)。
+    id_contains: 限定 accessible_id 包含该子串 (如 "FileDialogStatusBar"),
+    避免语言变化导致 name 找不到时误匹配其他按钮。
+    返回的 dict 额外带 "name" 字段 (匹配到的 name, 去空格)。
+    """
+    for nm in names:
+        if nm in buttons:
+            b = buttons[nm]
+            if not id_contains or id_contains in b.get("id", ""):
+                return {**b, "name": nm}
+    norm = {k.replace(" ", ""): v for k, v in buttons.items()}
+    for nm in names:
+        key = nm.replace(" ", "")
+        if key in norm:
+            b = norm[key]
+            if not id_contains or id_contains in b.get("id", ""):
+                return {**b, "name": key}
+    if id_contains:
+        for nm, b in buttons.items():
+            if id_contains in b.get("id", ""):
+                return {**b, "name": nm}
+    if texts:
+        for b in buttons.values():
+            if b["text"] in texts:
+                return {**b, "name": ""}
+    return None
+
+
+def _click_button(btn) -> None:
+    """点击 AT-SPI 节点中心 (xdotool 鼠标点击)。"""
+    import subprocess
+
+    try:
+        e = btn.get_extents(__import__("gi").repository.Atspi.CoordType.SCREEN)
+        cx, cy = e.x + e.width // 2, e.y + e.height // 2
+        subprocess.run(
+            ["xdotool", "mousemove", str(cx), str(cy), "click", "1"],
+            capture_output=True, timeout=5
+        )
+    except BaseException:
+        pass
+
+
+def _set_text(node, text: str) -> bool:
+    """用 AT-SPI EditableText 直接设置文本内容, 不依赖焦点/键盘。"""
+    try:
+        node.queryEditableText().setTextContents(text)
+        return True
+    except BaseException:
+        return False
+
+
+def _find_name_edit(probe: dict):
+    """找文件名输入框。
+
+    优先 accessible_id 含 FileDialogStatusBar 的文本节点 (状态栏文件名框,
+    不随语言变化); fallback 取 y 坐标最大 (状态栏在对话框底部)。
+    """
+    for node, nm, nid in probe.get("text_inputs", []):
+        if "FileDialogStatusBar" in nid:
+            return node
+    candidates = []
+    for node, nm, nid in probe.get("text_inputs", []):
+        try:
+            e = node.get_extents(__import__("gi").repository.Atspi.CoordType.SCREEN)
+            candidates.append((e.y, node))
+        except BaseException:
+            pass
+    if not candidates:
+        return None
+    candidates.sort(key=lambda t: t[0])
+    return candidates[-1][1]
+
+
+def _find_path_input(probe: dict):
+    """找地址栏输入框。
+
+    优先 accessible_id 含 AddressBar 的节点 (地址栏激活后); fallback 排除
+    文件名框 (FileDialogStatusBar) 与搜索框 (SearchEdit) 后取 (y,x) 最小
+    (地址栏在对话框左上角)。仅当存在候选时返回, 避免把文件名框当地址栏。
+    """
+    for node, nm, nid in probe.get("text_inputs", []):
+        if "AddressBar" in nid:
+            return node
+    candidates = []
+    for node, nm, nid in probe.get("text_inputs", []):
+        if "FileDialogStatusBar" in nid or "SearchEdit" in nid:
+            continue
+        try:
+            e = node.get_extents(__import__("gi").repository.Atspi.CoordType.SCREEN)
+            candidates.append((e.y, e.x, node))
+        except BaseException:
+            pass
+    if not candidates:
+        return None
+    candidates.sort(key=lambda t: (t[0], t[1]))
+    return candidates[0][2]
+
+
+def _select_file_item(probe: dict, filename: str) -> bool:
+    """在文件列表中选中目标文件 (点击 AT-SPI list item)。"""
+    for node, nm in probe.get("file_items", []):
+        if nm == filename:
+            _click_button(node)
+            return True
+    return False
+
+
+def _focus_file_list(probe: dict) -> bool:
+    """点击文件列表区域确保焦点 (地址栏导航后焦点可能在地址栏)。"""
+    fl = probe.get("file_list")
+    if fl is None:
+        return False
+    _click_button(fl)
+    return True
+
+
+def _accept_button_text(probe: dict) -> str:
+    """返回接受按钮 (Open/Save) 的匹配 name (去空格), 用于判断对话框类型。"""
+    accept = _pick_button(
+        probe.get("buttons", {}),
+        (
+            "CurAcceptButton", "FileDialogStatusBarAcceptButton",
+            "Save", "Open", "保存", "打开", "保 存", "打 开",
+        ),
+        ("Save", "Open", "保存", "打开"),
+        id_contains="FileDialogStatusBar",
+    )
+    return accept["name"].replace(" ", "") if accept else ""
+
+
+def _dde_dialog_visible() -> bool:
+    """检查 dde-file-dialog 是否有可见窗口 (xdotool, 仅匹配可见窗口)。"""
+    import subprocess
+
+    try:
+        out = subprocess.run(
+            ["xdotool", "search", "--onlyvisible", "--class", "dde-file-dialog"],
+            capture_output=True, text=True, timeout=5
+        )
+        return bool(out.stdout.strip())
+    except BaseException:
+        return False
+
+
+def _confirm_dialog() -> bool:
+    """根据 dde-file-dialog 按钮状态动态确认当前对话框。
+
+    覆盖确认框 (Replace): 点击确认覆盖。
+    打开对话框 (接受按钮文本 Open): 可点击则点击打开; 不可点击 (目标
+    路径/文件不存在) 则点取消关闭, 避免对话框卡死。
+    保存对话框 (接受按钮文本 Save): 点击保存。
+    返回 True 表示已处理; False 表示未探测到按钮, 调用方应走键盘 fallback。
+    """
+    probe = _probe_dde_dialog()
+    if not probe:
+        # 探测不到 dde-file-dialog 控件: 对话框已关闭 (保存/打开成功) 或
+        # 尚未出现。此时不应触发键盘 fallback (会误操作宿主应用), 视为已处理。
+        return True
+    buttons = probe["buttons"]
+
+    # 覆盖确认框: Replace 按钮 (中文 "替 换", 去空格匹配)
+    replace_btn = _pick_button(
+        buttons, ("Replace", "覆盖", "替换", "替 换"), ("Replace", "覆盖", "替换")
+    )
+    if replace_btn is not None:
+        _click_button(replace_btn["node"])
+        time.sleep(0.5)
+        return True
+
+    # 接受按钮 (状态栏: id 含 FileDialogStatusBar, 文本 Save/Open / 保 存 / 打 开)
+    accept_btn = _pick_button(
+        buttons,
+        (
+            "CurAcceptButton", "FileDialogStatusBarAcceptButton",
+            "Save", "Open", "保存", "打开", "保 存", "打 开",
+        ),
+        ("Save", "Open", "保存", "打开"),
+        id_contains="FileDialogStatusBar",
+    )
+    if accept_btn is not None:
+        if accept_btn["enabled"]:
+            _click_button(accept_btn["node"])
+            # 保存场景: 文件已存在时弹出覆盖确认框 (替 换), 循环探测并确认。
+            # 注意 accept_btn["name"] 可能是 "保 存" (带空格), 需去空格判断。
+            if accept_btn["name"].replace(" ", "") in ("Save", "保存"):
+                # 点保存后: 覆盖确认框弹出有延迟, 且弹出初期按钮未渲染
+                # (extents 为 0 被探测过滤, 甚至整个确认框探测为 None)。
+                # 只要 dde-file-dialog 仍有可见窗口 (确认框渲染中/弹出中)
+                # 就继续等待; 窗口全部关闭才视为处理完毕。
+                for _ in range(12):
+                    time.sleep(1.0)
+                    probe2 = _probe_dde_dialog()
+                    if probe2:
+                        replace_btn = _pick_button(
+                            probe2["buttons"],
+                            ("Replace", "覆盖", "替换", "替 换"),
+                            ("Replace", "覆盖", "替换"),
+                        )
+                        if replace_btn is not None:
+                            _click_button(replace_btn["node"])
+                            time.sleep(0.5)
+                            continue
+                    if not _dde_dialog_visible():
+                        break  # 所有 dde-file-dialog 窗口已关闭
+        else:
+            # 路径/文件不存在 → 接受按钮不可点击 → 点取消关闭
+            reject_btn = _pick_button(
+                buttons,
+                ("CurRejectButton", "Cancel", "取消", "取 消"),
+                ("Cancel", "取消"),
+                id_contains="FileDialogStatusBar",
+            )
+            if reject_btn is not None:
+                _click_button(reject_btn["node"])
+        return True
+
+    return False
+
+
+def _file_dialog_keyboard_fallback(path: str, name: str, is_dir: bool) -> None:
+    """键盘盲操 fallback: 仅当探测不到 dde-file-dialog 进程时使用。"""
     import os
     import subprocess
     import time
 
-    path = step.path or ""
-    if not path:
-        raise ValueError("file_dialog_select requires a 'path' argument")
-
-    path = os.path.expanduser(path)
-    # 目录模式: 目标目录不存在时先创建, 确保走目录模式 (否则 is_dir=False
-    # 会误走 file 模式, 导致选择错误路径)。
-    if not os.path.isdir(path):
-        try:
-            os.makedirs(path, exist_ok=True)
-        except Exception:
-            pass
-    is_dir = os.path.isdir(path)
-
-    # Wait for dialog to appear
-    time.sleep(1.0)
-
     def _focus_and_clear():
-        """Focus path bar (Ctrl+L) and clear existing text.
-
-        多次尝试: DTK 集成的 QFileDialog 地址栏聚焦/清空可能滞后, 单次
-        Ctrl+L+Ctrl+A+Delete 可能残留旧文本导致路径拼接。
-        """
+        """Focus path bar (Ctrl+L) and clear existing text."""
         for _ in range(2):
             subprocess.run(
                 ["xdotool", "key", "--clearmodifiers", "ctrl+l"],
@@ -921,30 +1214,36 @@ def handle_file_dialog_select(step: SuiteActionStep, context: dict) -> None:
         )
         time.sleep(0.5)
 
+    if name:
+        subprocess.run(
+            ["xdotool", "key", "--clearmodifiers", "ctrl+a"],
+            capture_output=True, timeout=5
+        )
+        time.sleep(0.2)
+        subprocess.run(
+            ["xdotool", "type", "--clearmodifiers", name],
+            capture_output=True, timeout=5
+        )
+        time.sleep(0.3)
+
     if is_dir:
-        # Directory mode: navigate to dir, select all, confirm
         _focus_and_clear()
         _type_and_enter(path)
-        # Select all files in the directory
         subprocess.run(
             ["xdotool", "key", "--clearmodifiers", "ctrl+a"],
             capture_output=True, timeout=5
         )
         time.sleep(0.3)
-        # Press Enter to confirm
         subprocess.run(
             ["xdotool", "key", "--clearmodifiers", "Return"],
             capture_output=True, timeout=5
         )
         time.sleep(0.5)
     else:
-        # File mode: navigate to parent dir, then type filename
         parent = os.path.dirname(path)
         filename = os.path.basename(path)
         _focus_and_clear()
         _type_and_enter(parent)
-        # Now inside the directory — file list is focused.
-        # Type the filename (dialog highlights the matching file), then Enter to open.
         subprocess.run(
             ["xdotool", "type", "--clearmodifiers", filename],
             capture_output=True, timeout=5
@@ -955,6 +1254,142 @@ def handle_file_dialog_select(step: SuiteActionStep, context: dict) -> None:
             capture_output=True, timeout=5
         )
         time.sleep(0.5)
+
+
+def handle_file_dialog_select(step: SuiteActionStep, context: dict) -> None:
+    """在原生文件对话框中输入路径并确认 (deepin/UOS portal)。
+
+    调用方需先触发对话框弹出 (如点击导入按钮或按 Ctrl+O)。本实现完全
+    基于 dde-file-dialog 进程的 AT-SPI 树操作 (真实 UI 状态), 不依赖
+    键盘焦点猜测:
+
+    1. 文件名输入框 (FileNameEdit): 用 EditableText 直接设置文件名
+    2. 地址栏: 设置目录路径后回车导航
+    3. 打开场景: 从文件列表选中目标文件 (Open 按钮依赖列表选中状态)
+    4. 动态确认: 接受按钮 (Save/Open) 可点击则点击; 打开模式下目标
+       文件不存在时接受按钮不可点击, 自动点取消关闭
+    5. 保存后若弹出覆盖确认框 (Replace), 点击确认覆盖
+    探测不到 dde-file-dialog 时回退键盘操作。
+    """
+    import os
+    import subprocess
+    import time
+
+    path = step.path or ""
+    name = step.name or ""
+    if not path:
+        raise ValueError("file_dialog_select requires a 'path' argument")
+
+    path = os.path.expanduser(path)
+    # 目录模式: 目标目录不存在时先创建, 确保走目录模式 (否则 is_dir=False
+    # 会误走 file 模式, 导致选择错误路径)。
+    if not os.path.isdir(path):
+        try:
+            os.makedirs(path, exist_ok=True)
+        except Exception:
+            pass
+    is_dir = os.path.isdir(path)
+
+    # 等待对话框出现
+    time.sleep(1.0)
+
+    probe = _probe_dde_dialog()
+    if not probe:
+        # 探测不到 dde-file-dialog (非 DTK 对话框) → 键盘 fallback
+        _file_dialog_keyboard_fallback(path, name, is_dir)
+        return
+
+    # 目标文件名: 显式 name 优先, 否则取文件路径的 basename
+    filename = name or (os.path.basename(path) if not is_dir else "")
+
+    # 1. 文件名输入框设置文件名 (保存场景; 打开场景用于过滤文件列表)
+    if filename:
+        name_edit = _find_name_edit(probe)
+        if name_edit is not None:
+            _set_text(name_edit, filename)
+
+    # 2. 地址栏设置路径 + 回车导航
+    path_input = _find_path_input(probe)
+    if path_input is None:
+        # 地址栏默认隐藏 (面包屑模式), Ctrl+L 激活后重新探测
+        subprocess.run(
+            ["xdotool", "key", "--clearmodifiers", "ctrl+l"],
+            capture_output=True, timeout=5
+        )
+        time.sleep(0.5)
+        probe = _probe_dde_dialog() or probe
+        path_input = _find_path_input(probe)
+    if path_input is not None:
+        _set_text(path_input, path)
+        try:
+            path_input.grabFocus()
+        except BaseException:
+            pass
+        subprocess.run(
+            ["xdotool", "key", "--clearmodifiers", "Return"],
+            capture_output=True, timeout=5
+        )
+        time.sleep(1.0)
+
+    # 3. 导航后重新探测 (树可能刷新) 并重设文件名
+    probe = _probe_dde_dialog() or probe
+    if filename:
+        name_edit = _find_name_edit(probe)
+        if name_edit is not None:
+            _set_text(name_edit, filename)
+
+    # 4. 打开场景 (文件): 文件列表默认有焦点, 输入文件名过滤/选中,
+    #    Open 按钮才可点击 (源码: isSelectFiles 依赖列表选中状态)。
+    #    注意: path 可能是目录 + name 是文件名 (打开目录下的文件),
+    #    不能用 is_dir 排除。
+    if _accept_button_text(probe) in ("Open", "打开") and filename:
+        # 地址栏导航后焦点可能在地址栏, 点击文件列表区域确保焦点
+        _focus_file_list(probe)
+        time.sleep(0.3)
+        # 输入文件名 (文件列表过滤/选中目标文件)
+        subprocess.run(
+            ["xdotool", "type", "--clearmodifiers", filename],
+            capture_output=True, timeout=5
+        )
+        # 等待文件列表过滤/选中: 目标存在且 Open enabled 才继续。
+        # 注意: 文件列表可能不过滤 (type 只高亮近似项), Open 会因选中
+        # 近似文件而 enabled, 因此必须先检查目标精确匹配, 目标不存在
+        # 时提前结束, 避免打开错误文件。
+        for _ in range(6):
+            time.sleep(0.5)
+            probe = _probe_dde_dialog() or probe
+            items = [nm for _, nm in probe.get("file_items", [])]
+            if filename not in items:
+                break  # 目标不存在
+            open_btn = _pick_button(
+                probe["buttons"],
+                (
+                    "CurAcceptButton", "FileDialogStatusBarAcceptButton",
+                    "Save", "Open", "保存", "打开", "保 存", "打 开",
+                ),
+                ("Save", "Open", "保存", "打开"),
+                id_contains="FileDialogStatusBar",
+            )
+            if open_btn is not None and open_btn["enabled"]:
+                break
+        # 目标文件不存在 → 点取消关闭 (不打开近似文件)
+        if filename not in [nm for _, nm in probe.get("file_items", [])]:
+            reject_btn = _pick_button(
+                probe["buttons"],
+                ("CurRejectButton", "Cancel", "取消", "取 消"),
+                ("Cancel", "取消"),
+                id_contains="FileDialogStatusBar",
+            )
+            if reject_btn is not None:
+                _click_button(reject_btn["node"])
+            return
+
+    # 5. 动态确认 (打开/保存/覆盖确认)
+    if _confirm_dialog():
+        return
+
+    # 6. 确认失败 → 键盘 fallback
+    _file_dialog_keyboard_fallback(path, name, is_dir)
 
 def handle_file_dialog_cancel(step: SuiteActionStep, context: dict) -> None:
     """Cancel the native file dialog by pressing Escape."""

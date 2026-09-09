@@ -206,6 +206,7 @@ class SuiteActionStep(BaseModel):
     app: Optional[str] = None
     expected: Optional[Union[int, str]] = None
     name_pattern: Optional[str] = None
+    name: Optional[str] = None
     key: Optional[str] = None
     text: Optional[str] = None
     value: Optional[Any] = None
