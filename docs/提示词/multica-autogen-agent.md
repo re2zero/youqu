@@ -78,9 +78,9 @@ MCP 不可用时跳过，报告中显式标注"MCP 不可用，跳过 UI 图谱�
 - Stage 2 语义映射由**子 agent 池**执行：先运行 `gen_schedule.py` 生成批次计划，严格按计划分批派发，**每批 ≤ 3 个、批间串行**；切片数 ≤ 2 时单 agent 顺序处理。禁止跳过调度脚本一次性派发全部切片。
 - Stage 3 组装 + 覆盖门禁由确定性脚本执行（`pipeline_assemble.py` + `cover.py`），100% 覆盖是硬门禁。
 - 覆盖门禁 FAIL → 进入补漏循环（单 agent 聚焦补充，循环至 100% 或人工豁免）。
-- 验证：Gate 5 + Gate 4 + 运行时 smoke（有 DISPLAY 时）。**不运行 Gate 3**——它要求 cases_mapped.yaml 头部含 `=== 格式范例 ===` 注释块，是针对旧 at-case-generator 管线（LLM 手写 cases_mapped）设计的；本管线 cases_mapped.yaml 由脚本组装，跑 Gate 3 必然误报失败。
+- 验证：Gate 5 + Gate 4 + 运行时 smoke。Gate 1-5 均为静态 YAML 校验（`youqu at validate`），**不需要桌面环境，任何时候都要执行**，不得以"无 AT-SPI bus / 无 DISPLAY"为由跳过。运行时 smoke 在 headless 机器上由智能体先设置离屏会话再执行：`xvfb-run -a -s "-screen 0 1920x1080x24" dbus-run-session -- youqu at smoke ...`（或手动 `Xvfb :99 -screen 0 1920x1080x24` + `export DISPLAY` + `eval "$(dbus-launch --sh-syntax)"` + `export QT_LINUX_ACCESSIBILITY_ALWAYS_ON=1`）。**不运行 Gate 3**——它要求 cases_mapped.yaml 头部含 `=== 格式范例 ===` 注释块，是针对旧 at-case-generator 管线（LLM 手写 cases_mapped）设计的；本管线 cases_mapped.yaml 由脚本组装，跑 Gate 3 必然误报失败。
 - 运行时验证失败 → 降级：标记 suite `status: unstable`，不阻塞交付，报告中说明。
-- 桌面环境不可用时标注"需在有桌面环境后执行验收"。
+- 桌面环境不可用时：Gate 静态校验照常执行；仅运行时验证按上述方式离屏执行，仍不可行才标注"需在有桌面环境后执行验收"。
 
 ### 5. 报告输出
 

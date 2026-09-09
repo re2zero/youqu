@@ -5,7 +5,7 @@ description: >
   xlsx/csv case doc or feature requirements. Use when the user asks to 生成
   AT用例 / 生成测试套件 / 把用例文档转成 suite for a desktop app.
   Triggers: AT用例生成, 生成AT用例, AT套件生成, suite生成, 元素驱动用例, 覆盖率生成用例.
-version: "0.1.1"
+version: "0.1.2"
 license: MIT
 author: Uniontech
 ---
@@ -35,7 +35,7 @@ Generates executable AT-SPI `*.suite.yaml` suites for a Linux desktop app, guara
 4. **Generate** — one sub-agent per slice maps cases → suites, picking `selector.name` only from the whitelist. Dispatch strictly by `scripts/gen_schedule.py` batches (≤3 parallel, serial between batches).
 5. **Assemble + gate** — `scripts/pipeline_assemble.py` assembles suites; `scripts/cover.py` enforces the hard 100% gate.
 6. **Fill gaps** — for uncovered elements, run a focused single sub-agent until 100% or manual exemption.
-7. **Verify** — Gates 3/5/4, runtime verify (if DISPLAY), coverage report.
+7. **Verify** — Gates 3/5/4 (static YAML checks, no desktop needed), runtime verify (needs DISPLAY; on headless machines wrap with `xvfb-run -a -s "-screen 0 1920x1080x24" dbus-run-session --`), coverage report.
 
 Full stage details: `references/stage-1-prep.md`, `references/stage-2-generate.md`, `references/stage-3-assemble.md`, `references/stage-4-verify.md`. Sub-agent prompt: `templates/at-case-mapping-prompt-template.md`.
 
@@ -98,7 +98,7 @@ Full stage details: `references/stage-1-prep.md`, `references/stage-2-generate.m
 |---------|----------|
 | Scan fails (no libclang) | Stop, check deps |
 | No xlsx | Fall back to feature-driven mode (still needs --src/--scan-dir for element universe) |
-| No DISPLAY | Skip runtime verify |
+| No DISPLAY | Gates still run (static); for runtime verify wrap with `xvfb-run -a -s "-screen 0 1920x1080x24" dbus-run-session --` or skip and mark "needs desktop acceptance" |
 | One slice generation fails | Skip that slice, mark `skipped` |
 | Coverage gate FAIL | Gap-fill loop until 100% or manual exemption |
 | Runtime verify fails | Mark suite `status: unstable` |

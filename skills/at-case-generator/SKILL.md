@@ -7,7 +7,7 @@ description: >
   id_name 为权威。不依赖源码扫描、不做 xlsx 解析、不用子 agent。
   Triggers: AT用例生成, 生成AT用例, AT套件生成, suite生成, 元素驱动用例,
   从规范用例生成, 复用规范产物, cases_standard, element-map, 覆盖率生成用例.
-version: "2.3.0"
+version: "2.3.1"
 license: MIT
 author: Uniontech
 ---
@@ -73,7 +73,9 @@ flowchart LR
    elements.yaml + cases_mapped.yaml（与 at-suite-generator 同源脚本，格式一致）。
 5. **门禁**（Stage 3）— `cover.py`：100% 覆盖门禁（分母 = element-map 非 TBD
    非菜单 id_name）。
-6. **验证**（Stage 4）— Gate 5/4 + 运行时 smoke（有 DISPLAY 时）。
+6. **验证**（Stage 4）— Gate 5/4（静态校验，无需桌面环境）+ 运行时 smoke
+   （需要 DISPLAY；headless 机器用
+   `xvfb-run -a -s "-screen 0 1920x1080x24" dbus-run-session --` 包裹执行）。
 
 ## Boundary
 
@@ -198,7 +200,7 @@ flowchart LR
 | 某模块映射失败 | 重试一次；仍失败跳过该模块，报告标注 |
 | 覆盖门禁 FAIL | 补漏循环（主 agent 聚焦补充）→ 100% 或豁免 |
 | 运行时验证失败 | 标记 suite `status: unstable` |
-| 无 DISPLAY | 跳过运行时验证 |
+| 无 DISPLAY | Gate 5/4 照常执行（静态）；运行时验证用 `xvfb-run -a -s "-screen 0 1920x1080x24" dbus-run-session --` 包裹，或跳过并标注"需在有桌面环境后执行验收" |
 
 ## Verification checklist
 

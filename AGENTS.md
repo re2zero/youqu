@@ -210,6 +210,18 @@ Ruff: line-length=100, 4-space indent, Python 3.10+。仅启用 E4/E7/E9/F 规�
 - `youqu at run --testdir <dir>` — 执行 AT-SPI YAML 测试
 - `youqu at smoke --modules-dir <dir>` — L2 模块烟雾测试 (每模块 1 个代表 case)
 - `youqu at verify --suite <yaml> --spec-id <id>` — L3 单 case 深度验证
+- `youqu at validate` — Gate 1-5 均为静态 YAML 校验，**不需要桌面环境**，无 DISPLAY 时照常执行
+- 无桌面环境 (CI/headless) 跑运行时命令时，由智能体先设置离屏会话环境，框架零改动：
+  ```bash
+  # 方式 A (推荐): 一行包裹，退出自动清理；-s 指定 1080p 分辨率 (默认 1280x1024)
+  xvfb-run -a -s "-screen 0 1920x1080x24" dbus-run-session -- youqu at smoke --modules-dir <dir>
+  # 方式 B: 手动拉起并注入环境变量
+  Xvfb :99 -screen 0 1920x1080x24 -nolisten tcp &
+  export DISPLAY=:99
+  eval "$(dbus-launch --sh-syntax)"          # 注入 DBUS_SESSION_BUS_ADDRESS
+  export QT_LINUX_ACCESSIBILITY_ALWAYS_ON=1  # Qt 应用强制开启 accessibility
+  # accessibility bus 由 at-spi2-core 在首个 AT-SPI 应用连接时经 D-Bus 自动激活
+  ```
 
 **at-tree.yaml v2.0 格式** (scan+record+merge 产出):
 - `tree`: 持久层 — 始终可见的元素 (base dump + window:activate 合并，states 最后观测值覆盖)
@@ -235,6 +247,7 @@ youqu at split --cases cases_raw.yaml --at-tree at-tree-annotated.yaml --output 
 youqu at precandidate --module-dir /tmp/modules/find/
 youqu at validate --gate 5 --cases-mapped cases_mapped.yaml
 youqu at smoke --modules-dir /tmp/modules/
+xvfb-run -a -s "-screen 0 1920x1080x24" dbus-run-session -- youqu at smoke --modules-dir /tmp/modules/   # headless (CI/无桌面)
 youqu at verify --suite find/find.suite.yaml --spec-id find_s0
 ```
 
