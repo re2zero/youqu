@@ -146,6 +146,18 @@ def validate_element_map(cases: list[dict], elem_map: dict | None, report: Repor
     if not elem_map:
         report.warning("?", "无 element-map.yaml，无法校验 UI 目标映射")
         return
+    # id_name / object_name 至少填一个（spec §8）：都空或 TBD → 运行时无法定位
+    for e in elem_map.get("elements", []) or []:
+        if not isinstance(e, dict):
+            continue
+        idn = (e.get("id_name") or "").strip()
+        objn = (e.get("object_name") or "").strip()
+        if (not idn or idn in ("TBD", "待补充")) and (not objn or objn in ("TBD", "待补充")):
+            report.warning(
+                e.get("ui_name") or "?",
+                f"element-map 条目 id_name 与 object_name 均空/TBD，运行时无法定位"
+                f"（spec §8：至少填一个）",
+            )
     ui_names = {e.get("ui_name") for e in elem_map.get("elements", [])}
     for case in cases:
         cid = str(case.get("id", "?"))

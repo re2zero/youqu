@@ -7,7 +7,7 @@ description: >
   Triggers: 用例编写, 写用例, 用例转换, xlsx转yaml, 用例规范化, 用例合规检查,
   检查用例规范, 用例校对, test case authoring, case validation, element-map,
   界面元素映射表.
-version: "0.2.0"
+version: "0.3.0"
 license: MIT
 author: Uniontech
 ---
@@ -34,7 +34,7 @@ author: Uniontech
 
 1. 读 `references/spec.md`（规则）与 `assets/case-template.yaml`（范本）
 2. 产出用例：标题 `【模块】功能_场景`；前置只写状态；步骤一行一动作；预期可断言
-3. 步骤中每个 UI 目标追加到 `element-map.yaml`（`ui_name` 测试填，`id_name`/`role` 留给开发）
+3. 步骤中每个 UI 目标追加到 `element-map.yaml`（`ui_name` 测试填，`id_name`/`object_name`/`role` 留给开发）
 4. 跑 `scripts/validate_cases.py`，0 error 才交付
 
 ### 模式 B：xlsx → 标准 YAML 转换
@@ -43,7 +43,7 @@ author: Uniontech
 2. `scripts/convert_xlsx.py` 机械转换，一次产出：
    - `cases_standard.yaml`：`raw_*` 逐字保留原始描述 + 机械预处理到 title/module/steps/expected
    - `slices/`：按模块 + token 预算切分（2000+ 条用例必需，AI 逐片处理）
-   - `element-map.yaml`：机械提取 UI 目标初稿（ui_name 候选，id_name/role=TBD）
+   - `element-map.yaml`：机械提取 UI 目标初稿（ui_name 候选，id_name/object_name/role=TBD）
 3. **AI 初步生成**：逐片基于 raw_* 规范化（补【模块】、拆一行动作、去断言词、补输入值），精修 element-map（过滤噪声、补 desc）
 4. 测试人员对照 raw_* 校对（AI 是草稿，语义以原始描述为准）
 5. `scripts/validate_cases.py` 0 error 才交付

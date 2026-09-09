@@ -1371,14 +1371,26 @@ def _write_outputs(result: ScanResult, output_dir: str) -> None:
     # at_locatable_total: widgets locatable by AT-SPI name at runtime.
     # The source-naming denominator (total_widgets) also counts non-widget
     # interactive types (QAction/QShortcut/DAction) that only expose
-    # setObjectName — correct for source naming coverage, but these are NOT
-    # locatable by AT-SPI name (the objectName sits at the end of the
-    # accessible-id path, not as the element name). at_locatable_total
-    # excludes them so AT-case coverage uses an honest "locatable by name"
-    # denominator. Runtime-only exemptions (e.g. PButton, never constructed)
-    # are applied by coverage_atcase via unreachable.yaml.
+    # setObjectName. Qt6 bridge encodes objectName into get_accessible_id()
+    # dotted paths and the executor locates them by accessible_id suffix
+    # (df20e47) — they ARE locatable, so they stay in this denominator.
     at_locatable_total = sum(
         1 for w in result.widgets if not _is_non_widget_interactive(w.type_name)
+    )
+
+    # at_locatable_by_aid_total: at_locatable_total minus widgets that only
+    # expose setAccessibleName. AccessibleName is read as the AT-SPI element
+    # name; objectName only as accessible_id. When an app's suites locate
+    # everything via objectName (accessible_id selectors), name-only widgets
+    # form the reachable denominator — excluding them yields an honest
+    # "locatable by accessible_id" total (stricter of the two perspectives).
+    # Non-widget interactive types (QAction family) carry only objectName →
+    # included in this denominator.
+    at_locatable_by_aid_total = sum(
+        1
+        for w in result.widgets
+        if not _is_non_widget_interactive(w.type_name)
+        and w.has_object_name
     )
 
     try:
@@ -1403,11 +1415,11 @@ def _write_outputs(result: ScanResult, output_dir: str) -> None:
         "summary": {
             "total_widgets": total,
             "at_locatable_total": at_locatable_total,
+            "at_locatable_by_aid_total": at_locatable_by_aid_total,
             "with_names": ok_count,
             "missing_names": gap_count,
             "coverage": coverage,
         },
-        "gaps": [_widget_to_dict(w) for w in result.gap_widgets],
     }
     if yaml:
         with open(gaps_path, "w", encoding="utf-8") as f:
@@ -1429,6 +1441,7 @@ def _write_outputs(result: ScanResult, output_dir: str) -> None:
         "summary": {
             "total_widgets": total,
             "at_locatable_total": at_locatable_total,
+            "at_locatable_by_aid_total": at_locatable_by_aid_total,
             "with_names": ok_count,
             "missing_names": gap_count,
             "coverage": coverage,

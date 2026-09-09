@@ -39,10 +39,22 @@ for slice_info in summary["slices"]:
 
 1. **元素驱动**：先读该模块所有用例理解测什么 → 查 element-map 白名单确定
    断言目标 → 分组 → 逐条四字段分解（操作/目标/预期/前置）。
-2. **selector.name 只从白名单 `elements` 键取**（element-map id_name，运行时名）。
-   禁止虚构、禁止 ui_name 中文、禁止菜单项、禁止 unresolved（TBD）名。
-3. **菜单（transient_items）**：用 `dtk_main_menu` / `dtk_context_menu` + `items`
-   文本操作，不写 `selector.name`。
+2. **selector 只从白名单 `elements` 键取**（element-map 运行时名）。定位键按
+   manifest 的 `locator` 判定：`locator: accessible_id`（元素有 `object_name`，
+   Qt6 编码进 accessible_id 后缀）→ `selector.accessible_id`；`locator: name`
+   （仅 setAccessibleName）→ `selector.name`。**有 object_name 优先用
+   accessible_id**（objectName 唯一稳定）。禁止虚构、禁止 ui_name 中文、
+   禁止 unresolved（TBD）名。
+3. **菜单项运行时自动分类**（manifest 的 `transient_items` 单列瞬态；
+   `elements` 中的菜单项带 objectName 编码 → 持久）：
+   - 持久菜单项（在 `elements`，如 WindowsAction / Settings）→
+     `element_action` + `selector.accessible_id`（引擎按 popup aid 段
+     自动分类触发：DropdownMenu 点按钮 / 主菜单点 OptionMenu，键盘导航；
+     歧义时回退 `dtk_dropdown_menu` + selector + items=objectName 后缀）
+   - role=menu 或关闭态无节点 / 无 objectName 的右键菜单项（在
+     `transient_items`）→ 瞬态，`dtk_context_menu` + 右键触发点
+     selector + `items`
+   - 主菜单 → `dtk_main_menu` + `items`
 4. **manual 用例**：`manual: true` → `status: "unsupported"` + `reason`（直接用
    at-case-authoring 的 reason），`steps: []`。不再自行判断。
    **unsupported 不会产生可执行 case**（见 stage-3 处置说明）；多个同 reason
@@ -72,7 +84,8 @@ for slice_info in summary["slices"]:
 |----------|-----------------|------|
 | `step_type` | `type` | `action` 或 `assert` |
 | `action` | `operation` | 动作类型 |
-| `selector.name` | `target` | 元素名称（白名单） |
+| `selector.name` | `target` | 元素名称（白名单，setAccessibleName/文本名） |
+| `selector.accessible_id` | `target` | objectName 定位（白名单 object_name，见原则 2/3） |
 | `do` | `value` 且值为 click | 操作类型 |
 
 每个 suite 的 `annotation.AT元素引用` 必须列出该 suite 实际引用的白名单元素名

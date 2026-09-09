@@ -5,8 +5,13 @@
 这是对 `coverage_stats.py` 的**接力**:
 
 - **scan_total (分母)** — 由 `coverage_stats.py` 扫描出的交互控件总数 (源码扫描结果), 本脚本不计算, 只从扫描产物读取
-- **covered_refs (分子)** — 本脚本计算: suite 持久元素引用全集 = `selector.name` (去重去噪)。**瞬态菜单项 (`dtk_main_menu` / `dtk_context_menu` 的 `items`) 不计入覆盖**, 仅在报告 `transient_items` 中列出供查看。
+- **covered_refs (分子)** — 本脚本计算: suite 持久元素引用全集 = `selector.name` ∪ `selector.accessible_id` (去重去噪)。**瞬态菜单项 (`dtk_main_menu` / `dtk_context_menu` 的 `items`) 不计入覆盖**, 仅在报告 `transient_items` 中列出供查看。
 - **覆盖率** — `min(covered_refs, scan_total) / scan_total × 100%`, 封顶 100%
+
+`selector.accessible_id` 是 Qt6 objectName 定位 (编码进 accessible_id 点分路径
+后缀, executor 后缀匹配)。QAction/DAction 等仅 objectName 的控件经此可定位,
+计入分母 (默认口径 `at_locatable_total` 包含它们)。纯 objectName 应用可用
+`--aid-denominator` 切分母到 `at_locatable_by_aid_total`。
 
 若项目不存在 AT 用例 (`<src>/tests/at/` 下无含 `*.suite.yaml` 的子目录), 覆盖率记为 0。
 
@@ -33,8 +38,13 @@
 `coverage_stats.py` 扫描完成后, 产物写在 `<output 目录>/coverage_scan/` 下。`coverage_atcase.py` 按以下顺序取 total:
 
 1. `--total <N>` 直接传入
-2. `--scan-dir <dir>` 指定的扫描产物目录 (读取 `pre_report.json` 或 `pre_scan_gaps.yaml` 的 `summary.total_widgets`)
+2. `--scan-dir <dir>` 指定的扫描产物目录 (读取 `pre_report.json` 或 `pre_scan_gaps.yaml`)
 3. 自动发现 `<src>/coverage_scan/` 或 `./coverage_scan/`
+
+C++ 产物默认读 `summary.at_locatable_total` (按名/按 accessible_id 可定位,
+含 QAction 家族), 回退 `total_widgets`。纯 objectName 应用加
+`--aid-denominator` 改读 `summary.at_locatable_by_aid_total` (仅按
+accessible_id 可定位)。
 
 **纯 QML 项目回退:** C++ 扫描产物 (pre_report.json / pre_scan_gaps.yaml) 的
 `total_widgets` 为 0 或不存在时, 自动回退到 QML 产物
@@ -47,10 +57,11 @@ total_elements (分别读取后求和)。
 ## covered_refs 计算
 
 递归遍历所有 `*.suite.yaml` (含 `steps` / `assert_steps` / `setup` / `teardown` / 嵌套 `suites`), 收集:
-- `selector.name` — 持久元素定位 (计入覆盖)
+- `selector.name` — 持久元素定位 (setAccessibleName/文本名, 计入覆盖)
+- `selector.accessible_id` — objectName 定位 (Qt6 accessible_id 后缀, 计入覆盖)
 - `items:` 菜单项 — 仅在 `action` 为 `dtk_main_menu` / `dtk_context_menu` 时收集, 属**瞬态菜单项**, 不计入覆盖, 归入 `transient_items`
 
-持久 `selector.name` 去重并剔除文件名噪音 (含 `.`) 后即 `covered_refs` (分子)。瞬态菜单项只在报告中单独列出, 反映"当前有哪些菜单动作被用例覆盖"。
+`selector.name` 与 `selector.accessible_id` 去重合并并剔除文件名噪音 (含 `.`) 后即 `covered_refs` (分子)。报告同时输出 `name_refs` / `aid_refs` 分别统计两类引用数。瞬态菜单项只在报告中单独列出, 反映"当前有哪些菜单动作被用例覆盖"。
 
 `elements.yaml` 仅用于辅助报告 (清单内覆盖 / 清单缺口), 不决定分子分母。若无 `elements.yaml`, 分子直接取 suite 持久引用全集, **不报覆盖为 0**。
 
@@ -61,17 +72,19 @@ total_elements (分别读取后求和)。
 ## Interpreting results
 
 覆盖率 `min(covered_refs, scan_total) / scan_total` 混合了两个不同口径的集合:
-- **分子 covered_refs** — suite 持久 selector 引用全集 (瞬态菜单项已剔除)
-- **分母 scan_total** — 源码扫描的交互控件数 (不含菜单项)
+- **分子 covered_refs** — suite 持久 selector 引用全集 (name + accessible_id, 瞬态菜单项已剔除)
+- **分母 scan_total** — 源码扫描的交互控件数 (含 QAction 家族, 不含瞬态菜单项)
 
 因为瞬态菜单项已从分子剔除, 分子与扫描口径更一致; 覆盖率达到或超过扫描交互控件数时仍**封顶 100%**。100% 的含义是"用例引用的持久去重元素数已覆盖扫描交互控件数", 不代表清单完整或所有 UI 元素都被测到。
 
 有区分度的指标在辅助报告:
 - **covered_in_inventory** — covered_refs 中落在 `elements.yaml` 清单内的数量
+- **name_refs / aid_refs** — 分别用 `selector.name` / `selector.accessible_id` 引用的去重元素数 (判断应用定位方式: 纯 name 偏 setAccessibleName, 纯 aid 偏 objectName)
 - **transient_items** — 瞬态菜单项清单 (主菜单/右键菜单, 不参与覆盖)
 - **refs_not_in_inventory** — covered_refs 的清单外元素
 - **scan_named_not_in_inventory** — 扫描已命名但清单缺失 (清单缺口)
 - **inventory_uncovered** — 清单中未被任何 covered_refs 覆盖 (用例缺口)
+
 
 解读覆盖率前先看 `elements_source` 与辅助指标, 区分"清单问题"与"用例缺口"。源码是 AT-SPI 树实际名称的权威, 清单与源码冲突时以源码为准。
 
@@ -86,6 +99,8 @@ python3 scripts/coverage_stats.py --src /path/to/repo --cpp-only -o coverage_rep
 # 2. 接力计算 AT 用例覆盖率 (自动发现 <repo>/coverage_scan/ 或 ./coverage_scan/)
 python3 scripts/coverage_atcase.py --src /path/to/repo
 
+# 纯 objectName 应用: 分母切到 at_locatable_by_aid_total
+python3 scripts/coverage_atcase.py --src /path/to/repo --aid-denominator
 # 显式指定扫描产物目录 / 直接传 total
 python3 scripts/coverage_atcase.py --src /path/to/repo --scan-dir /path/to/coverage_scan
 python3 scripts/coverage_atcase.py --src /path/to/repo --total <N>

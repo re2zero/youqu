@@ -12,10 +12,13 @@
 
 - `cases_standard.yaml`（AI 规范化全量）或 `normalized/*.yaml`（按模块规范化，
   含 `manual`/`reason`）— 规范用例
-- `element-map.yaml` — 元素映射表（`id_name` = 运行时 AT-SPI 名）
+- `element-map.yaml` — 元素映射表（`id_name` = AccessibleName → selector.name；
+  `object_name` = QObject::objectName → selector.accessible_id，Qt6 bridge 编码
+  进 accessible_id 点分路径后缀，executor 后缀匹配）
 
-> **不要用 `slices/`**：那是 at-case-authoring 的机械切分产物，manual 全为
-> false，缺 AI 规范化标记，会丢失不可自动化信息。用 `normalized/`。
+> **定位键优先级**（element_manifest.py 与 cover.py 共用同一判定）：有
+> `object_name` 的元素以 object_name 为键、`locator: accessible_id`（优先——
+> objectName 唯一稳定）；否则以 `id_name` 为键、`locator: name`。
 
 ## 1. 用例 → input.json（parse_cases_standard.py）
 
@@ -44,13 +47,16 @@ python3 <skill>/scripts/element_manifest.py \
 
 产物 `tests/at/element-coverage-manifest.yaml`：
 
-- `elements` — 持久命名元素（100% 分母 + selector 白名单）
-- `transient_items` — 菜单 / 菜单项（role=menu / menu item，排除出分母）
-- `unresolved` — id_name TBD/空（运行时无法按名定位，**不进分母**；文档性
-  清单，供开发补名）
+- `elements` — 持久命名元素（100% 分母 + selector 白名单；带 objectName
+  编码的菜单项如 DDropdownMenu 的 WindowsAction / 主菜单 Settings 在此，
+  用 accessible_id 引用，运行时按 popup aid 段自动分类触发方式）
+- `transient_items` — 瞬态菜单项（role=menu 纯 popup 容器，以及关闭态
+  无节点 / 无 objectName 编码的 QMenu 右键菜单项，排除出分母；用例用
+  dtk_context_menu + 触发点 + items）
+- `unresolved` — id_name/object_name 均空或 TBD（运行时无法按名定位，**不进分母**；文档性清单，供开发补名）
 
 > **术语区分**（勿混淆）：
-> - `unresolved`（清单段）= id_name TBD/空 → 不进分母，待补名。
+> - `unresolved`（清单段）= id_name/object_name 均空或 TBD → 不进分母，待补名。
 > - `unreachable.yaml`（用户文件）= **已命名**但运行时不可达元素的人工豁免 →
 >   由 cover.py 消费。
 > 二者用途不同，不可互换。

@@ -1,6 +1,10 @@
 # 界面元素映射表范本（at-case-authoring）
-# 字段顺序固定：desc → ui_name → id_name → role
-# desc/ui_name 测试人员填；id_name/role 开发人员填
+# 字段顺序固定：desc → ui_name → id_name → object_name → role
+# desc/ui_name 测试人员填；id_name/object_name/role 开发人员填
+# id_name = AccessibleName（setAccessibleName 的值）→ selector.name
+# object_name = QObject::objectName（setObjectName 的值）→ selector.accessible_id
+#   （Qt6 bridge 编码进 accessible_id 点分路径后缀，executor 后缀匹配）
+# 有 object_name 的控件映射阶段优先用 selector.accessible_id（更稳定）
 # 重名控件：开发改源码 AccessibleName 使其唯一，不加 parent 消歧
 
 app: deepin-reader
@@ -11,17 +15,32 @@ elements:
   - desc: 无文档时打开文件选择对话框   # 测试人员填：功能说明
     ui_name: 打开文件按钮             # 测试人员填：中文 UI 名（与步骤一致）
     id_name: Button_SelectFile        # 开发人员填：AccessibleName（setAccessibleName 的值）
+    object_name: ""                   # 开发人员填：objectName（setObjectName 的值，无则留空）
     role: button                      # 开发人员填：AT-SPI 角色
 
   - desc: 标题栏搜索框
     ui_name: 搜索输入框
     id_name: DLineEditChildLineEdit
+    object_name: ""
     role: text
 
   - desc: 标题栏缩放比例输入
     ui_name: 缩放输入框
     id_name: DLineEditChildLineEdit
+    object_name: ""
     role: text
+
+  - desc: 切换到缩略图视图
+    ui_name: 缩略图按钮
+    id_name: Button_thumbnail
+    object_name: ""
+    role: check box
+
+  - desc: 切换行尾格式为 Windows（DDropdownMenu 项，仅 objectName）
+    ui_name: 切换行尾格式为 Windows
+    id_name: ""                       # 无 setAccessibleName，留空
+    object_name: WindowsAction        # 开发人员填：objectName → selector.accessible_id
+    role: menu item
 
   - desc: 切换到缩略图视图
     ui_name: 缩略图按钮

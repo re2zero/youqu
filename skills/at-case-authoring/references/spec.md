@@ -77,6 +77,8 @@
 - 无文本控件写**从属容器+位置**：`点击查找弹窗底部的"全部替换"按钮`
 - 菜单写**路径**：`右键-查找` / `主菜单-设置-高级设置`
 - **禁止写代码标识**：`accessible_id=FindNext`、`点击 Search 元素`
+  （例外：DDropdownMenu 下拉菜单项写**功能描述**，如 `切换行尾格式为 Windows`，
+  由 element-map 填 `object_name`（如 WindowsAction）→ 生成技能映射为`selector.accessible_id`——本阶段仍以人读文本为准）
 
 ## 4.1 VLM 参考图断言（`vlm_assert` hint）
 
@@ -140,19 +142,30 @@
 
 ## 8. 界面元素映射表（必填）
 
-格式 `element-map.yaml`，每个应用一张。字段（顺序固定）：
-
-| 字段 | 谁填 | 必填 | 说明 |
-|---|---|---|---|
-| desc | 测试人员 | 否 | 功能说明 |
-| ui_name | 测试人员 | 是 | 中文 UI 名，与步骤一致 |
-| id_name | 开发人员 | 是 | AccessibleName（setAccessibleName 的值），非 objectName |
+| id_name | 开发人员 | 至少一个必填 | AccessibleName（setAccessibleName 的值），运行时是 AT-SPI 树的 `name`，selector 用 `selector.name` |
+| object_name | 开发人员 | 至少一个必填 | QObject::objectName（setObjectName 的值）。Qt6 bridge 把它编码进 accessible_id 点分路径后缀（如 `EditorApplication.DropdownMenu.UnixAction`），运行时经 `get_accessible_id()` 读取，executor 按**后缀匹配**定位，selector 用 `selector.accessible_id` |
 | role | 开发人员 | 否 | AT-SPI 角色 |
-
 规则：
+- **`id_name`/`object_name` 至少填一个**：仅 setAccessibleName 的控件只填
+  `id_name`（selector.name）；QAction/DAction 等无 setAccessibleName 的控件填
+  `object_name`（selector.accessible_id）；两者都有的控件**都填**——映射阶段
+  有 object_name 时**优先用 `selector.accessible_id`**（更稳定：objectName 唯一，
+  AccessibleName 可能被文本/角色污染）。两者都空 → 视同 TBD，不进分母。
 - 重名控件 → 开发人员改源码 AccessibleName 使其唯一，**不在映射表加 parent 消歧**
+- **菜单项不填 menu_type 字段**：executor 运行时按菜单项父 popup 的
+  accessible_id 段模式自动分类触发方式（DropdownMenu 段→点共享 PToolButton；
+  Menu_/Menu 段→标题栏 OptionMenu 按钮 + 键盘导航，禁 TAB；QMenu 段+嵌套
+  段→父链展开；纯 QMenu 段→右键，需用例提供 context_trigger 触发点）。
+  实测 deepin-editor：DDropdownMenu 项（WindowsAction）与主菜单项
+  （Settings/NewWindow）关闭态树有节点 + objectName 编码，可智能路由；
+  QMenu 右键菜单项关闭态**无节点**（CloseTab 等）或节点无 objectName
+  （大写/小写），不可智能路由，用例用 `dtk_context_menu` + 右键触发点 +
+  items 文本。
+- **菜单项持久/瞬态判定**：有 `object_name` → 持久（进分母，accessible_id
+  智能路由）；无 `object_name` 或关闭态无节点 → 瞬态（不进分母，
+  dtk_context_menu + 文本）。
 - AI 查表解析，查不到 → 标 UNSUPPORTED，禁止编造
-- 活文档：代码变更新 `id_name`，UI 变更新 `ui_name`
+- 活文档：代码变更新 `id_name`/`object_name`，UI 变更新 `ui_name`
 
 ## 9. 范本
 

@@ -5,7 +5,7 @@ description: >
   step's operation/target/expected/precondition and never confuse them.
   Triggers: AT用例映射, LLM map, cases_mapped, 步骤语义解析, selector填写,
   映射规范, AT case mapping, precondition extraction, UNSUPPORTED classification.
-version: "1.0.0"
+version: "1.1.0"
 license: MIT
 author: Uniontech
 ---
@@ -205,20 +205,41 @@ selector:
 
 ### Constraint 4: DTK Menu Items Use Menu Navigation
 
-DTK menu items are **transient** — they only exist in AT-SPI tree when the
-menu is open. **NEVER** use `element_action` for menu items.
+DTK 菜单项按关闭态 AT-SPI 树行为分三类（实测 deepin-editor，Qt6/DTK6）：
 
-Wrong:
+**① 持久菜单项（objectName 编码，关闭态有节点）→ `element_action` 智能路由**：
+DDropdownMenu 项（`WindowsAction`/`UnixAction`）与主菜单项（`Settings`/
+`NewWindow`）在关闭态树有占位节点，且 Qt6 bridge 把 `setObjectName` 编码进
+accessible_id 点分路径后缀。executor 智能分派按父 popup 的 aid 段模式自动
+分类触发方式（DropdownMenu 段→点共享段 PToolButton；Menu_ 段→标题栏
+OptionMenu 按钮真实点击 + 键盘导航，禁 TAB）：
 ```yaml
-- action: element_action         # ← menu item not in AT-SPI tree when closed!
+- action: element_action
   selector:
-    name: 设置
+    accessible_id: Settings     # 主菜单项，引擎自动开菜单 + 键盘导航
 ```
 
-Right:
+**② 嵌套子菜单（`DropdownMenu.QAction.QMenu` / `Menu_2.QAction.QMenu`）→
+`element_action` 智能路由（父链自动收集）**：如编码列表 `PActUtf8`（UTF-8）
+、主题 `浅色`，引擎从节点向上收集父链（`Unicode→UTF-8` / `主题→浅色`）
+逐级展开 + 键盘导航，无需手写路径：
 ```yaml
-- action: dtk_main_menu
-  items: [设置]                  # ← keyboard navigation, not AT-SPI lookup
+- action: element_action
+  selector:
+    accessible_id: PActUtf8     # 引擎自动走 Unicode→UTF-8
+```
+
+**③ 右键 QMenu 项（关闭态无节点或无 objectName）→ `dtk_context_menu`**：
+关闭态 QMenu 子项无持久节点（`CloseTab`）或节点 aid 后缀是裸 `QAction`
+（大写/小写），`element_action` + `accessible_id` FAILS。用 `dtk_context_menu`
++ 定位右键触发点（selector）+ `items`。触发坐标必须由用例显式提供——popup
+是 application 顶层独立节点，与触发点无父子/共享 aid 段关系，无法从树
+结构反推：
+```yaml
+- action: dtk_context_menu
+  selector:
+    name: tab_title       # right-click target (persistent node)
+  items: [关闭标签页]     # menu item (transient, keyboard-navigated)
 ```
 
 
@@ -430,9 +451,10 @@ After writing cases_mapped.yaml, before `youqu at generate`:
   "被清空", "可以重新", "正常", "异常")
 - [ ] Every `element_action`/`mouse_click` has a selector with name or
   accessible_id
-- [ ] No menu item uses `element_action` (must use `dtk_main_menu`/`dtk_context_menu`)
 - [ ] `file_dialog_select`/`file_dialog_cancel` has a preceding dialog trigger step
-  (`keyboard_hot_key`, `element_action`, or `dtk_main_menu`)
+- [ ] No QMenu popup item uses `element_action` (must use `dtk_main_menu`/
+  `dtk_context_menu`); DDropdownMenu items use `element_action` +
+  `selector.accessible_id` (歧义消歧时才用 `dtk_dropdown_menu` + items=objectName 后缀)
 - [ ] Runtime-populated list/tree children use `child_index` (not a bare `index`)
 - [ ] Every suite has at least one non-`assert_window` assert step
 - [ ] No suite is a no-op (session_start → wait → assert_window → session_stop)

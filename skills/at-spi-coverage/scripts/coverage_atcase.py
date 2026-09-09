@@ -63,8 +63,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-# 菜单类动作: 其 items 为瞬态菜单项, 不计入覆盖
-MENU_ACTIONS = frozenset({"dtk_main_menu", "dtk_context_menu"})
+# 瞬态菜单动作: 其 items 为瞬态菜单项 (键盘导航文本), 不计入覆盖
+TRANSIENT_MENU_ACTIONS = frozenset({"dtk_main_menu", "dtk_context_menu"})
+# 持久菜单动作: dtk_dropdown_menu 的 items 是 DDropdownMenu 项 objectName
+# 后缀 (与 selector.accessible_id 同键空间, 持久占位节点), 计入覆盖
+PERSISTENT_MENU_ACTIONS = frozenset({"dtk_dropdown_menu"})
 
 
 def _load_json(path: Path) -> Any:
@@ -91,26 +94,64 @@ def _load_yaml(path: Path) -> Any:
 
 
 def _iter_suite_refs(node: Any, selectors: set[str], items: set[str]) -> None:
-    """递归遍历 suite 结构, 收集 selector.name (持久) 与 items (瞬态菜单项)。
+    """递归遍历 suite 结构, 收集 selector 定位键 (持久) 与 items (瞬态菜单项)。
 
-    items 仅在菜单动作 (dtk_main_menu / dtk_context_menu) 下收集 —— 它们是瞬态
-    菜单项, 不参与覆盖计算, 单独汇总到 items 供报告展示。
+    selector 定位键 = name 与 accessible_id 并集:
+      - name           : AT-SPI 可见名 (setAccessibleName / 控件文本)
+      - accessible_id  : Qt6 bridge 编码的 objectName 点分路径后缀
+                         (executor 后缀匹配定位, 见 df20e47)
+    两类键都可能定位持久元素, 均计入覆盖。
+    items 收集分两类:
+      - 瞬态菜单动作 (dtk_main_menu / dtk_context_menu): items 是键盘导航
+        文本, 关闭态无节点 → 不计入覆盖, 单独汇总。
+      - 持久菜单动作 (dtk_dropdown_menu): items 是 DDropdownMenu 项
+        objectName 后缀 (与 selector.accessible_id 同键空间, 关闭态树有
+        占位节点) → 计入覆盖。
     """
     if isinstance(node, dict):
         sel = node.get("selector")
         if isinstance(sel, dict):
-            n = sel.get("name")
-            if isinstance(n, str):
-                selectors.add(n.strip())
-        if node.get("action") in MENU_ACTIONS and isinstance(node.get("items"), list):
+            for key in ("name", "accessible_id"):
+                n = sel.get(key)
+                if isinstance(n, str) and n.strip():
+                    selectors.add(n.strip())
+        action = node.get("action")
+        if isinstance(action, str) and isinstance(node.get("items"), list):
             for it in node["items"]:
-                if isinstance(it, str):
+                if not isinstance(it, str) or not it.strip():
+                    continue
+                if action in TRANSIENT_MENU_ACTIONS:
                     items.add(it.strip())
+                elif action in PERSISTENT_MENU_ACTIONS:
+                    selectors.add(it.strip())
         for v in node.values():
             _iter_suite_refs(v, selectors, items)
     elif isinstance(node, list):
         for v in node:
             _iter_suite_refs(v, selectors, items)
+
+
+def _iter_refs_by_type(node: Any, name_refs: set[str], aid_refs: set[str]) -> None:
+    """递归遍历 suite 结构, 按定位键类型收集引用 (辅助统计用)。"""
+    if isinstance(node, dict):
+        sel = node.get("selector")
+        if isinstance(sel, dict):
+            n = sel.get("name")
+            if isinstance(n, str) and n.strip():
+                name_refs.add(n.strip())
+            a = sel.get("accessible_id")
+            if isinstance(a, str) and a.strip():
+                aid_refs.add(a.strip())
+        # dtk_dropdown_menu 的 items 是 objectName 后缀 → 归 aid_refs
+        if node.get("action") in PERSISTENT_MENU_ACTIONS and isinstance(node.get("items"), list):
+            for it in node["items"]:
+                if isinstance(it, str) and it.strip():
+                    aid_refs.add(it.strip())
+        for v in node.values():
+            _iter_refs_by_type(v, name_refs, aid_refs)
+    elif isinstance(node, list):
+        for v in node:
+            _iter_refs_by_type(v, name_refs, aid_refs)
 
 
 def _count_suite_cases(node: Any) -> int:
@@ -156,7 +197,12 @@ def _collect_suite_refs(at_dir: Path) -> tuple[set[str], set[str], int, int]:
 
 
 def _collect_elements_yaml(elements_yaml: Path) -> set[str]:
-    """从 elements.yaml 的 `elements` map 收集元素 name 去重集合。"""
+    """从 elements.yaml 的 `elements` map 收集定位键 (name + accessible_id) 去重集合。
+
+    elements.yaml 的条目可含 name 与/或 accessible_id (生成链
+    yaml_generator 已透传 accessible_id, 见 MappingSelector)。两类键都
+    是持久定位键, 都用于清单内覆盖统计。
+    """
     names: set[str] = set()
     data = _load_yaml(elements_yaml)
     if not isinstance(data, dict):
@@ -166,9 +212,10 @@ def _collect_elements_yaml(elements_yaml: Path) -> set[str]:
         return names
     for _, v in elements.items():
         if isinstance(v, dict):
-            n = v.get("name")
-            if isinstance(n, str):
-                names.add(n.strip())
+            for key in ("name", "accessible_id"):
+                n = v.get(key)
+                if isinstance(n, str):
+                    names.add(n.strip())
         elif isinstance(v, str):
             names.add(v.strip())
     return names
@@ -275,15 +322,21 @@ def _read_total_from(data: Any, keys: tuple[str, ...]) -> int | None:
     return None
 
 
-def _load_scan_total(scan_dir: Path) -> tuple[int | None, str]:
+def _load_scan_total(
+    scan_dir: Path, key: str = "at_locatable_total"
+) -> tuple[int | None, str]:
     """从 coverage_stats.py 扫描产物读取 total (应编写元素总数)。
 
-    C++ 优先读取 summary.at_locatable_total (剔除非 widget 交互类型
-    QAction/QShortcut/DAction 及容器后、按名可定位的元素总数), 回退
-    summary.total_widgets (源码命名口径, 含 QAction 等仅 setObjectName 类型)。
-    C++ 与 QML 分别读取后求和 (混合项目两者都有控件时 total = cpp + qml):
-    - C++: pre_report.json, 回退 pre_scan_gaps.yaml (summary.at_locatable_total /
-           summary.total_widgets)
+    口径由 `key` 选择 (C++ 产物中同时存在):
+      - at_locatable_total      : 按名可定位 (剔非 widget 交互 + 容器; 含
+                                  仅 objectName 的 QAction 家族, Qt6 编码进
+                                  accessible_id 后可定位)
+      - at_locatable_by_aid_total: 按 accessible_id 可定位 (剔仅
+                                  setAccessibleName 的 widget; 纯 objectName
+                                  应用用此口径)
+    回退 summary.total_widgets (源码命名口径)。C++ 与 QML 分别读取后求和
+    (混合项目两者都有控件时 total = cpp + qml):
+    - C++: pre_report.json, 回退 pre_scan_gaps.yaml
     - QML: qml_report.json, 回退 qml_gaps.yaml (summary.total_elements)
     返回 (total, source_label); 无任何产物时返回 (None, "")。
     """
@@ -291,13 +344,13 @@ def _load_scan_total(scan_dir: Path) -> tuple[int | None, str]:
     cpp_src = ""
     pre_report = scan_dir / "pre_report.json"
     if pre_report.is_file():
-        t = _read_total_from(_load_json(pre_report), ("at_locatable_total", "total_widgets"))
+        t = _read_total_from(_load_json(pre_report), (key, "at_locatable_total", "total_widgets"))
         if t is not None:
             cpp_total, cpp_src = t, "pre_report.json"
     if cpp_total is None:
         pre_gaps = scan_dir / "pre_scan_gaps.yaml"
         if pre_gaps.is_file():
-            t = _read_total_from(_load_yaml(pre_gaps), ("at_locatable_total", "total_widgets"))
+            t = _read_total_from(_load_yaml(pre_gaps), (key, "at_locatable_total", "total_widgets"))
             if t is not None:
                 cpp_total, cpp_src = t, "pre_scan_gaps.yaml"
 
@@ -364,6 +417,8 @@ def main() -> int:
     ap.add_argument("--at-dir", help="AT 用例目录 (默认自动发现 <src>/tests/at/ 下含 *.suite.yaml 的子目录)")
     ap.add_argument("--scan-dir", help="coverage_stats.py 扫描产物目录 (含 pre_report.json)")
     ap.add_argument("--total", type=int, help="直接指定元素总数 total (跳过扫描产物读取)")
+    ap.add_argument("--aid-denominator", action="store_true",
+                    help="分母用 at_locatable_by_aid_total (纯 objectName 应用; 默认 at_locatable_total)")
     ap.add_argument("--output", "-o", default="coverage_atcase.json", help="JSON 报告输出路径")
     ap.add_argument("--md-report", default="coverage_atcase.md",
                     help="Markdown 报告输出路径 (默认 coverage_atcase.md; 置空则不生成)")
@@ -388,7 +443,9 @@ def main() -> int:
             print("       请先运行: python3 scripts/coverage_stats.py --src <repo> -o coverage_report.json", file=sys.stderr)
             print("       或直接传入: --total <元素总数> / --scan-dir <coverage_scan 目录>", file=sys.stderr)
             return 1
-        total, total_src = _load_scan_total(scan_dir)
+        total, total_src = _load_scan_total(
+            scan_dir, key="at_locatable_by_aid_total" if args.aid_denominator else "at_locatable_total"
+        )
         total_source = f"{scan_dir}/{total_src}" if total_src else f"{scan_dir}/pre_report.json"
         if total is None:
             print(f"[FAIL] 扫描产物 {scan_dir} 中未找到 total_widgets / total_elements 字段。", file=sys.stderr)
@@ -448,6 +505,15 @@ def main() -> int:
         scan_named = _denoise(_collect_scan_named(scan_dir))
         scan_named_not_in_inventory = sorted(scan_named - ui_clean)
     refs_not_in_inventory = sorted(covered_refs - ui_clean) if has_elements_yaml else []
+    # 引用类型统计 (辅助): 分别计数 name / accessible_id 引用
+    name_refs: set[str] = set()
+    aid_refs: set[str] = set()
+    if at_dir is not None:
+        for sf in sorted(at_dir.rglob("*.suite.yaml")):
+            data = _load_yaml(sf)
+            if data is None:
+                continue
+            _iter_refs_by_type(data, name_refs, aid_refs)
 
     print("=" * 60)
     print("AT 用例覆盖率统计")
@@ -463,6 +529,7 @@ def main() -> int:
     else:
         print(f"  扫描交互控件 (total) : {total}")
         print(f"  用例覆盖引用 (covered): {covered_n} (selector 去重, 不含瞬态 items)")
+        print(f"    其中 name 引用      : {len(name_refs)} 个 | accessible_id 引用: {len(aid_refs)} 个")
         print(f"  其中清单内           : {len(covered_in_inventory)} 个")
         print(f"  覆盖率               : {cov}%")
         if covered_n > total:
@@ -501,6 +568,8 @@ def main() -> int:
         "no_cases": no_cases,
         "total": total,
         "covered_in_inventory": len(covered_in_inventory),
+        "name_refs": len(name_refs),
+        "aid_refs": len(aid_refs),
         "covered_refs": covered_n,
         "transient_items": transient_items,
         "coverage": cov,

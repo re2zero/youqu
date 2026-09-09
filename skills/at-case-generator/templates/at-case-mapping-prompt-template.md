@@ -85,21 +85,53 @@
 
 ### 2. 元素白名单（强制）
 
-**`selector.name` 必须来自 `element-coverage-manifest.yaml` 的 `elements` 键
-（即 element-map 的运行时 id_name）。**
+**`selector.name` 或 `selector.accessible_id` 必须来自
+`element-coverage-manifest.yaml` 的 `elements` 键（即 element-map 的运行时
+定位键）。**
 - 禁止虚构元素名
 - 禁止用 ui_name 中文作元素名
 - 禁止用静态扫描名（如 `RectButton`，运行时是 `rectangle_button`）
 - 元素名必须与白名单完全一致
+- 定位键按 manifest 的 `locator` 判定：`locator: accessible_id`（元素有
+  `object_name`）→ `selector.accessible_id`；`locator: name`（仅
+  setAccessibleName）→ `selector.name`。**有 object_name 优先用
+  accessible_id**（objectName 唯一稳定，executor 后缀匹配 + 智能分派自动
+  菜单导航）
 
-### 3. 菜单项 → dtk_main_menu / dtk_context_menu（瞬态）
+### 3. 菜单项 → 运行时自动分类（重要）
 
-`transient_items` 中的菜单/菜单项是瞬态元素，**禁止**用 `element_action` 定位。
-用 `dtk_main_menu` + `items`（中文文本）：
+**`transient_items` 中的元素（role=menu 纯 popup 容器、关闭态无节点或
+无 objectName 编码的 QMenu 右键菜单项）是瞬态元素，禁止用 `element_action`
+定位**。用 `dtk_main_menu` + `items`（主菜单）或 `dtk_context_menu` +
+右键触发点 selector + `items`（QMenu 右键菜单）：
 
 ```json
 {"step_type": "action", "action": "dtk_main_menu", "items": ["GIF"], "description": "选择GIF格式"}
 ```
+
+**`elements` 中带 `locator: accessible_id` 的元素（带 objectName 编码的持久
+菜单项，如 DDropdownMenu 的 `UnixAction`/`WindowsAction`、主菜单
+`Settings`）是持久元素**，**不要**用 dtk_main_menu / dtk_context_menu，用
+`element_action` + `selector.accessible_id`（引擎按 popup aid 段自动分类
+触发方式并键盘导航；嵌套子菜单如 `PActUtf8` 自动收集父链 Unicode→UTF-8）：
+
+```json
+{"step_type": "action", "action": "element_action", "selector": {"accessible_id": "WindowsAction"}, "do": "click", "description": "切换行尾格式为Windows"}
+```
+
+**歧义回退（仅当智能分派找不到唯一触发按钮）**：多个 DDropdownMenu 触发
+按钮 aid 全同（PToolButton）且需 `index` 显式消歧时，用 `dtk_dropdown_menu`
+（items 是 objectName 后缀，运行时反查显示文本）：
+
+```json
+{"step_type": "action", "action": "dtk_dropdown_menu", "selector": {"accessible_id": "PToolButton"}, "items": ["WindowsAction"], "description": "切换行尾格式为Windows"}
+```
+
+**判断依据是 manifest 的段位置**：`elements`（含 locator: accessible_id）→
+accessible_id；`transient_items` → dtk_main_menu / dtk_context_menu。不要凭
+role 猜——QMenu 右键菜单项与 DDropdownMenu 项的 role 都可能是 push button。
+右键菜单（`context_trigger`）：关闭态 popup 与触发点无父子关系，坐标必须由
+用例显式提供（`context_trigger: {name: Tabbar}` 等）。
 
 ### 4. manual 用例 → unsupported（强制）
 
@@ -125,9 +157,7 @@
 ### 5. 断言质量
 
 - 每个 case 至少有一个 `assert_*` 步骤，且**不是** `assert_window`
-- `assert_element` 的 selector 必须有 `name`（从白名单选取）
-- **`assert_not_exists` 只用于真正的瞬态元素**（临时弹窗、下拉列表等关闭后从
-  AT-SPI 树消失的元素）。持久控件（搜索框、主窗口、标签栏等常驻树中的元素）
+- `assert_element` 的 selector 必须有 `name` 或 `accessible_id`（从白名单选取）
   禁止用 `assert_not_exists`。隐藏类断言改断言状态（`assert_element` /
   `assert_window_count`）。
 - 断言动作使用运行时支持名：`assert_element` / `assert_not_exists` /
@@ -176,12 +206,15 @@
 5. 输出 JSON 格式，禁止 YAML 锚点/别名
 6. 顶层结构必须是 `{"meta": {...}, "suites": [...]}`
 
-## 验证自查（输出前逐条检查）
-
-- [ ] 每个 suite 第一个 step 是 `session_start` 吗？
-- [ ] 每个 suite 最后一个 step 是 `assert_*` 吗？
-- [ ] 所有 `selector.name` 来自 element-coverage-manifest.yaml 白名单？
-- [ ] 菜单项用 `dtk_main_menu`/`dtk_context_menu` + `items`，没用 selector.name？
+- [ ] 所有 `selector.name` / `selector.accessible_id` 来自
+      element-coverage-manifest.yaml 白名单？
+- [ ] `transient_items` 中的元素用了 `dtk_main_menu`/`dtk_context_menu` +
+      items，没用 `element_action`？`elements` 中 locator: accessible_id 的
+      元素用了 `selector.accessible_id`（未误用 dtk_main_menu）？
+- [ ] `dtk_dropdown_menu` 仅作 DDropdownMenu 歧义回退（智能分派找不到唯一
+      触发按钮时），items 是白名单 object_name 后缀？
+- [ ] 菜单项判定依据 manifest 段位置而非 role（QMenu 与 DDropdownMenu 项
+      role 都可能是 push button）？
 - [ ] 每个 suite 的 `annotation.AT元素引用` 声明了覆盖元素？
 - [ ] 所有 `manual: true` 用例标了 `unsupported` + `reason` + `steps: []`？
 - [ ] 所有 `wait` 都有合理用途？

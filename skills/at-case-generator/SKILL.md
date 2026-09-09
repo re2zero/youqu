@@ -7,7 +7,7 @@ description: >
   id_name 为权威。不依赖源码扫描、不做 xlsx 解析、不用子 agent。
   Triggers: AT用例生成, 生成AT用例, AT套件生成, suite生成, 元素驱动用例,
   从规范用例生成, 复用规范产物, cases_standard, element-map, 覆盖率生成用例.
-version: "2.2.0"
+version: "2.3.0"
 license: MIT
 author: Uniontech
 ---
@@ -85,20 +85,42 @@ flowchart LR
 
 ## 核心规则（why）
 
-- **白名单 = element-map `id_name`**（运行时名）。selector.name 必须来自清单的
-  `elements` 键；禁止虚构、禁止用 ui_name 中文、禁止用静态扫描名。
-- **菜单（menu / menu item）不进分母**：瞬态，运行时用 `dtk_main_menu` 按文本
-  操作；在清单 `transient_items` 单列。
-- **TBD/空 id_name 不进分母**：运行时无法按名定位，清单 `unresolved` 段单列
-  供开发补名；人工豁免走 `unreachable.yaml`（cover.py 唯一豁免输入）。
-  **`unresolved` ≠ `unreachable`**，二者不可混淆。
+- **白名单 = element-map 运行时名**。selector 的定位键必须来自清单的
+  `elements` 键，按 manifest 的 `locator` 判定：`locator: accessible_id`
+  （元素有 `object_name`，Qt6 编码进 accessible_id 点分路径后缀，executor
+  后缀匹配 + 智能分派自动菜单导航）→ `selector.accessible_id`；`locator: name`
+  （仅 setAccessibleName）→ `selector.name`。**有 object_name 优先用
+  accessible_id**（objectName 唯一稳定）。禁止虚构、禁止用 ui_name 中文、
+  禁止用静态扫描名。
+- **菜单项自动归类，不填 menu_type**：executor 运行时按菜单项父 popup 的
+  accessible_id 段模式自动分类（实测 deepin-editor，Qt6/DTK6）：
+  - popup 含 `DropdownMenu` 段（如 `EditorApplication.DropdownMenu`）→
+    DDropdownMenu，点共享段 PToolButton 触发（WindowsAction 实测通过）
+  - popup 含 `Menu`/`Menu_` 段（如 `Menu_2`）→ 主菜单，标题栏
+    OptionMenu 按钮真实点击触发 + 键盘导航（**禁 TAB**，DTK 不支持；
+    Settings/NewWindow 实测通过）
+  - popup 含 `QMenu` 段 + DropdownMenu/Menu 段 → 嵌套子菜单（编码列表
+    UTF-8、主题浅色等），先展开父项再键盘导航（父链自动收集）
+  - popup 含 `QMenu` 段（无 DropdownMenu/Menu）→ 右键菜单；**关闭态树
+    可能无节点**（CloseTab 实测不存在）或节点无 objectName 编码（大写/
+    小写 aid 后缀是裸 QAction），需用例提供 `context_trigger`（右键触发点
+- **element-map 不填 menu_type 字段**（真实 deepin-editor element-map 无此
+  字段）。菜单项持久/瞬态判定看**有无 `object_name`**：有 object_name 编码
+  的项（DDropdownMenu 的 WindowsAction、主菜单 Settings）→ 持久，进分母，
+  用 `selector.accessible_id` 引用（引擎自动开菜单 + 键盘导航）；无
+  object_name 编码或关闭态无节点的右键菜单项 → 用例用 `dtk_context_menu` +
+  触发点 + `items` 文本。
+- **TBD/空 id_name 与 object_name 不进分母**：运行时无法按名定位，清单
+  `unresolved` 段单列供开发补名；人工豁免走 `unreachable.yaml`（cover.py
+  唯一豁免输入）。**`unresolved` ≠ `unreachable`**，二者不可混淆。
 - **manual 用例 → `status: unsupported` + `reason`**：直接消费 at-case-authoring
   的 `manual: true` / `reason`，不再让映射 agent 自行判断。unsupported suite
   **不产生可执行 case**（assemble 跳过）——仅保留决策痕迹。
 - **主 agent 直接映射**：不用子 agent、不跑 `gen_schedule.py`。模块 ≥1 都顺序
   映射，每模块输出独立 output.json，`meta` 原样沿用 input.json。
-- **100% 门禁是硬要求**：每个白名单元素必须被至少一个持久 `selector.name` 引用。
-  缺口 → 补漏循环（主 agent 聚焦补充）→ 100% 或 `unreachable.yaml` 人工豁免。
+- **100% 门禁是硬要求**：每个白名单元素必须被至少一个持久 `selector.name` 或
+  `selector.accessible_id` 引用。缺口 → 补漏循环（主 agent 聚焦补充）→
+  100% 或 `unreachable.yaml` 人工豁免。
 
 ## Gotchas
 
@@ -113,9 +135,17 @@ flowchart LR
   白名单 + 用例实际引用）；门禁分母读 element-map，不是 elements.yaml。
 - **重复 `id_name`**：element-map 常对同一 id_name 列多个 ui_name（如保存按钮/
   保存截图按钮），清单按 id_name 去重。
-- **菜单例外**：不要在 `selector.name` 里放菜单项名（如 menuUndo / gifAction /
+- **菜单例外**：不要在 `selector.name` 里放瞬态菜单项名（如 menuUndo /
   microphoneAction），它们是瞬态的；`element_action` 会定位失败。用
-  `dtk_main_menu` + `items`（文本）。
+  `dtk_main_menu` + `items`（文本）。**运行时自动分类**：
+  - popup 段含 `DropdownMenu` / `Menu_` → `selector.accessible_id` +
+    `element_action`（引擎智能分派自动菜单导航，deepin-editor 实测
+    WindowsAction→Windows、Settings/NewWindow 通过；智能分派找不到唯一
+    触发按钮时回退 `dtk_dropdown_menu` + selector + items=objectName 后缀）
+  - 右键 QMenu（关闭态无节点或无 objectName）→ 用 `dtk_context_menu` +
+    右键触发点 selector + items
+  - 嵌套子菜单（DropdownMenu.QAction.QMenu / Menu_2.QAction.QMenu）→
+    引擎自动收集父链（Unicode→UTF-8、主题→浅色），无需手写路径
 - **`element_action` 的 `do` 白名单**：仅 `click` / `right_click` / `double_click` /
   `focus` / `point`；`do: clear`/`do: set` 运行时直接报 `Unknown element action`。
   清空输入框用键盘（`Ctrl+A` + `Delete`），赋值用 `element_set_value`。
@@ -144,7 +174,8 @@ flowchart LR
 | 解析 xlsx / 重复切分 / 用 slices/ | at-case-authoring 已产出 cases_standard + normalized |
 | 子 agent 映射 | 用户决策：主 agent 直接映射，效率优先 |
 | `selector.name` 用 ui_name 中文 / 虚构名 / unresolved 名 | 运行失败 |
-| 菜单项进 `selector.name` | 瞬态，运行失败；用 dtk_main_menu |
+| 瞬态菜单项进 `selector.name` | QMenu 瞬态，运行失败；用 dtk_main_menu |
+| DDropdownMenu 菜单项用 `dtk_main_menu` | 应为 accessible_id 智能分派（见核心规则） |
 | 跳过 `cover.py` 门禁 | 100% 是硬要求 |
 | 把 `manual` 用例生成成可运行 suite | 规范技能已标记不可自动化，应 unsupported |
 | 把 `unresolved`（TBD）抄进 unreachable.yaml | 二者语义不同：unresolved 待补名，unreachable 已命名不可达 |
@@ -176,5 +207,7 @@ flowchart LR
 - [ ] 每个模块一个 output.json，`meta` 沿用 input.json；manual 用例标
       `unsupported` + `reason`
 - [ ] `pipeline_assemble.py` 0 error；`elements.yaml` 含白名单全部元素
-- [ ] `cover.py` 100%（或豁免均在 `unreachable.yaml`，未把 `unresolved` 混入）
+- [ ] `cover.py` 100%（selector.name 或 selector.accessible_id 引用皆可；豁免均在
+      `unreachable.yaml`，未把 `unresolved` 混入）
+- [ ] DDropdownMenu 菜单项用 `selector.accessible_id` 引用（未误用 dtk_main_menu）
 - [ ] 产物在 `tests/at/`，格式与 at-suite-generator 一致

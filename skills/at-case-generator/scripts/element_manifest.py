@@ -21,8 +21,19 @@ Naming:
     denominator (runtime cannot locate by name). They are documented here for
     the human to fill in; they are NOT the same as cover.py's `unreachable.yaml`
     manual exemptions. The two terms must not be conflated.
-  - `transient_items` = menu / menu item roles, excluded from denominator,
-    located at runtime by dtk_main_menu text.
+  - `transient_items` = menu / menu item roles **without `object_name`**
+    (no QObject::objectName encoded, verified on deepin-editor right-click
+    menus) — located at runtime by dtk_context_menu + text. Menus whose items
+    carry objectName suffixes (DDropdownMenu / main-menu DMenu placeholders)
+    are PERSISTENT and go through the intelligent accessible_id router.
+
+Locator selection (per element-map entry):
+  - has `object_name` → key = object_name, locator = accessible_id (Qt6
+    bridge encodes objectName into the accessible_id dotted-path suffix;
+    executor matches by suffix). Preferred over name when both are present:
+    objectName is unique, AccessibleName can be polluted by text/role.
+  - else `id_name` → key = id_name, locator = name (setAccessibleName).
+  - neither (or TBD) → `unresolved` (never enters the denominator).
 
 Usage:
     element_manifest.py --element-map tests/at/casefile/out/element-map.yaml \
@@ -41,7 +52,7 @@ except ImportError:
     print("Error: PyYAML required")
     sys.exit(1)
 
-TRANSIENT_ROLES = frozenset({"menu", "menu item", "menuitem", "MenuItem"})
+TRANSIENT_ROLES = frozenset({"menu", "menuitem", "MenuItem"})
 
 
 def _load_yaml(path: Path) -> dict | None:
@@ -74,35 +85,54 @@ def main() -> int:
         if not isinstance(e, dict):
             continue
         id_name = (e.get("id_name") or "").strip()
+        object_name = (e.get("object_name") or "").strip()
         role = (e.get("role") or "").strip()
         ui_name = (e.get("ui_name") or "").strip()
         desc = (e.get("desc") or "").strip()
-        if not id_name or id_name in ("TBD", "待补充"):
+        # 定位键: 有 object_name 优先用 accessible_id (objectName 唯一稳定,
+        # AccessibleName 可能被文本/角色污染); 否则用 name。
+        if object_name:
+            key = object_name
+            locator = "accessible_id"
+        elif id_name and id_name not in ("TBD", "待补充"):
+            key = id_name
+            locator = "name"
+        else:
             unresolved.append(
                 {
-                    # id_name is literally "TBD" — use ui_name so entries are
-                    # distinguishable (a shared "TBD" name collapses the set).
-                    "name": ui_name or id_name,
+                    # id_name/object_name 均空或 TBD — 用 ui_name 作展示名
+                    # (shared "TBD" name collapses the set).
+                    "name": ui_name or id_name or object_name,
                     "role": role,
                     "ui_name": ui_name,
                     "desc": desc,
-                    "reason": "id_name 未填 (TBD)，运行时无法按名定位",
+                    "reason": "id_name/object_name 未填 (TBD)，运行时无法按名定位",
                 }
             )
             continue
-        if role.lower() in TRANSIENT_ROLES:
+        if role.lower() in TRANSIENT_ROLES and not object_name:
+            # 瞬态: role=menu/menu item 且**无 object_name 编码** (右键 QMenu
+            # 项 aid 后缀是裸 QAction/QMenu, 实测 deepin-editor 右键菜单即此
+            # 形态) → 关闭态无法按 accessible_id 定位, 运行时用
+            # dtk_context_menu + 触发点 + 菜单文本。
+            # 反之有 object_name 编码 (UnixAction/WindowsAction/Settings 等)
+            # 的菜单项是持久占位节点, 走智能 accessible_id 路由。
             transient.append(
-                {"name": id_name, "role": role, "ui_name": ui_name, "desc": desc}
+                {"name": key, "role": role, "ui_name": ui_name, "desc": desc}
             )
             continue
-        if id_name in seen_ids:
-            continue  # element-map may list the same id_name for several ui_names
-        seen_ids.add(id_name)
-        elements[id_name] = {
+        if key in seen_ids:
+            continue  # element-map may list the same key for several ui_names
+        seen_ids.add(key)
+        entry: dict[str, str] = {
             "role": role,
             "ui_name": ui_name,
             "desc": desc,
+            "locator": locator,
         }
+        # 持久菜单项 (DDropdownMenu / 主菜单占位, 有 object_name) 统一走
+        # accessible_id 智能路由: executor 按 popup aid 段自动分类触发方式。
+        elements[key] = entry
 
     manifest = {
         "version": "1.0",

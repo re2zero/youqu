@@ -710,7 +710,26 @@ def main() -> int:
     cpp_gap_n = len(cpp_gap)
     cpp_total = cpp_ok_n + cpp_gap_n
     cpp_cov = _pct(cpp_ok_n, cpp_total)
-
+    # 口径 (仅 C++): 扫描产物 summary 里 at_locatable_total (按名可定位) /
+    # at_locatable_by_aid_total (按 accessible_id 可定位, 纯 objectName 应用)。
+    # QAction 家族仅 objectName → 已包含在 at_locatable_total; 仅
+    # setAccessibleName 的 widget 不包含在 by_aid_total。
+    cpp_at_total: int | None = None
+    cpp_by_aid_total: int | None = None
+    if cpp_total:
+        scan_dir = (Path(args.from_yaml) if args.from_yaml
+                    else Path(args.output).parent / "coverage_scan")
+        for cand in (scan_dir / "pre_report.json", scan_dir / "pre_scan_gaps.yaml"):
+            data = _load_yaml(cand)
+            if not isinstance(data, dict):
+                continue
+            sm = data.get("summary") or {}
+            if cpp_at_total is None:
+                cpp_at_total = sm.get("at_locatable_total")
+            if cpp_by_aid_total is None:
+                cpp_by_aid_total = sm.get("at_locatable_by_aid_total")
+            if cpp_at_total is not None and cpp_by_aid_total is not None:
+                break
     # QML
     qml_ok_n = len(qml_ok)
     qml_gap_n = len(qml_gap)
@@ -756,6 +775,15 @@ def main() -> int:
                 _breakdown(items, lambda e: e.get("source_file", "?"), "文件")
             if args.by_type:
                 _breakdown(items, lambda e: e.get("element_type", "?"), "类型")
+
+    print("\n" + "=" * 60)
+    print(f"[合计] 已编写: {all_ok} / 应编写: {all_total} / 覆盖率: {all_cov}%")
+    if cpp_at_total is not None:
+        print(f"       [口径] 按名可定位 (at_locatable_total)     : {cpp_at_total}")
+    if cpp_by_aid_total is not None:
+        print(f"       [口径] 按 accessible_id 可定位 (by_aid)   : {cpp_by_aid_total}")
+    print(f"       阈值: {args.threshold}%  -> {'PASS' if all_cov >= args.threshold else 'FAIL'}")
+    print("=" * 60)
 
     report = {
         "cpp": {"ok": cpp_ok_n, "gap": cpp_gap_n, "total": cpp_total, "coverage": cpp_cov},

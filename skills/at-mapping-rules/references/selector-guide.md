@@ -52,10 +52,16 @@ QAction/DAction/QShortcut 是纯 QObject，**没有 setAccessibleName 方法**�
   do: click
 ```
 
-## 4. element-map 的 id_name 语义
+## 4. element-map 的 id_name / object_name 语义
 
-- element-map 的 `id_name` 若是源码 `setObjectName("X")` 抄来的**短名**，可直接用作 `selector.accessible_id`（后缀匹配兜底）
-- **但注意**：静态扫描的 objectName 未必等于运行时 AT-SPI name。运行时 `name` 来自 text/accessibleName，`accessible_id` 来自 objectName/类名。二者不是一回事，映射时先确认目标控件在哪个键上
+- element-map 双字段（at-case-authoring spec §8）：
+  - `id_name` = AccessibleName（setAccessibleName 的值）→ `selector.name`
+  - `object_name` = QObject::objectName（setObjectName 的值）→
+    `selector.accessible_id`（Qt6 bridge 编码进 accessible_id 点分路径后缀，后缀匹配兜底）
+- **有 object_name 优先用 `selector.accessible_id`**（objectName 唯一稳定，
+  AccessibleName 可能被文本/角色污染）
+- **但注意**：静态扫描的 objectName 未必等于运行时 AT-SPI name。运行时 `name` 来自 text/accessibleName，`accessible_id` 来自 objectName/类名。
+  二者不是一回事，映射时先确认目标控件在哪个键上（看 manifest 的 `locator`：accessible_id / name）
 
 ## 5. DTK 菜单操作（瞬态菜单项）
 

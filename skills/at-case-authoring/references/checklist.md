@@ -34,6 +34,8 @@
 
 - [ ] 目标写的是**屏幕可见文本**，不是位置描述或代码标识
   - 违规：`点击右上角的"替换"`（无文本）、`点击空白处`、`点击 Search 元素`、`accessible_id=FindNext`
+  - 例外：DDropdownMenu 下拉菜单项写功能描述（如 `切换行尾格式为 Windows`），
+    element-map 填 `object_name` → 映射阶段转 `selector.accessible_id`
 - [ ] 无文本控件写的是**从属容器 + 位置**
 - [ ] 菜单写的是**路径**：`右键-查找` / `主菜单-设置-高级设置`
 
@@ -53,9 +55,16 @@
 
 ## 7. 界面元素映射表
 
-- [ ] `element-map.yaml` 存在，且用例步骤中**每个 UI 目标**都能在表中查到 `ui_name`
-- [ ] `ui_name` 与步骤中的目标文本一致
-- [ ] 同名 `id_name` 由开发在源码改 AccessibleName 唯一；映射表**不加** `parent` 消歧
+- [ ] `id_name`/`object_name` **至少填一个**：仅 setAccessibleName 填 `id_name`
+      （selector.name）；QAction/DAction 等无 setAccessibleName 填 `object_name`
+      （selector.accessible_id，Qt6 编码进 accessible_id 后缀）；两者都有都填，
+      映射阶段有 object_name 优先用 accessible_id
+- [ ] QAction/DAction 的 `object_name` 填 objectName（Qt6 编码进 accessible_id
+      后缀）；**不填 menu_type 字段**——executor 运行时按 popup aid 段
+      自动分类触发方式
+- [ ] 关闭态无节点 / 无 object_name 编码的 QMenu 右键菜单项（如 CloseTab、
+      大写/小写）标记 role=menu，用例用 `dtk_context_menu` + 右键触发点 +
+      items；未被误标为持久（不进分母）
 
 ## 8. 语义保持（转换校对）
 

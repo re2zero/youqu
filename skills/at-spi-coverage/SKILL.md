@@ -6,7 +6,7 @@ description: >
   (elements exercised by *.suite.yaml vs. scan total, transient menu items
   excluded). Auto-detects the AT case dir under tests/at/.
   Triggers: AT-SPI覆盖率, 覆盖率, coverage, AT 用例覆盖率, atcase, 控件缺口, gap 分析.
-version: "0.5.5"
+version: "0.6.0"
 license: MIT
 author: Uniontech
 ---
@@ -44,9 +44,16 @@ Output: `ok / total × 100%` where `total = ok + gap`. Exit `0` if coverage ≥ 
 
 ```
 coverage = min(covered_refs, scan_total) / scan_total × 100%   (封顶 100%)
-covered_refs = selector.name (去重去噪)                 # 分子, 持久元素引用
+covered_refs = selector.name ∪ selector.accessible_id (去重去噪)  # 分子
 scan_total   = coverage_stats.py 扫描的交互控件数        # 分母, 源码扫描产物
 ```
+
+`selector.accessible_id` 是 Qt6 objectName 定位 (编码进 accessible_id 点分路径
+后缀, executor 后缀匹配) — QAction/DAction 等仅 objectName 的控件经此可定位,
+所以**计入分母** (at_locatable_total 包含它们)。默认分母 `at_locatable_total`
+(按名/按 id 可定位); 纯 objectName 应用可用 `--aid-denominator` 切到
+`at_locatable_by_aid_total` (仅按 accessible_id 可定位, 剔仅 setAccessibleName
+的 widget)。
 
 瞬态菜单项 (主/右键菜单 `items`) **不计入覆盖**, 仅在报告 (`transient_items`) 中列出供查看。
 `elements.yaml` 仅用于辅助报告 (清单内覆盖/清单缺口), 不决定分子分母; 无 `elements.yaml` 时直接从 `*.suite.yaml` 计算分子。
@@ -96,8 +103,7 @@ pair). Disable the pip fallback with `$LIBCLANG_NO_PIP`. The env-check prints
 which layer won, e.g. `[✓] libclang 绑定+动态库 <path> (ldconfig)`.
 
 ## Gotchas
-
-- **`elements.yaml` ≠ source scan.** `elements.yaml` is a manually-maintained UI element list (includes `Form_*` containers, `Label_*` labels, menu items); `coverage_stats.py` counts only interactive widgets instantiated in source. Different dimensions — do not expect them to match. The atcase numerator counts **selector.name only** (transient menu items excluded, listed separately in `transient_items`), so coverage reflects persistent elements against the scan total. See "Interpreting results" in `references/atcase-coverage.md`.
+- **`elements.yaml` ≠ source scan.** `elements.yaml` is a manually-maintained UI element list (includes `Form_*` containers, `Label_*` labels, menu items); `coverage_stats.py` counts only interactive widgets instantiated in source. Different dimensions — do not expect them to match. The atcase numerator counts **selector.name + selector.accessible_id** (transient menu items excluded, listed separately in `transient_items`), so coverage reflects persistent elements against the scan total. See "Interpreting results" in `references/atcase-coverage.md`.
 - **AT 用例目录不限于 `tests/at/yaml`.** 脚本自动发现 `<src>/tests/at/` 下任意含 `*.suite.yaml` 的子目录 (`yaml`, `yaml_xxx`, …)。若 AT 用例在别处, 用 `--at-dir` 显式指定。
 - **无 `elements.yaml` 不报 0.** 缺 `elements.yaml` 时分子直接取 `*.suite.yaml` 的持久 selector, 覆盖照常计算, 只是清单相关辅助指标为空。
 - **Dynamic names are invisible to static scan.** `setAccessibleName("Button_" + objName)` (string concatenation) cannot be resolved by libclang — those widgets appear as gaps even though they get names at runtime. Verify with a live AT-SPI dump, not the static scan alone.

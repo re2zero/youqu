@@ -22,6 +22,13 @@ unreachable:
 
 人工确认后从分母剔除。**这是 100% 的唯一豁免通道。**
 
+> **补漏先查定位键**：未覆盖元素若为带 objectName 编码的持久菜单项
+> （`elements` 中带 `locator: accessible_id`，如 DDropdownMenu 的
+> WindowsAction、主菜单 Settings），用 `selector.accessible_id` 引用即可
+> （引擎智能分派按 popup aid 段自动分类，无需豁免）；关闭态无节点 / 无
+> objectName 的 QMenu 右键菜单项在 `transient_items`（不进分母，无需补）；
+> 确属条件渲染才走 unreachable.yaml。
+
 > **区分 `unresolved` 与 `unreachable.yaml`**：
 > - `element-coverage-manifest.yaml` 的 `unresolved` 段是 id_name TBD/空——本
 >   就不进分母（清单阶段已排除），是"待开发填名"的文档清单，**不要**抄进

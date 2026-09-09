@@ -240,9 +240,9 @@ def read_xlsx(path: Path, app: str, out_dir: Path, budget: int) -> None:
         "app": app,
         "version": "0.1",
         "updated": date.today().isoformat(),
-        "note": "初稿：ui_name 由脚本机械提取，id_name/role=TBD 待开发人员填充",
+        "note": "初稿：ui_name 由脚本机械提取，id_name/object_name/role=TBD 待开发人员填充（无 menu_type，运行时按 popup aid 段自动分类）",
         "elements": [
-            {"desc": "TBD", "ui_name": u, "id_name": "TBD", "role": "TBD"}
+            {"desc": "TBD", "ui_name": u, "id_name": "TBD", "object_name": "TBD", "role": "TBD"}
             for u in ui_targets
         ],
     }

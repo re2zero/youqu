@@ -40,18 +40,25 @@ python3 <skill>/scripts/cover.py \
 
 ## 覆盖门禁（cover.py）
 
-硬性目标：**element-map 中每个非 TBD、非菜单的持久 `id_name` 必须被至少一个
-suite 的持久 `selector.name` 引用**。
+硬性目标：**element-map 中每个非 TBD、非菜单的持久定位键（id_name 或
+object_name）必须被至少一个 suite 的持久 `selector.name` 或
+`selector.accessible_id` 引用**。
 
 ```
 coverage = covered / (denominator - unreachable) × 100%
 ```
 
 - **denominator** = element-map `elements` 键（持久命名元素，运行时名）
-- **covered** = 持久 `selector.name`（去重，剔文件名噪音）
-- **unreachable** = `unreachable.yaml` 中的人工豁免（`unresolved` 即 id_name
-  TBD/空 已在本阶段 1 被清单排除，不在此列）
-- **瞬态菜单项不计入分母**（`transient_items` 单列，用 dtk_main_menu 文本操作）
+- **covered** = 持久 `selector.name` + `selector.accessible_id` 并集
+  （去重，剔文件名噪音；accessible_id 是 objectName 定位，executor 后缀匹配）
+- **unreachable** = `unreachable.yaml` 中的人工豁免（`unresolved` 即
+  id_name/object_name 均空或 TBD 已在本阶段 1 被清单排除，不在此列）
+- **瞬态菜单项不计入分母**（`transient_items` 单列：关闭态无节点 / 无
+  objectName 编码的 QMenu 右键菜单项 + role=menu 纯 popup 容器；用
+  dtk_context_menu / dtk_main_menu）。
+  带 objectName 编码的持久菜单项（DDropdownMenu 的 WindowsAction、主菜单
+  Settings 等）在 `elements` 中，用 accessible_id 引用（智能分派按 popup
+  aid 段自动分类触发方式并键盘导航）。
 - 退出码 0 = 达标，1 = 未达标
 
 ## 校验规则

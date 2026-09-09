@@ -61,6 +61,7 @@ VALID_ACTIONS = frozenset(
         "mouse_scroll",
         "dtk_main_menu",
         "dtk_context_menu",
+        "dtk_dropdown_menu",
         "keyboard_press",
         "keyboard_hot_key",
         "keyboard_type",
@@ -75,7 +76,7 @@ VALID_ACTIONS = frozenset(
     | ASSERT_ACTIONS
 )
 
-MENU_ACTIONS = frozenset({"dtk_main_menu", "dtk_context_menu"})
+MENU_ACTIONS = frozenset({"dtk_main_menu", "dtk_context_menu", "dtk_dropdown_menu"})
 SETUP_ACTIONS = frozenset({"session_start", "session_stop"})
 
 
@@ -463,7 +464,12 @@ def main() -> None:
     # ── Supplement elements from manifest (authoritative whitelist) ──
     for ref, sel in manifest_elements.items():
         if ref not in all_elements:
-            all_elements[ref] = {"name": ref, "role": sel.get("role", "")}
+            entry: dict[str, str] = {"name": ref, "role": sel.get("role", "")}
+            # 有 object_name 的持久元素 (含 DDropdownMenu 项) 用 accessible_id
+            # 定位 (executor 后缀匹配 + 智能分派自动菜单导航)
+            if sel.get("locator") == "accessible_id":
+                entry["accessible_id"] = ref
+            all_elements[ref] = entry
 
     # ── Write elements.yaml ──────────────────────────────────────────
     if all_elements:

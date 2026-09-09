@@ -63,13 +63,12 @@ slices/
 
 > 单条用例 token 超预算仍独立成片（不丢弃、不拆分）。切分仅按模块自然边界 + 预算，不改用例语义。
 
-### 1c. element-map 初稿（机械提取）
-
-`convert_xlsx.py` 机械提取步骤中的 UI 目标 → `element-map.yaml`：
 - `ui_name`：从动作上下文（点击/选择/勾选后的引号文本）和控件词（X按钮/输入框/菜单）提取的**候选**中文名
-- `id_name`/`role`：`TBD`（待开发填充）
-
-> **候选性质**：机械正则对自由中文文本提取不完美，可能含噪声（描述短语/输入数据）。`ui_name` 最终由 AI 初步生成精修 + 测试人员校对确认。
+- `id_name`/`object_name`/`role`：`TBD`（待开发填充）；**不生成 menu_type 字段**
+  （已废弃，executor 运行时按 popup aid 段自动分类，见 spec §8）
+- `object_name` 是 QObject::objectName（setObjectName 的值），Qt6 bridge 编码进
+  accessible_id 点分路径后缀，运行时经 `get_accessible_id()` 读取，executor 后缀
+  匹配定位，selector 用 `selector.accessible_id`（见 spec §8）
 ## 第 2 步：AI 初步生成（减少人工工作量）
 
 基于 raw_* 对每条用例做**规范化草稿**：
@@ -85,38 +84,29 @@ slices/
    - "操作正常/无异常" → 换成可断言目标
    - 不可自动化目标（颜色/光标/硬件/性能）→ 标题标 `【人工】` **且** 整条标 `manual: true`（两者必须同时，见 spec §7）
 5. **element-map 初稿**：收集所有步骤里的 UI 目标，生成 `element-map.yaml`
-   - `ui_name`（测试人员填）：AI 从步骤提取中文 UI 名
-   - `id_name`/`role`（开发人员填）：标记为 `TBD`（待开发填充）
-
+   - `id_name`/`object_name`/`role`（开发人员填）：标记为 `TBD`（待开发填充）；
+     不生成 menu_type（已废弃）
 ### element-map 初稿示例
-
-```yaml
-# element-map.yaml — 初稿（ui_name 已提取，id_name/role 待开发填）
+# element-map.yaml — 初稿（ui_name 已提取，id_name/object_name/role 待开发填；无 menu_type）
 app: deepin-reader
 version: "0.1"
 updated: 2026-09-01
 elements:
   - desc: TBD                  # 测试人员可补：功能说明
     ui_name: 查找输入框         # AI 从步骤提取
-    id_name: TBD                # 开发人员填
+    id_name: TBD                # 开发人员填（AccessibleName）
+    object_name: TBD            # 开发人员填（objectName，无则留空）
     role: TBD                   # 开发人员填
   - desc: TBD
     ui_name: 向上搜索
     id_name: TBD
+    object_name: TBD
     role: TBD
-```
-
 ## 校对规则（测试人员逐条，最终裁决）
 
 1. 对照 `raw_*` 确认 AI 规范化**未改变用例语义**
-2. 确认 title/precondition/steps/expected 符合规范
-3. 确认 element-map 的 `ui_name` 与步骤目标一致；把 `TBD` 的 id_name/role 交给开发人员
-
-## 校验
-
-转换 + AI 生成后跑 `scripts/validate_cases.py`，必须 0 error 才算完成。
-
-## 完整性保证
+2. 确认 element-map 的 `ui_name` 与步骤目标一致；把 `TBD` 的
+   id_name/object_name/role 交给开发人员（不生成 menu_type，见 spec §8）
 
 - 原始用例数 = 转换后数（`convert_xlsx.py` 会记录 case_count）
 - 每条 id 保留 + raw_* 保留原始描述，可从标准 yaml 追溯/还原回 xlsx

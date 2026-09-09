@@ -56,8 +56,17 @@ Console:
   覆盖率        : 85.6%
 
 [合计] 已编写: 196 / 应编写: 229 / 覆盖率: 85.6%
+       [口径] 按名可定位 (at_locatable_total)     : 220
+       [口径] 按 accessible_id 可定位 (by_aid)   : 180
        阈值: 80.0%  -> PASS
 ```
+
+两个口径只在 C++ 产物存在时打印:
+- `at_locatable_total` — 按 AT-SPI 名**或** accessible_id 可定位的元素数
+  (剔非 widget 交互容器; 含 QAction/DAction 等仅 objectName 的类型 — Qt6
+  把它们编码进 accessible_id, executor 可定位)
+- `at_locatable_by_aid_total` — 仅按 accessible_id 可定位 (纯 objectName 应用;
+  剔仅 setAccessibleName 的 widget)
 
 With `--by-file` / `--by-type`, a breakdown like `src/dialog/scheduledlg.cpp  14/4/18` (ok/gap/total) and `DIconButton  6/11/17`.
 

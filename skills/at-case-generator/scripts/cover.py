@@ -38,7 +38,7 @@ except ImportError:
     print("Error: PyYAML required")
     sys.exit(1)
 
-TRANSIENT_ROLES = frozenset({"menu", "menu item", "menuitem", "MenuItem"})
+TRANSIENT_ROLES = frozenset({"menu", "menuitem", "MenuItem"})
 
 
 # ─── Loaders ────────────────────────────────────────────────────────────
@@ -55,9 +55,13 @@ def _load_yaml(path: Path) -> dict | None:
 def _collect_element_map(em_path: Path) -> tuple[dict[str, dict], list[dict]]:
     """Collect persistent named elements + transient items from element-map.
 
-    Returns ({name: {role, ui_name, desc}}, [transient items]).
-    id_name TBD/empty entries are dropped here (they never enter the
-    denominator).
+    Locator key per entry (must match element_manifest.py):
+      - has `object_name` → key = object_name (accessible_id 定位,
+        Qt6 bridge 编码进 accessible_id 点分路径后缀, executor 后缀匹配)
+      - else `id_name` (非 TBD) → key = id_name (name 定位)
+      - neither (或 TBD) → dropped (never enters the denominator)
+    Menu items with object_name are PERSISTENT (智能路由); those without
+    are transient (dtk_context_menu 文本定位, 排除出分母)。
     """
     em = _load_yaml(em_path)
     if not isinstance(em, dict):
@@ -68,16 +72,28 @@ def _collect_element_map(em_path: Path) -> tuple[dict[str, dict], list[dict]]:
         if not isinstance(e, dict):
             continue
         id_name = (e.get("id_name") or "").strip()
+        object_name = (e.get("object_name") or "").strip()
         role = (e.get("role") or "").strip()
-        if not id_name or id_name in ("TBD", "待补充"):
+        ui_name = (e.get("ui_name") or "").strip()
+        if object_name:
+            key = object_name
+            locator = "accessible_id"
+        elif id_name and id_name not in ("TBD", "待补充"):
+            key = id_name
+            locator = "name"
+        else:
             continue
-        if role.lower() in TRANSIENT_ROLES:
+        if role.lower() in TRANSIENT_ROLES and not object_name:
+            # 瞬态 = 无 objectName 编码的 menu/menu item (右键 QMenu 项),
+            # 关闭态无法按 accessible_id 定位 → 排除出分母。
             transient.append(
-                {"name": id_name, "role": role,
-                 "ui_name": (e.get("ui_name") or "").strip()}
+                {"name": key, "role": role, "ui_name": ui_name, "locator": locator}
             )
             continue
-        elements.setdefault(id_name, {"role": role})
+        entry = {"role": role, "locator": locator}
+        if ui_name:
+            entry["ui_name"] = ui_name
+        elements.setdefault(key, entry)
     return elements, transient
 
 
@@ -100,7 +116,7 @@ def _collect_unreachable(unreachable_path: Path) -> set[str]:
 
 
 def _collect_suite_refs(testdir: Path) -> set[str]:
-    """Collect all persistent selector.name from *.suite.yaml files."""
+    """Collect all persistent selector.name / selector.accessible_id from *.suite.yaml."""
     refs: set[str] = set()
     for sf in sorted(testdir.rglob("*.suite.yaml")):
         data = _load_yaml(sf)
@@ -113,15 +129,25 @@ def _walk_refs(node, refs: set[str]) -> None:
     if isinstance(node, dict):
         sel = node.get("selector")
         if isinstance(sel, dict):
-            n = sel.get("name")
-            if isinstance(n, str) and n:
-                refs.add(n.strip())
+            # name 与 accessible_id 都是持久定位键 (executor 后缀匹配,
+            # 见 df20e47): 门禁两者都计, 否则 objectName 引用的用例
+            # 会误报未覆盖。
+            for key in ("name", "accessible_id"):
+                n = sel.get(key)
+                if isinstance(n, str) and n:
+                    refs.add(n.strip())
+        # dtk_dropdown_menu 的 items 是 DDropdownMenu 项 objectName 后缀
+        # (持久占位节点, 与 selector.accessible_id 同键空间) → 计入覆盖,
+        # 否则用 dtk_dropdown_menu 引用的持久菜单项会误报未覆盖。
+        if node.get("action") == "dtk_dropdown_menu" and isinstance(node.get("items"), list):
+            for it in node["items"]:
+                if isinstance(it, str) and it:
+                    refs.add(it.strip())
         for v in node.values():
             _walk_refs(v, refs)
     elif isinstance(node, list):
         for v in node:
             _walk_refs(v, refs)
-
 
 def _is_noise(name: str) -> bool:
     """Filename-like noise (contains '.'). SPI element names never contain '.'."""
