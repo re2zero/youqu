@@ -775,6 +775,9 @@ def handle_dtk_dropdown_menu(step: SuiteActionStep, context: dict) -> None:
         "accessible_id"
     ) or trigger_attrs.get("parent") or trigger_attrs.get("x") is not None:
         try:
+            # 窗口可能被其他窗口遮挡 (测试在终端中运行, 应用不在前台):
+            # 不激活窗口时, 坐标点击会落到遮挡窗口上, 菜单弹不出。
+            ensure_window_focus(context)
             idx = trigger_attrs.get("index", 0)
             element = find_element(dog, trigger_attrs, idx)
             element.click()

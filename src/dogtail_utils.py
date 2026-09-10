@@ -110,6 +110,15 @@ def _gi_find_descendants(root, name=None, role=None, recursive=True, accessible_
                 node, accessible_id
             ):
                 return False
+            # 过滤幽灵节点: 进程被 SIGKILL 后 AT-SPI 残留 app 的节点
+            # extents 为 (0,0,0,0) (窗口已销毁), 坐标点击必然失败且可能
+            # 点到屏幕左上角把目标窗口切到后台。extents 全 0 的节点
+            # 无法交互, 直接丢弃; 滚动区域外元素 extents 有效不受影响。
+            ext = node.get_extents(
+                __import__("gi").repository.Atspi.CoordType.SCREEN
+            )
+            if ext.width <= 0 or ext.height <= 0:
+                return False
             return True
         except BaseException:
             return False
