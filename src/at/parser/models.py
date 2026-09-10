@@ -197,6 +197,7 @@ class SuiteActionStep(BaseModel):
     wait_for: Optional[WaitCondition] = None
     wait_after: Optional[int] = None
     do: Optional[str] = None
+    click_mode: Optional[str] = None
     x: Optional[int] = None
     y: Optional[int] = None
     items: Optional[list[str]] = None

@@ -603,6 +603,12 @@ def handle_element_action(step: SuiteActionStep, context: dict) -> None:
         if _is_check_box(element):
             _coordinate_click(element, action, attrs)
             return
+        # click_mode=coordinate: 显式要求坐标点击——适用于 AT-SPI action
+        # 存在但实现为空的元素(如 deepin-screen-recorder 的自定义 SaveButton,
+        # doActionNamed 不抛异常但未触发真实鼠标事件, 造成"假通过")。
+        if (step.click_mode or "").lower() == "coordinate":
+            _coordinate_click(element, action, attrs)
+            return
         # 优先 AT-SPI action 触发（DTK 对话框/菜单元素经 Qt 桥直接触发，
         # 不依赖屏幕坐标，规避坐标点击对对话框元素不可靠导致的"假通过"）。
         # action 全部不可用时回退坐标点击（带坐标守卫）。

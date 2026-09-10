@@ -221,18 +221,25 @@ def execute_steps(
             return err
 
         if step.wait:
-            target = _peek_next_selector(idx, steps, elements)
-            if target:
-                found = _smart_wait(target, step.wait, context)
-                if not found:
-                    _log.warning(
-                        "smart_wait timed out: step#%d selector=%s wait=%.1fs",
-                        idx,
-                        target,
-                        step.wait,
-                    )
-            else:
+            # session_start 是异步命令执行(Popen 立即返回, bash 仍在跑)。
+            # 命令执行期间并行轮询 AT-SPI 树会与应用的鼠标事件处理竞争,
+            # 实测可导致 Qt/QML 应用(如 deepin-screen-recorder 拖拽框选时)崩溃,
+            # 故 session_start 后的 wait 一律纯 sleep, 不做 smart_wait 元素轮询。
+            if step.action in _LIFECYCLE_ACTIONS:
                 time.sleep(step.wait)
+            else:
+                target = _peek_next_selector(idx, steps, elements)
+                if target:
+                    found = _smart_wait(target, step.wait, context)
+                    if not found:
+                        _log.warning(
+                            "smart_wait timed out: step#%d selector=%s wait=%.1fs",
+                            idx,
+                            target,
+                            step.wait,
+                        )
+                else:
+                    time.sleep(step.wait)
 
         if step.wait_after:
             time.sleep(step.wait_after / 1000.0)
